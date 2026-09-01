@@ -1,0 +1,6 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/plugin-system" }
+  ]
+}

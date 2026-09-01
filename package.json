@@ -1,0 +1,21 @@
+{
+  "name": "runflux",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Visual backend compiler — design a workflow visually, compile it into a real deployable backend.",
+  "author": "Juan Pablo Farias <juanpablofarias.com>",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "plugins/*"
+  ],
+  "scripts": {
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "vitest": "^4.1.9",
+    "@types/node": "^22.5.0"
+  }
+}
