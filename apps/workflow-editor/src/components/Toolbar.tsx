@@ -48,23 +48,31 @@ export function Toolbar({ catalog, persistence, validation }: ToolbarProps) {
   };
 
   return (
-    <div className="flex items-center gap-2 border-b border-slate-200 bg-white px-3 py-2">
-      <span className="text-sm font-semibold text-slate-900">{workflow.name}</span>
+    <header className="z-20 flex h-[62px] shrink-0 items-center gap-4 border-b border-slate-200 bg-white/95 px-5 shadow-sm backdrop-blur-xl">
+      <div className="flex items-center gap-2.5 text-[15px] font-bold tracking-tight">
+        <span className="grid h-8 w-8 place-items-center rounded-[10px] bg-gradient-to-br from-indigo-500 to-indigo-700 text-white shadow-lg shadow-indigo-200">R</span>
+        <span>RunFlux</span>
+      </div>
+      <span className="h-6 w-px bg-slate-200" />
+      <div className="flex min-w-0 flex-col">
+        <strong className="max-w-sm truncate text-[13px]">{workflow.name}</strong>
+        <span className="text-[10px] font-semibold text-slate-400">{workflow.nodes.length} nodes · {workflow.connections.length} edges</span>
+      </div>
       <div className="ml-auto flex items-center gap-2">
-        {status.kind === 'saved' && <span className="text-xs text-slate-500">Saved</span>}
+        {status.kind === 'saved' && <span className="text-[11px] font-semibold text-emerald-600"><span className="sr-only">Saved</span>✓ Salvo</span>}
         {status.kind === 'blocked' && (
-          <span className="text-xs text-red-600" role="alert">
+          <span className="max-w-xs text-[11px] font-semibold text-red-600" role="alert">
             Fill required fields on node {status.nodeId} before testing
           </span>
         )}
-        {status.kind === 'tested' && <span className="text-xs text-slate-500">{status.message}</span>}
-        <Button variant="outline" size="sm" onClick={handleSave}>
-          Save
+        {status.kind === 'tested' && <span className="text-[11px] font-semibold text-emerald-600">{status.message}</span>}
+        <Button variant="outline" size="sm" onClick={handleSave} aria-label="Save workflow">
+          Salvar
         </Button>
         <Button size="sm" onClick={handleTest}>
-          Test
+          ▶ Testar
         </Button>
       </div>
-    </div>
+    </header>
   );
 }

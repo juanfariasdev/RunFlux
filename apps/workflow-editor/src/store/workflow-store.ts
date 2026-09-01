@@ -1,6 +1,12 @@
 import { create } from 'zustand';
 import { wouldCreateCycle } from '../domain/dag';
-import type { WorkflowConnection, WorkflowDefinition, WorkflowNode } from '../domain/types';
+import type {
+  WorkflowConnection,
+  WorkflowDefinition,
+  WorkflowEdgeType,
+  WorkflowNode,
+  WorkflowNodeAppearance,
+} from '../domain/types';
 
 export interface WorkflowStoreState {
   workflow: WorkflowDefinition;
@@ -10,6 +16,9 @@ export interface WorkflowStoreState {
   removeNode: (nodeId: string) => void;
   updateNodeParameters: (nodeId: string, parameters: Record<string, unknown>) => void;
   moveNode: (nodeId: string, position: { x: number; y: number }) => void;
+  updateNodeAppearance: (nodeId: string, appearance: Partial<WorkflowNodeAppearance>) => void;
+  updateNodeGeometry: (nodeId: string, geometry: { position?: { x: number; y: number }; width?: number; height?: number; parentId?: string | null }) => void;
+  replaceNodes: (nodes: WorkflowNode[]) => void;
   selectNode: (nodeId: string | undefined) => void;
 
   /**
@@ -19,6 +28,13 @@ export interface WorkflowStoreState {
    * to the user (EC-03).
    */
   addConnection: (connection: WorkflowConnection) => boolean;
+  updateConnection: (
+    sourceNodeId: string,
+    sourceOutput: string,
+    targetNodeId: string,
+    targetInput: string,
+    appearance: { label?: string; animated?: boolean; type?: WorkflowEdgeType; color?: string },
+  ) => void;
   removeConnection: (sourceNodeId: string, sourceOutput: string, targetNodeId: string, targetInput: string) => void;
 }
 
@@ -26,12 +42,23 @@ function emptyWorkflow(): WorkflowDefinition {
   return { id: crypto.randomUUID(), name: 'Untitled workflow', nodes: [], connections: [] };
 }
 
+function orderNodesByParent(nodes: WorkflowNode[]): WorkflowNode[] {
+  const parents = nodes.filter((n) => !n.parentId);
+  const children = nodes.filter((n) => Boolean(n.parentId));
+  return [...parents, ...children];
+}
+
 export const useWorkflowStore = create<WorkflowStoreState>((set, get) => ({
   workflow: emptyWorkflow(),
   selectedNodeId: undefined,
 
   addNode: (node) =>
-    set((state) => ({ workflow: { ...state.workflow, nodes: [...state.workflow.nodes, node] } })),
+    set((state) => ({
+      workflow: {
+        ...state.workflow,
+        nodes: orderNodesByParent([...state.workflow.nodes, node]),
+      },
+    })),
 
   removeNode: (nodeId) =>
     set((state) => ({
@@ -61,6 +88,52 @@ export const useWorkflowStore = create<WorkflowStoreState>((set, get) => ({
       },
     })),
 
+  updateNodeAppearance: (nodeId, appearance) =>
+    set((state) => ({
+      workflow: {
+        ...state.workflow,
+        nodes: state.workflow.nodes.map((node) =>
+          node.id === nodeId
+            ? { ...node, appearance: { ...node.appearance, ...appearance } }
+            : node,
+        ),
+      },
+    })),
+
+  updateNodeGeometry: (nodeId, geometry) =>
+    set((state) => {
+      const updatedNodes = state.workflow.nodes.map((node) => {
+        if (node.id !== nodeId) return node;
+        const updated: WorkflowNode = {
+          ...node,
+          position: geometry.position ?? node.position,
+          appearance: {
+            ...node.appearance,
+            ...(geometry.width !== undefined ? { width: geometry.width } : {}),
+            ...(geometry.height !== undefined ? { height: geometry.height } : {}),
+          },
+        };
+        if (geometry.parentId !== undefined) {
+          if (geometry.parentId === null) {
+            delete updated.parentId;
+          } else {
+            updated.parentId = geometry.parentId;
+          }
+        }
+        return updated;
+      });
+
+      return {
+        workflow: {
+          ...state.workflow,
+          nodes: orderNodesByParent(updatedNodes),
+        },
+      };
+    }),
+
+  replaceNodes: (nodes) =>
+    set((state) => ({ workflow: { ...state.workflow, nodes: orderNodesByParent(nodes) } })),
+
   selectNode: (nodeId) => set({ selectedNodeId: nodeId }),
 
   addConnection: (connection) => {
@@ -73,6 +146,21 @@ export const useWorkflowStore = create<WorkflowStoreState>((set, get) => ({
     }));
     return true;
   },
+
+  updateConnection: (sourceNodeId, sourceOutput, targetNodeId, targetInput, appearance) =>
+    set((state) => ({
+      workflow: {
+        ...state.workflow,
+        connections: state.workflow.connections.map((connection) =>
+          connection.sourceNodeId === sourceNodeId &&
+          connection.sourceOutput === sourceOutput &&
+          connection.targetNodeId === targetNodeId &&
+          connection.targetInput === targetInput
+            ? { ...connection, ...appearance }
+            : connection,
+        ),
+      },
+    })),
 
   removeConnection: (sourceNodeId, sourceOutput, targetNodeId, targetInput) =>
     set((state) => ({

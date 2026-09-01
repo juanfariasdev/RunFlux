@@ -66,4 +66,25 @@ describe('Palette', () => {
     expect(setDragImage).toHaveBeenCalledTimes(1);
     expect(setDragImage.mock.calls[0][0]).toBe(item);
   });
+
+  it('publishes the dragged plugin metadata for the canvas preview', async () => {
+    render(<Palette catalog={fakeCatalog({ action: [manifest('action-http', 'action')] })} />);
+    const item = (await screen.findByText('action-http')).closest('[draggable]') as HTMLElement;
+    const onDragStart = vi.fn();
+    window.addEventListener('runflux:palette-drag-start', onDragStart);
+
+    fireEvent.dragStart(item, {
+      dataTransfer: { setData: vi.fn(), setDragImage: vi.fn(), effectAllowed: '' },
+      clientX: 10,
+      clientY: 10,
+    });
+
+    expect((onDragStart.mock.calls[0][0] as CustomEvent).detail).toEqual({
+      id: 'action-http',
+      name: 'action-http',
+      category: 'action',
+      version: '1.0.0',
+    });
+    window.removeEventListener('runflux:palette-drag-start', onDragStart);
+  });
 });

@@ -12,8 +12,8 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variantClasses: Record<NonNullable<ButtonProps['variant']>, string> = {
-  default: 'bg-slate-900 text-white hover:bg-slate-700',
-  outline: 'border border-slate-300 bg-white text-slate-900 hover:bg-slate-50',
+  default: 'bg-indigo-600 text-white shadow-sm shadow-indigo-200 hover:bg-indigo-700',
+  outline: 'border border-slate-200 bg-white text-slate-700 shadow-sm hover:border-slate-300 hover:bg-slate-50',
   ghost: 'bg-transparent text-slate-900 hover:bg-slate-100',
   destructive: 'bg-red-600 text-white hover:bg-red-500',
 };
@@ -26,7 +26,7 @@ const sizeClasses: Record<NonNullable<ButtonProps['size']>, string> = {
 export function Button({ variant = 'default', size = 'default', className = '', ...rest }: ButtonProps) {
   return (
     <button
-      className={`inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors disabled:pointer-events-none disabled:opacity-50 ${variantClasses[variant]} ${sizeClasses[size]} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 rounded-lg font-semibold transition-colors disabled:pointer-events-none disabled:opacity-50 ${variantClasses[variant]} ${sizeClasses[size]} ${className}`}
       {...rest}
     />
   );

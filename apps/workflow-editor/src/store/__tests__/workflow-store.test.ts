@@ -65,6 +65,18 @@ describe('updateNodeParameters / moveNode', () => {
     moveNode('a', { x: 100, y: 200 });
     expect(useWorkflowStore.getState().workflow.nodes[0].position).toEqual({ x: 100, y: 200 });
   });
+
+  it('persists appearance and resize dimensions independently of plugin parameters', () => {
+    const { addNode, updateNodeAppearance, updateNodeGeometry } = useWorkflowStore.getState();
+    addNode(node('a'));
+    updateNodeAppearance('a', { label: 'Webhook', shape: 'pill', color: '#4f46e5' });
+    updateNodeGeometry('a', { width: 280, height: 120 });
+
+    expect(useWorkflowStore.getState().workflow.nodes[0]).toMatchObject({
+      parameters: {},
+      appearance: { label: 'Webhook', shape: 'pill', color: '#4f46e5', width: 280, height: 120 },
+    });
+  });
 });
 
 describe('addConnection (RF-08, D-06)', () => {
@@ -106,5 +118,20 @@ describe('removeConnection', () => {
     const connections = useWorkflowStore.getState().workflow.connections;
     expect(connections).toHaveLength(1);
     expect(connections[0].targetNodeId).toBe('c');
+  });
+
+  it('updates only the exact edge appearance, including parallel handles', () => {
+    const first = connection('a', 'b');
+    const second = { ...first, sourceOutput: 'error' };
+    useWorkflowStore.setState((state) => ({
+      workflow: { ...state.workflow, connections: [first, second] },
+    }));
+
+    useWorkflowStore.getState().updateConnection('a', 'main', 'b', 'main', {
+      label: 'Sucesso', animated: true, type: 'bezier', color: '#10b981',
+    });
+
+    expect(useWorkflowStore.getState().workflow.connections[0]).toMatchObject({ label: 'Sucesso', animated: true, type: 'bezier' });
+    expect(useWorkflowStore.getState().workflow.connections[1].label).toBeUndefined();
   });
 });

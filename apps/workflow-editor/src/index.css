@@ -8,3 +8,29 @@ body,
   height: 100%;
   margin: 0;
 }
+
+/* React Flow owns these nested DOM elements, so utilities cannot be attached
+   in JSX. Keep this bridge small and compose it from Tailwind utilities. */
+.runflux-flow {
+  --xy-edge-stroke-default: #64748b;
+  --xy-edge-stroke-width-default: 2;
+  --xy-connectionline-stroke-default: #4f46e5;
+  --xy-selection-background-color-default: rgb(79 70 229 / 0.08);
+  --xy-selection-border-default: 1px dashed #6366f1;
+}
+
+.runflux-flow .react-flow__pane { @apply cursor-grab; }
+.runflux-flow .react-flow__pane.dragging { @apply cursor-grabbing; }
+.runflux-flow .react-flow__edge-path { @apply transition-[stroke,stroke-width] duration-150; }
+.runflux-flow .react-flow__edge:hover .react-flow__edge-path,
+.runflux-flow .react-flow__edge.selected .react-flow__edge-path {
+  @apply [filter:drop-shadow(0_2px_3px_rgb(79_70_229_/_0.2))];
+  stroke-width: 3;
+}
+.runflux-flow .react-flow__edge.animated path {
+  stroke-dasharray: 6 5;
+  animation-duration: 0.75s;
+}
+.runflux-flow .react-flow__controls-button {
+  @apply !h-[30px] !w-[30px] !border-slate-200 !bg-white/95 !text-slate-600;
+}

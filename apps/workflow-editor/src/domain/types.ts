@@ -10,6 +10,18 @@ export interface WorkflowNode {
   pluginVersion: string;
   parameters: Record<string, unknown>;
   position: { x: number; y: number };
+  parentId?: string;
+  appearance?: WorkflowNodeAppearance;
+}
+
+export type WorkflowNodeShape = 'card' | 'rounded' | 'pill' | 'diamond' | 'subflow';
+
+export interface WorkflowNodeAppearance {
+  label?: string;
+  color?: string;
+  shape?: WorkflowNodeShape;
+  width?: number;
+  height?: number;
 }
 
 export interface WorkflowConnection {
@@ -17,7 +29,13 @@ export interface WorkflowConnection {
   sourceOutput: string;
   targetNodeId: string;
   targetInput: string;
+  label?: string;
+  animated?: boolean;
+  type?: WorkflowEdgeType;
+  color?: string;
 }
+
+export type WorkflowEdgeType = 'smoothstep' | 'bezier' | 'straight';
 
 export interface WorkflowDefinition {
   id: string;

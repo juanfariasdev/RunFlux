@@ -4,7 +4,9 @@ import type { PluginManifest } from '@runflux/plugin-system/types';
 import { HttpPluginCatalogAdapter } from './adapters/plugin-catalog-adapter';
 import { NoopValidationRuntimeAdapter } from './adapters/validation-runtime-adapter';
 import { InMemoryWorkflowPersistenceAdapter } from './adapters/workflow-persistence-adapter';
+import { connectionId } from './adapters/react-flow-adapter';
 import { Canvas } from './components/Canvas';
+import { EdgeConfigPanel } from './components/EdgeConfigPanel';
 import { NodeConfigPanel } from './components/NodeConfigPanel';
 import { Palette } from './components/Palette';
 import { Toolbar } from './components/Toolbar';
@@ -18,36 +20,67 @@ const validation = new NoopValidationRuntimeAdapter();
 
 export function App() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | undefined>();
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | undefined>();
   const nodes = useWorkflowStore((s) => s.workflow.nodes);
+  const connections = useWorkflowStore((s) => s.workflow.connections);
   const updateNodeParameters = useWorkflowStore((s) => s.updateNodeParameters);
+  const updateNodeAppearance = useWorkflowStore((s) => s.updateNodeAppearance);
+  const updateConnection = useWorkflowStore((s) => s.updateConnection);
+  const removeNode = useWorkflowStore((s) => s.removeNode);
+  const removeConnection = useWorkflowStore((s) => s.removeConnection);
   const [manifestsById, setManifestsById] = useState<Map<string, PluginManifest>>(new Map());
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
+  const selectedConnection = connections.find((connection) => connectionId(connection) === selectedEdgeId);
 
   useEffect(() => {
-    if (!selectedNode || manifestsById.has(selectedNode.pluginId)) return;
+    let cancelled = false;
     catalog.listPlugins().then((grouped) => {
-      const map = new Map(Object.values(grouped).flat().map((m) => [m.id, m]));
-      setManifestsById(map);
+      if (!cancelled) setManifestsById(new Map(Object.values(grouped).flat().map((manifest) => [manifest.id, manifest])));
     });
-  }, [selectedNode, manifestsById]);
+    return () => { cancelled = true; };
+  }, []);
 
   const selectedManifest = selectedNode ? manifestsById.get(selectedNode.pluginId) : undefined;
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full min-w-[900px] flex-col overflow-hidden bg-slate-50 text-slate-900">
       <Toolbar catalog={catalog} persistence={persistence} validation={validation} />
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         <Palette catalog={catalog} />
         <ReactFlowProvider>
-          <Canvas catalog={catalog} onSelectNode={setSelectedNodeId} />
+          <Canvas catalog={catalog} onSelectNode={setSelectedNodeId} onSelectEdge={setSelectedEdgeId} />
         </ReactFlowProvider>
-        {selectedNode && selectedManifest && (
+        {selectedNode && (
           <NodeConfigPanel
+            key={selectedNode.id}
             manifest={selectedManifest}
             values={selectedNode.parameters}
+            appearance={selectedNode.appearance}
             onChange={(values) => updateNodeParameters(selectedNode.id, values)}
+            onAppearanceChange={(appearance) => updateNodeAppearance(selectedNode.id, appearance)}
+            onDelete={() => {
+              removeNode(selectedNode.id);
+              setSelectedNodeId(undefined);
+            }}
             onClose={() => setSelectedNodeId(undefined)}
+          />
+        )}
+        {selectedConnection && (
+          <EdgeConfigPanel
+            connection={selectedConnection}
+            onChange={(appearance) => updateConnection(
+              selectedConnection.sourceNodeId,
+              selectedConnection.sourceOutput,
+              selectedConnection.targetNodeId,
+              selectedConnection.targetInput,
+              appearance,
+            )}
+            onDelete={() => {
+              removeConnection(selectedConnection.sourceNodeId, selectedConnection.sourceOutput, selectedConnection.targetNodeId, selectedConnection.targetInput);
+              setSelectedEdgeId(undefined);
+            }}
+            onClose={() => setSelectedEdgeId(undefined)}
           />
         )}
       </div>
