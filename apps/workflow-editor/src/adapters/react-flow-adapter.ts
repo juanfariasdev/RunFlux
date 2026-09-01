@@ -28,6 +28,8 @@ export function toReactFlowNode(
 ): FlowNode {
   const appearance = node.appearance ?? {};
   const isSubflow = appearance.shape === 'subflow';
+  const width = appearance.width ?? (isSubflow ? 520 : 220);
+  const height = appearance.height ?? (isSubflow ? 300 : 104);
 
   return {
     id: node.id,
@@ -36,9 +38,14 @@ export function toReactFlowNode(
     parentId: node.parentId,
     extent: node.parentId ? 'parent' : undefined,
     expandParent: node.parentId ? true : undefined,
+    width,
+    height,
+    initialWidth: width,
+    initialHeight: height,
+    measured: { width, height },
     style: {
-      width: appearance.width ?? (isSubflow ? 520 : 220),
-      height: appearance.height ?? (isSubflow ? 300 : 104),
+      width,
+      height,
     },
     zIndex: isSubflow ? -1 : 1,
     data: {

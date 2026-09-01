@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { NoopValidationRuntimeAdapter } from '../validation-runtime-adapter';
 import { InMemoryWorkflowPersistenceAdapter } from '../workflow-persistence-adapter';
 import type { WorkflowDefinition } from '@runflux/workflow-model/types';
+
+// NoopValidationRuntimeAdapter now has its own dedicated test file
+// alongside HttpValidationRuntimeAdapter — see validation-runtime-adapter.test.ts.
 
 const workflow: WorkflowDefinition = {
   id: 'wf-1',
@@ -9,22 +11,6 @@ const workflow: WorkflowDefinition = {
   nodes: [],
   connections: [],
 };
-
-describe('NoopValidationRuntimeAdapter', () => {
-  it('always resolves run() with status "success" and an empty nodeResults, and never throws', async () => {
-    const adapter = new NoopValidationRuntimeAdapter();
-    const result = await adapter.run(workflow, { mode: 'sandbox' });
-    expect(result.status).toBe('success');
-    expect(result.nodeResults).toEqual([]);
-  });
-
-  it('always resolves runNode() with a result carrying no error', async () => {
-    const adapter = new NoopValidationRuntimeAdapter();
-    const result = await adapter.runNode(workflow, 'n1', { mode: 'sandbox' });
-    expect(result.nodeId).toBe('n1');
-    expect(result.error).toBeNull();
-  });
-});
 
 describe('InMemoryWorkflowPersistenceAdapter', () => {
   it('returns undefined when loading a workflow that was never saved', async () => {

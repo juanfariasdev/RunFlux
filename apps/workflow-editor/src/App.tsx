@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
 import type { PluginManifest } from '@runflux/plugin-system/types';
 import { HttpPluginCatalogAdapter } from './adapters/plugin-catalog-adapter';
-import { NoopValidationRuntimeAdapter } from './adapters/validation-runtime-adapter';
+import { HttpValidationRuntimeAdapter } from './adapters/validation-runtime-adapter';
 import { InMemoryWorkflowPersistenceAdapter } from './adapters/workflow-persistence-adapter';
 import { connectionId } from './adapters/react-flow-adapter';
 import { Canvas } from './components/Canvas';
@@ -16,7 +16,7 @@ import { useWorkflowStore } from './store/workflow-store';
 // (dev middleware / static build asset) instead of running discovery here.
 const catalog = new HttpPluginCatalogAdapter();
 const persistence = new InMemoryWorkflowPersistenceAdapter();
-const validation = new NoopValidationRuntimeAdapter();
+const validation = new HttpValidationRuntimeAdapter();
 
 export function App() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | undefined>();

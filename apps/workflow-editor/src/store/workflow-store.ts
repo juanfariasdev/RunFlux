@@ -7,10 +7,21 @@ import type {
   WorkflowNode,
   WorkflowNodeAppearance,
 } from '@runflux/workflow-model/types';
+import type { NodeResult } from '@runflux/validation-runtime';
 
 export interface WorkflowStoreState {
   workflow: WorkflowDefinition;
   selectedNodeId: string | undefined;
+
+  /**
+   * Latest validation result per node (003-validation-runtime, RF-02/RF-05).
+   * Ephemeral, session-only (NG-03 of the validation-runtime spec) — never
+   * part of `workflow`, so it is never saved/exported with the project.
+   */
+  nodeResults: Record<string, NodeResult>;
+  setNodeResults: (results: NodeResult[]) => void;
+  setNodeResult: (result: NodeResult) => void;
+  clearNodeResults: () => void;
 
   addNode: (node: WorkflowNode) => void;
   removeNode: (nodeId: string) => void;
@@ -51,6 +62,17 @@ function orderNodesByParent(nodes: WorkflowNode[]): WorkflowNode[] {
 export const useWorkflowStore = create<WorkflowStoreState>((set, get) => ({
   workflow: emptyWorkflow(),
   selectedNodeId: undefined,
+  nodeResults: {},
+
+  setNodeResults: (results) =>
+    set((state) => ({
+      nodeResults: { ...state.nodeResults, ...Object.fromEntries(results.map((r) => [r.nodeId, r])) },
+    })),
+
+  setNodeResult: (result) =>
+    set((state) => ({ nodeResults: { ...state.nodeResults, [result.nodeId]: result } })),
+
+  clearNodeResults: () => set({ nodeResults: {} }),
 
   addNode: (node) =>
     set((state) => ({
@@ -61,24 +83,34 @@ export const useWorkflowStore = create<WorkflowStoreState>((set, get) => ({
     })),
 
   removeNode: (nodeId) =>
-    set((state) => ({
-      workflow: {
-        ...state.workflow,
-        nodes: state.workflow.nodes.filter((n) => n.id !== nodeId),
-        connections: state.workflow.connections.filter(
-          (c) => c.sourceNodeId !== nodeId && c.targetNodeId !== nodeId,
-        ),
-      },
-      selectedNodeId: state.selectedNodeId === nodeId ? undefined : state.selectedNodeId,
-    })),
+    set((state) => {
+      const { [nodeId]: _removed, ...remainingResults } = state.nodeResults;
+      return {
+        workflow: {
+          ...state.workflow,
+          nodes: state.workflow.nodes.filter((n) => n.id !== nodeId),
+          connections: state.workflow.connections.filter(
+            (c) => c.sourceNodeId !== nodeId && c.targetNodeId !== nodeId,
+          ),
+        },
+        selectedNodeId: state.selectedNodeId === nodeId ? undefined : state.selectedNodeId,
+        nodeResults: remainingResults,
+      };
+    }),
 
   updateNodeParameters: (nodeId, parameters) =>
-    set((state) => ({
-      workflow: {
-        ...state.workflow,
-        nodes: state.workflow.nodes.map((n) => (n.id === nodeId ? { ...n, parameters } : n)),
-      },
-    })),
+    set((state) => {
+      // A parameter change invalidates any previous test result for this
+      // node — its output no longer reflects what the node would produce now.
+      const { [nodeId]: _stale, ...remainingResults } = state.nodeResults;
+      return {
+        workflow: {
+          ...state.workflow,
+          nodes: state.workflow.nodes.map((n) => (n.id === nodeId ? { ...n, parameters } : n)),
+        },
+        nodeResults: remainingResults,
+      };
+    }),
 
   moveNode: (nodeId, position) =>
     set((state) => ({
