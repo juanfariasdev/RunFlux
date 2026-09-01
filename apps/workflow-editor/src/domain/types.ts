@@ -1,0 +1,27 @@
+/**
+ * Canonical workflow model (data-delta.md). Deliberately independent of
+ * @xyflow/react's own Node/Edge shape — see adapters/react-flow-adapter.ts
+ * for the translation layer (D-05).
+ */
+
+export interface WorkflowNode {
+  id: string;
+  pluginId: string;
+  pluginVersion: string;
+  parameters: Record<string, unknown>;
+  position: { x: number; y: number };
+}
+
+export interface WorkflowConnection {
+  sourceNodeId: string;
+  sourceOutput: string;
+  targetNodeId: string;
+  targetInput: string;
+}
+
+export interface WorkflowDefinition {
+  id: string;
+  name: string;
+  nodes: WorkflowNode[];
+  connections: WorkflowConnection[];
+}

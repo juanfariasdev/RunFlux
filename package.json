@@ -7,7 +7,8 @@
   "type": "module",
   "workspaces": [
     "packages/*",
-    "plugins/*"
+    "plugins/*",
+    "apps/*"
   ],
   "scripts": {
     "test": "npm run test --workspaces --if-present",
