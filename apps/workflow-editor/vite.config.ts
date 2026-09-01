@@ -1,5 +1,5 @@
 import react from '@vitejs/plugin-react';
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 import { runfluxPluginCatalogPlugin } from './vite-plugin-plugin-catalog.ts';
 
 // https://vite.dev/config/
@@ -8,5 +8,6 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test-setup.ts'],
+    exclude: [...configDefaults.exclude, 'dist/**'],
   },
 });

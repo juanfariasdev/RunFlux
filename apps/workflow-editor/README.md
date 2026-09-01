@@ -2,9 +2,9 @@
 
 Visual drag-and-drop workflow editor (feature `002-workflow-editor`). React 19 + TypeScript, canvas via React Flow (xyflow), state via Zustand, forms via React Hook Form + Zod, consuming `@runflux/plugin-system` (feature `001-plugin-system`).
 
-## ⚠️ Known gap before this can run in a real browser
+## How plugin discovery reaches the browser
 
-`PluginRegistry.discover()` (in `@runflux/plugin-system`) reads the filesystem via `node:fs/promises`. This app isolates that dependency behind `PluginCatalogAdapter` (`src/adapters/plugin-catalog-adapter.ts`), but no browser-compatible transport exists yet — `npx vite build` succeeds, but Node's `fs`/`path`/`url` are externalized to empty stubs, so the Palette would fail at runtime in an actual browser tab. It works today only in Node-capable contexts (this app's own Vitest suite). See `roadmap.md` (D-09/D-10) for the details and the likely fix (a small local backend/companion process, since `compiler` will need the same filesystem access).
+`PluginRegistry.discover()` (in `@runflux/plugin-system`) reads the filesystem via `node:fs/promises` — it cannot run inside a browser bundle. This app never imports it from browser code; instead, `vite-plugin-plugin-catalog.ts` runs discovery inside Vite's own Node process and serves the result at a fixed URL (`/runflux-plugins.json`) — a dev-server middleware in `npm run dev`, a static build asset in `npm run build`. The browser side (`HttpPluginCatalogAdapter` in `src/adapters/plugin-catalog-adapter.ts`) only ever does `fetch(that URL)`. See `roadmap.md` (D-09 through D-13) for the full story, including why `@runflux/plugin-system` needed a second, pre-bundled `"./node"` entry point (`npm run build:node -w @runflux/plugin-system` — re-run it after changing that package's source).
 
 ## Try it (manual walkthrough — mirrors `onboarding.md`)
 
