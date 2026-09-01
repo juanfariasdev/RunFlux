@@ -10,7 +10,7 @@ export interface ValidationRunOptions {
 /**
  * Seam to the `validation-runtime` feature (003-validation-runtime, D-07 of
  * `002-workflow-editor`, extended here). The editor calls `run()` when the
- * user clicks "Testar" (RF-06), after its own required-parameter check
+ * user clicks "Test" (RF-06), after its own required-parameter check
  * (RF-12) has already passed; `runNode()` backs testing a single node in
  * isolation (RF-04).
  */

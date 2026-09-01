@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useWorkflowStore } from '../workflow-store';
 import type { WorkflowConnection, WorkflowNode } from '@runflux/workflow-model/types';
+import type { NodeResult } from '@runflux/validation-runtime';
 
 function node(id: string): WorkflowNode {
   return { id, pluginId: 'action-example', pluginVersion: '1.0.0', parameters: {}, position: { x: 0, y: 0 } };
@@ -10,11 +11,16 @@ function connection(sourceNodeId: string, targetNodeId: string): WorkflowConnect
   return { sourceNodeId, sourceOutput: 'main', targetNodeId, targetInput: 'main' };
 }
 
+function result(nodeId: string, error: string | null = null): NodeResult {
+  return { nodeId, input: null, output: 'ok', error, startedAt: 't0', finishedAt: 't1' };
+}
+
 beforeEach(() => {
   // Reset to a clean workflow between tests — zustand stores are module-level singletons.
   useWorkflowStore.setState({
     workflow: { id: 'wf-test', name: 'Test', nodes: [], connections: [] },
     selectedNodeId: undefined,
+    nodeResults: {},
   });
 });
 
@@ -134,7 +140,48 @@ describe('removeConnection', () => {
     expect(connections).toHaveLength(1);
     expect(connections[0].targetNodeId).toBe('c');
   });
+});
 
+describe('nodeResults (003-validation-runtime, RF-02/RF-05)', () => {
+  it('setNodeResults merges a batch of results, keyed by nodeId', () => {
+    useWorkflowStore.getState().setNodeResults([result('a'), result('b', 'boom')]);
+    const { nodeResults } = useWorkflowStore.getState();
+    expect(nodeResults.a.error).toBeNull();
+    expect(nodeResults.b.error).toBe('boom');
+  });
+
+  it('setNodeResult updates a single node without touching others', () => {
+    useWorkflowStore.getState().setNodeResults([result('a'), result('b')]);
+    useWorkflowStore.getState().setNodeResult(result('a', 'now failing'));
+    const { nodeResults } = useWorkflowStore.getState();
+    expect(nodeResults.a.error).toBe('now failing');
+    expect(nodeResults.b.error).toBeNull();
+  });
+
+  it('clearNodeResults empties the map', () => {
+    useWorkflowStore.getState().setNodeResults([result('a')]);
+    useWorkflowStore.getState().clearNodeResults();
+    expect(useWorkflowStore.getState().nodeResults).toEqual({});
+  });
+
+  it('removeNode drops that node\'s stale result', () => {
+    const { addNode, setNodeResult, removeNode } = useWorkflowStore.getState();
+    addNode(node('a'));
+    setNodeResult(result('a'));
+    removeNode('a');
+    expect(useWorkflowStore.getState().nodeResults.a).toBeUndefined();
+  });
+
+  it('updateNodeParameters invalidates that node\'s stale result', () => {
+    const { addNode, setNodeResult, updateNodeParameters } = useWorkflowStore.getState();
+    addNode(node('a'));
+    setNodeResult(result('a'));
+    updateNodeParameters('a', { url: 'https://example.com' });
+    expect(useWorkflowStore.getState().nodeResults.a).toBeUndefined();
+  });
+});
+
+describe('edge appearance updates', () => {
   it('updates only the exact edge appearance, including parallel handles', () => {
     const first = connection('a', 'b');
     const second = { ...first, sourceOutput: 'error' };
@@ -143,10 +190,10 @@ describe('removeConnection', () => {
     }));
 
     useWorkflowStore.getState().updateConnection('a', 'main', 'b', 'main', {
-      label: 'Sucesso', animated: true, type: 'bezier', color: '#10b981',
+      label: 'Success', animated: true, type: 'bezier', color: '#10b981',
     });
 
-    expect(useWorkflowStore.getState().workflow.connections[0]).toMatchObject({ label: 'Sucesso', animated: true, type: 'bezier' });
+    expect(useWorkflowStore.getState().workflow.connections[0]).toMatchObject({ label: 'Success', animated: true, type: 'bezier' });
     expect(useWorkflowStore.getState().workflow.connections[1].label).toBeUndefined();
   });
 });

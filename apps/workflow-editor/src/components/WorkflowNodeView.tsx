@@ -2,7 +2,7 @@ import { Handle, NodeResizer, Position, type NodeProps } from '@xyflow/react';
 import type { CSSProperties } from 'react';
 import type { FlowNode } from '../adapters/react-flow-adapter';
 
-const CATEGORY_LABELS: Record<string, string> = { trigger: 'Gatilho', action: 'Ação', output: 'Saída', 'control-flow': 'Controle', subworkflow: 'Subfluxo' };
+const CATEGORY_LABELS: Record<string, string> = { trigger: 'Trigger', action: 'Action', output: 'Output', 'control-flow': 'Control', subworkflow: 'Subflow' };
 
 export function WorkflowNodeView({ data, selected, dragging }: NodeProps<FlowNode>) {
   const status = data?.referenceStatus?.status ?? 'missing';
@@ -41,8 +41,8 @@ export function WorkflowNodeView({ data, selected, dragging }: NodeProps<FlowNod
           {!isDiamond && <span className="self-start text-xs tracking-[-3px] text-slate-300" aria-hidden="true">⋮⋮</span>}
         </div>
 
-        {status === 'missing' && <div className="absolute -bottom-2 right-2 rounded-md bg-red-100 px-1.5 py-0.5 text-[8px] font-bold text-red-700 shadow" role="alert">Plugin não encontrado</div>}
-        {status === 'outdated' && <div className="absolute -bottom-2 right-2 rounded-md bg-amber-100 px-1.5 py-0.5 text-[8px] font-bold text-amber-800 shadow">Atualização disponível · v{data.referenceStatus.status === 'outdated' ? data.referenceStatus.installedVersion : ''}</div>}
+        {status === 'missing' && <div className="absolute -bottom-2 right-2 rounded-md bg-red-100 px-1.5 py-0.5 text-[8px] font-bold text-red-700 shadow" role="alert">Plugin not found</div>}
+        {status === 'outdated' && <div className="absolute -bottom-2 right-2 rounded-md bg-amber-100 px-1.5 py-0.5 text-[8px] font-bold text-amber-800 shadow">Update available · v{data.referenceStatus.status === 'outdated' ? data.referenceStatus.installedVersion : ''}</div>}
         {category !== 'output' && <Handle id="main" type="source" position={Position.Right} className="!h-3 !w-3 !border-[3px] !border-white !bg-[var(--node-accent)] !shadow-md transition hover:scale-125" />}
       </article>
     </>
@@ -57,8 +57,8 @@ export function SubflowNodeView({ data, selected, dragging }: NodeProps<FlowNode
       <section className={`relative h-full w-full overflow-hidden rounded-[20px] border-2 border-dashed bg-white/80 shadow-inner transition ${selected ? 'border-solid ring-4 ring-violet-100 shadow-lg' : 'border-violet-300'} ${dragging ? 'shadow-2xl' : ''}`} style={{ '--node-accent': color, borderColor: selected ? color : undefined } as CSSProperties} data-testid="subflow-node">
         <header className="flex h-[58px] items-center gap-2.5 border-b border-violet-100 bg-violet-50/70 px-4">
           <span className="grid h-8 w-8 place-items-center rounded-[9px] bg-white text-[var(--node-accent)] shadow-sm"><LayersIcon /></span>
-          <span className="flex flex-col"><small className="text-[8px] font-extrabold tracking-[.13em] text-[var(--node-accent)]">SUBFLOW</small><strong className="text-xs text-slate-800">{data?.appearance?.label?.trim() || 'Novo subflow'}</strong></span>
-          <small className="ml-auto text-[9px] text-slate-400">Arraste nodes para dentro</small>
+          <span className="flex flex-col"><small className="text-[8px] font-extrabold tracking-[.13em] text-[var(--node-accent)]">SUBFLOW</small><strong className="text-xs text-slate-800">{data?.appearance?.label?.trim() || 'New subflow'}</strong></span>
+          <small className="ml-auto text-[9px] text-slate-400">Drag nodes inside</small>
         </header>
         <div className="pointer-events-none absolute bottom-3.5 left-3.5 right-3.5 top-[72px] rounded-xl border border-dashed border-violet-200" />
       </section>

@@ -30,19 +30,19 @@ export function Palette({ catalog }: PaletteProps) {
   return (
     <aside className="flex w-[270px] shrink-0 flex-col border-r border-slate-200 bg-white max-[1120px]:w-[230px]" aria-label="Plugin palette">
       <header className="flex items-end justify-between px-[18px] pb-[13px] pt-[22px]">
-        <div><span className="mb-0.5 block text-[9px] font-extrabold tracking-[.16em] text-indigo-500">RUNFLUX</span><h2 className="m-0 text-lg font-bold tracking-tight">Biblioteca</h2></div>
+        <div><span className="mb-0.5 block text-[9px] font-extrabold tracking-[.16em] text-indigo-500">RUNFLUX</span><h2 className="m-0 text-lg font-bold tracking-tight">Library</h2></div>
         <span className="grid h-[22px] min-w-[26px] place-items-center rounded-lg bg-slate-100 text-[10px] font-bold text-slate-500">{total}</span>
       </header>
       <label className="mx-3.5 flex h-[38px] items-center gap-2 rounded-[10px] border border-slate-200 bg-slate-50 px-3 transition focus-within:border-indigo-300 focus-within:bg-white focus-within:ring-4 focus-within:ring-indigo-50">
         <svg className="w-[15px] text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
-        <input className="min-w-0 flex-1 border-0 bg-transparent text-xs text-slate-700 outline-none placeholder:text-slate-400" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar nodes…" aria-label="Buscar nodes" />
+        <input className="min-w-0 flex-1 border-0 bg-transparent text-xs text-slate-700 outline-none placeholder:text-slate-400" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search nodes…" aria-label="Search nodes" />
       </label>
-      <p className="mx-[17px] mb-[15px] mt-2.5 text-[10px] text-slate-400">Arraste um item para o canvas</p>
+      <p className="mx-[17px] mb-[15px] mt-2.5 text-[10px] text-slate-400">Drag an item onto the canvas</p>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-5 [scrollbar-color:#cbd5e1_transparent] [scrollbar-width:thin]">
         {loading && <div className="grid gap-2"><span className="sr-only">Loading plugins…</span>{[0, 1, 2].map((item) => <span key={item} className="h-[58px] animate-pulse rounded-xl bg-slate-100" />)}</div>}
         {!loading && total === 0 && <p className="px-2 py-5 text-center text-[11px] text-slate-400">No plugins discovered.</p>}
-        {!loading && total > 0 && visibleGroups.length === 0 && <p className="px-2 py-5 text-center text-[11px] text-slate-400">Nenhum node encontrado.</p>}
+        {!loading && total > 0 && visibleGroups.length === 0 && <p className="px-2 py-5 text-center text-[11px] text-slate-400">No nodes found.</p>}
         {visibleGroups.map(([category, manifests]) => (
           <section key={category} className="mb-[18px]">
             <h3 className="mx-1 mb-2 flex items-center justify-between text-[9px] font-extrabold uppercase tracking-[.12em] text-slate-500"><span>{CATEGORY_LABELS[category] ?? category}</span><small className="text-[9px] text-slate-400">{manifests.length}</small></h3>
@@ -110,8 +110,8 @@ function PaletteItem({ manifest }: { manifest: PluginManifest }) {
           onAddClick();
         }}
         className="opacity-0 group-hover:opacity-100 grid h-6 w-6 place-items-center rounded-lg bg-indigo-50 text-xs font-bold text-indigo-600 transition hover:bg-indigo-600 hover:text-white"
-        title="Clique para adicionar ao fluxo"
-        aria-label={`Adicionar ${manifest.name} ao fluxo`}
+        title="Click to add to the workflow"
+        aria-label={`Add ${manifest.name} to the workflow`}
       >
         ＋
       </button>

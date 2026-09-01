@@ -12,9 +12,9 @@ import { Label } from './ui/label';
 const COLORS = ['#4f46e5', '#0ea5e9', '#10b981', '#f59e0b', '#f97316', '#ef4444', '#ec4899', '#8b5cf6', '#334155'];
 const SHAPES: { value: WorkflowNodeShape; label: string }[] = [
   { value: 'card', label: 'Card' },
-  { value: 'rounded', label: 'Suave' },
-  { value: 'pill', label: 'Pílula' },
-  { value: 'diamond', label: 'Decisão' },
+  { value: 'rounded', label: 'Rounded' },
+  { value: 'pill', label: 'Pill' },
+  { value: 'diamond', label: 'Decision' },
 ];
 
 export interface NodeConfigPanelProps {
@@ -55,7 +55,7 @@ export function NodeConfigPanel({
     <aside className="w-[310px] shrink-0 overflow-y-auto border-l border-slate-200 bg-white max-[1120px]:w-[280px] [scrollbar-color:#cbd5e1_transparent] [scrollbar-width:thin]" aria-label="Node configuration">
       <header className="sticky top-0 z-[3] flex min-h-[72px] items-center justify-between border-b border-slate-200 bg-white/95 px-[17px] py-3.5 backdrop-blur-xl">
         <div>
-          <span className="mb-0.5 block text-[9px] font-extrabold tracking-[.16em] text-indigo-500">NODE SELECIONADO</span>
+          <span className="mb-0.5 block text-[9px] font-extrabold tracking-[.16em] text-indigo-500">SELECTED NODE</span>
           <h2 className="m-0 max-w-[220px] truncate text-[15px] font-bold tracking-tight">{appearance.label?.trim() || manifest?.name || 'Subflow'}</h2>
         </div>
         <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close panel" className="w-[30px] px-0 text-slate-400">✕</Button>
@@ -63,15 +63,15 @@ export function NodeConfigPanel({
 
       <section className="border-b border-slate-100 p-[17px]">
         <div className="mb-[15px] flex flex-col">
-          <h3 className="m-0 text-[11px] font-bold text-slate-800">Aparência</h3>
-          <span className="mt-0.5 text-[9px] text-slate-400">Personalize o visual no canvas</span>
+          <h3 className="m-0 text-[11px] font-bold text-slate-800">Appearance</h3>
+          <span className="mt-0.5 text-[9px] text-slate-400">Customize how it looks on the canvas</span>
         </div>
 
-        <Label className="mb-1 block" htmlFor="node-display-label">Label do node</Label>
+        <Label className="mb-1 block" htmlFor="node-display-label">Node label</Label>
         <Input
           id="node-display-label"
           value={appearance.label ?? ''}
-          placeholder={manifest?.name ?? 'Nome do subflow'}
+          placeholder={manifest?.name ?? 'Subflow name'}
           onChange={(event) => onAppearanceChange?.({ label: event.target.value })}
         />
 
@@ -96,7 +96,7 @@ export function NodeConfigPanel({
         )}
 
         <div className="mt-3.5">
-          <Label className="mb-1.5 block">Cor</Label>
+          <Label className="mb-1.5 block">Color</Label>
           <div className="flex flex-wrap gap-2">
             {COLORS.map((color) => (
               <button
@@ -105,17 +105,17 @@ export function NodeConfigPanel({
                 className={`h-6 w-6 cursor-pointer rounded-full border-2 border-white shadow-[0_0_0_1px_#dbe3ec] transition hover:scale-110 ${(appearance.color ?? '#4f46e5') === color ? 'ring-2 ring-indigo-400 ring-offset-2' : ''}`}
                 style={{ backgroundColor: color }}
                 onClick={() => onAppearanceChange?.({ color })}
-                aria-label={`Usar cor ${color}`}
+                aria-label={`Use color ${color}`}
                 aria-pressed={(appearance.color ?? '#4f46e5') === color}
               />
             ))}
-            <label className="relative grid h-6 w-6 cursor-pointer place-items-center rounded-full border-2 border-white bg-gradient-to-br from-red-400 via-emerald-400 to-violet-500 text-[13px] text-white shadow-[0_0_0_1px_#dbe3ec]" title="Escolher cor personalizada">
+            <label className="relative grid h-6 w-6 cursor-pointer place-items-center rounded-full border-2 border-white bg-gradient-to-br from-red-400 via-emerald-400 to-violet-500 text-[13px] text-white shadow-[0_0_0_1px_#dbe3ec]" title="Choose a custom color">
               <input
                 className="absolute h-px w-px opacity-0"
                 type="color"
                 value={appearance.color ?? '#4f46e5'}
                 onChange={(event) => onAppearanceChange?.({ color: event.target.value })}
-                aria-label="Cor personalizada"
+                aria-label="Custom color"
               />
               ＋
             </label>
@@ -123,17 +123,17 @@ export function NodeConfigPanel({
         </div>
 
         <div className="mt-3.5 grid grid-cols-2 gap-2">
-          <span className="flex flex-col rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-2 text-[10px] font-semibold text-slate-700"><small className="text-[7px] font-extrabold tracking-widest text-slate-400">LARGURA</small>{Math.round(appearance.width ?? (isSubflow ? 520 : 220))} px</span>
-          <span className="flex flex-col rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-2 text-[10px] font-semibold text-slate-700"><small className="text-[7px] font-extrabold tracking-widest text-slate-400">ALTURA</small>{Math.round(appearance.height ?? (isSubflow ? 300 : 104))} px</span>
+          <span className="flex flex-col rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-2 text-[10px] font-semibold text-slate-700"><small className="text-[7px] font-extrabold tracking-widest text-slate-400">WIDTH</small>{Math.round(appearance.width ?? (isSubflow ? 520 : 220))} px</span>
+          <span className="flex flex-col rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-2 text-[10px] font-semibold text-slate-700"><small className="text-[7px] font-extrabold tracking-widest text-slate-400">HEIGHT</small>{Math.round(appearance.height ?? (isSubflow ? 300 : 104))} px</span>
         </div>
-        <p className="mb-0 mt-2 text-[8px] leading-relaxed text-slate-400">Selecione o node e arraste os pontos das bordas para redimensionar.</p>
+        <p className="mb-0 mt-2 text-[8px] leading-relaxed text-slate-400">Select the node and drag its border handles to resize it.</p>
       </section>
 
       {!isSubflow && (
         <section className="border-b border-slate-100 p-[17px]">
           <div className="mb-[15px] flex flex-col">
-            <h3 className="m-0 text-[11px] font-bold text-slate-800">Configuração</h3>
-            <span className="mt-0.5 text-[9px] text-slate-400">{manifest ? `Tipo · ${manifest.category}` : 'Plugin indisponível'}</span>
+            <h3 className="m-0 text-[11px] font-bold text-slate-800">Configuration</h3>
+            <span className="mt-0.5 text-[9px] text-slate-400">{manifest ? `Type · ${manifest.category}` : 'Plugin unavailable'}</span>
           </div>
           <form className="grid gap-3.5" onSubmit={(event) => event.preventDefault()}>
             {parameters.map((param) => (
@@ -151,17 +151,17 @@ export function NodeConfigPanel({
                 ) : (
                   <Input id={param.name} type={param.type === 'number' ? 'number' : 'text'} {...register(param.name, { valueAsNumber: param.type === 'number' })} />
                 )}
-                {formState.errors[param.name] && <p className="mb-0 mt-1 text-[9px] text-red-600">{String(formState.errors[param.name]?.message ?? 'Valor inválido')}</p>}
+                {formState.errors[param.name] && <p className="mb-0 mt-1 text-[9px] text-red-600">{String(formState.errors[param.name]?.message ?? 'Invalid value')}</p>}
               </div>
             ))}
-            {parameters.length === 0 && <p className="m-0 text-[10px] text-slate-400">Este node não possui parâmetros adicionais.</p>}
+            {parameters.length === 0 && <p className="m-0 text-[10px] text-slate-400">This node has no additional parameters.</p>}
           </form>
         </section>
       )}
 
       {onDelete && (
         <footer className="flex justify-end px-[17px] pb-6 pt-3.5">
-          <Button variant="destructive" size="sm" onClick={onDelete}>Excluir node</Button>
+          <Button variant="destructive" size="sm" onClick={onDelete}>Delete node</Button>
         </footer>
       )}
     </aside>

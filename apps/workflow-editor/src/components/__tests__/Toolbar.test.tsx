@@ -27,6 +27,7 @@ beforeEach(() => {
   useWorkflowStore.setState({
     workflow: { id: 'wf-1', name: 'My Workflow', nodes: [], connections: [] },
     selectedNodeId: undefined,
+    nodeResults: {},
   });
 });
 
@@ -48,7 +49,7 @@ describe('Toolbar — Save (RF-07, RN-04)', () => {
     fireEvent.click(screen.getByRole('button', { name: /save/i }));
 
     await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
-    expect(await screen.findByText('Saved')).toBeInTheDocument();
+    expect(await screen.findByText(/saved/i)).toBeInTheDocument();
   });
 });
 

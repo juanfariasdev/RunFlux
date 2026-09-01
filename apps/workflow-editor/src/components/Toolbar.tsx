@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { PluginCatalogAdapter } from '../adapters/plugin-catalog-adapter';
-import type { ValidationRuntimeAdapter } from '../adapters/validation-runtime-adapter';
+import type { PluginExecutionMode, ValidationRuntimeAdapter } from '../adapters/validation-runtime-adapter';
 import type { WorkflowPersistenceAdapter } from '../adapters/workflow-persistence-adapter';
 import { buildZodSchema } from '../forms/build-zod-schema';
 import { useWorkflowStore } from '../store/workflow-store';
@@ -15,13 +15,15 @@ export interface ToolbarProps {
 type ToolbarStatus = { kind: 'idle' } | { kind: 'saved' } | { kind: 'blocked'; nodeId: string } | { kind: 'tested'; message: string };
 
 /**
- * RF-07 (Salvar) and RF-06/RF-12 (Testar). Saving never validates required
+ * RF-07 (Save) and RF-06/RF-12 (Test). Saving never validates required
  * parameters (RN-04) — testing does, via the same buildZodSchema used by
  * NodeConfigPanel, before ever calling into ValidationRuntimeAdapter.
  */
 export function Toolbar({ catalog, persistence, validation }: ToolbarProps) {
   const workflow = useWorkflowStore((s) => s.workflow);
+  const setNodeResults = useWorkflowStore((s) => s.setNodeResults);
   const [status, setStatus] = useState<ToolbarStatus>({ kind: 'idle' });
+  const [mode, setMode] = useState<PluginExecutionMode>('sandbox');
 
   const handleSave = async () => {
     await persistence.save(workflow);
@@ -43,7 +45,8 @@ export function Toolbar({ catalog, persistence, validation }: ToolbarProps) {
       }
     }
 
-    const result = await validation.run(workflow, { mode: 'sandbox' });
+    const result = await validation.run(workflow, { mode });
+    setNodeResults(result.nodeResults ?? []);
     setStatus({ kind: 'tested', message: result.message ?? result.status });
   };
 
@@ -59,18 +62,34 @@ export function Toolbar({ catalog, persistence, validation }: ToolbarProps) {
         <span className="text-[10px] font-semibold text-slate-400">{workflow.nodes.length} nodes · {workflow.connections.length} edges</span>
       </div>
       <div className="ml-auto flex items-center gap-2">
-        {status.kind === 'saved' && <span className="text-[11px] font-semibold text-emerald-600"><span className="sr-only">Saved</span>✓ Salvo</span>}
+        {status.kind === 'saved' && (
+          <span className="text-[11px] font-semibold text-emerald-600" role="status">
+            <span aria-hidden="true">✓</span> Saved
+          </span>
+        )}
         {status.kind === 'blocked' && (
           <span className="max-w-xs text-[11px] font-semibold text-red-600" role="alert">
             Fill required fields on node {status.nodeId} before testing
           </span>
         )}
         {status.kind === 'tested' && <span className="text-[11px] font-semibold text-emerald-600">{status.message}</span>}
+        <label className="flex items-center gap-1 text-[10px] font-semibold text-slate-500">
+          <span className="sr-only">Execution mode</span>
+          <select
+            className="rounded-md border border-slate-200 bg-white px-1.5 py-1 text-[10px] font-semibold text-slate-600"
+            value={mode}
+            onChange={(event) => setMode(event.target.value as PluginExecutionMode)}
+            aria-label="Execution mode"
+          >
+            <option value="sandbox">Sandbox</option>
+            <option value="production">Production</option>
+          </select>
+        </label>
         <Button variant="outline" size="sm" onClick={handleSave} aria-label="Save workflow">
-          Salvar
+          Save
         </Button>
         <Button size="sm" onClick={handleTest}>
-          ▶ Testar
+          ▶ Test
         </Button>
       </div>
     </header>

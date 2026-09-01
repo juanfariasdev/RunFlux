@@ -146,7 +146,7 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge }: CanvasProps) {
     );
 
     if (!compatible) {
-      setRejectionMessage('Conexão incompatível com o tipo desses nodes.');
+      setRejectionMessage('This connection is incompatible with these node types.');
       return;
     }
 
@@ -155,7 +155,7 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge }: CanvasProps) {
       type: 'smoothstep',
       color: '#64748b',
     });
-    setRejectionMessage(accepted ? undefined : 'A conexão criaria um ciclo e foi bloqueada.');
+    setRejectionMessage(accepted ? undefined : 'This connection would create a cycle and was blocked.');
   }, [workflow.nodes, manifestFor, addConnection]);
 
   const onNodesChange = useCallback((changes: NodeChange<FlowNode>[]) => {
@@ -335,7 +335,7 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge }: CanvasProps) {
       pluginVersion: '1.0.0',
       parameters: {},
       position: { x: center.x - 260, y: center.y - 150 },
-      appearance: { shape: 'subflow', label: 'Novo subflow', color: '#8b5cf6', width: 520, height: 300 },
+      appearance: { shape: 'subflow', label: 'New subflow', color: '#8b5cf6', width: 520, height: 300 },
     };
     addNode(node);
     requestAnimationFrame(() => onSelectNode(node.id));
@@ -355,8 +355,8 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge }: CanvasProps) {
       {workflow.nodes.length === 0 && !isDragActive && (
         <div className="pointer-events-none absolute left-1/2 top-1/2 z-[3] flex w-80 -translate-x-1/2 -translate-y-1/2 flex-col items-center rounded-[20px] border border-dashed border-slate-300 bg-white/75 p-8 text-center text-slate-700 shadow-xl shadow-slate-200/40 backdrop-blur">
           <span className="mb-3 grid h-11 w-11 place-items-center rounded-[14px] bg-indigo-50 text-2xl text-indigo-600">＋</span>
-          <strong className="text-sm">Monte seu primeiro fluxo</strong>
-          <p className="mt-1 text-[11px] text-slate-400">Arraste um plugin da biblioteca ou crie um subflow.</p>
+          <strong className="text-sm">Build your first workflow</strong>
+          <p className="mt-1 text-[11px] text-slate-400">Drag a plugin from the library or create a subflow.</p>
         </div>
       )}
 
@@ -382,7 +382,7 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge }: CanvasProps) {
           ) : (
             <div className="absolute flex -translate-x-[22px] -translate-y-[25px] items-center gap-2 whitespace-nowrap rounded-xl border border-indigo-200 bg-white/95 px-3 py-2.5 text-indigo-800 shadow-2xl shadow-indigo-200" style={{ left: dragPoint.x, top: dragPoint.y }}>
               <span className="grid h-[23px] w-[23px] place-items-center rounded-lg bg-indigo-600 text-white">＋</span>
-              <strong className="text-[11px]">Solte para adicionar ao fluxo</strong>
+              <strong className="text-[11px]">Drop to add to the workflow</strong>
             </div>
           )}
         </div>
@@ -430,9 +430,9 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge }: CanvasProps) {
         />
         <Panel position="top-center" className="!flex !items-center !gap-1 !rounded-xl !border !border-slate-200 !bg-white/95 !p-1 !shadow-xl !backdrop-blur">
           <span className="px-1.5 text-[9px] font-extrabold uppercase tracking-wider text-slate-400 max-[1120px]:hidden">Layout</span>
-          <button type="button" className="h-7 rounded-lg px-2.5 text-[10px] font-semibold text-slate-600 transition hover:bg-indigo-50 hover:text-indigo-800" onClick={() => applyLayout('horizontal')} title="Organizar da esquerda para a direita">Horizontal</button>
-          <button type="button" className="h-7 rounded-lg px-2.5 text-[10px] font-semibold text-slate-600 transition hover:bg-indigo-50 hover:text-indigo-800" onClick={() => applyLayout('vertical')} title="Organizar de cima para baixo">Vertical</button>
-          <button type="button" className="h-7 rounded-lg px-2.5 text-[10px] font-semibold text-slate-600 transition hover:bg-indigo-50 hover:text-indigo-800" onClick={() => applyLayout('grid')} title="Organizar em grade">Grade</button>
+          <button type="button" className="h-7 rounded-lg px-2.5 text-[10px] font-semibold text-slate-600 transition hover:bg-indigo-50 hover:text-indigo-800" onClick={() => applyLayout('horizontal')} title="Arrange from left to right">Horizontal</button>
+          <button type="button" className="h-7 rounded-lg px-2.5 text-[10px] font-semibold text-slate-600 transition hover:bg-indigo-50 hover:text-indigo-800" onClick={() => applyLayout('vertical')} title="Arrange from top to bottom">Vertical</button>
+          <button type="button" className="h-7 rounded-lg px-2.5 text-[10px] font-semibold text-slate-600 transition hover:bg-indigo-50 hover:text-indigo-800" onClick={() => applyLayout('grid')} title="Arrange in a grid">Grid</button>
           <span className="mx-1 h-[18px] w-px bg-slate-200" />
           <button type="button" className="h-7 rounded-lg bg-indigo-600 px-2.5 text-[10px] font-semibold text-white transition hover:bg-indigo-700" onClick={addSubflow}>＋ Subflow</button>
         </Panel>
@@ -462,11 +462,11 @@ function categoryColor(category: PluginManifest['category'] | undefined): string
 
 function categoryLabel(category: PluginManifest['category']): string {
   switch (category) {
-    case 'trigger': return 'Gatilho';
-    case 'output': return 'Saída';
-    case 'control-flow': return 'Controle';
+    case 'trigger': return 'Trigger';
+    case 'output': return 'Output';
+    case 'control-flow': return 'Control';
     case 'subworkflow': return 'Subflow';
-    default: return 'Ação';
+    default: return 'Action';
   }
 }
 

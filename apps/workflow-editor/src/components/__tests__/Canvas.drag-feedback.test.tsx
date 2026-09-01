@@ -56,7 +56,7 @@ describe('Canvas external drag feedback', () => {
     });
 
     expect(canvas).toHaveAttribute('data-drag-active', 'true');
-    expect(screen.getByText(/solte para adicionar ao fluxo/i)).toBeInTheDocument();
+    expect(screen.getByText(/drop to add to the workflow/i)).toBeInTheDocument();
   });
 
   it('shows the dragged plugin itself in the canvas preview', () => {
@@ -70,7 +70,7 @@ describe('Canvas external drag feedback', () => {
     });
 
     expect(screen.getByTestId('dragged-node-preview')).toHaveTextContent('HTTP Request');
-    expect(screen.getByTestId('dragged-node-preview')).toHaveTextContent('Ação');
+    expect(screen.getByTestId('dragged-node-preview')).toHaveTextContent('Action');
   });
 
   it('adds the dragged plugin from preview state when custom DataTransfer data is unavailable', async () => {
