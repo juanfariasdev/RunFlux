@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import type { PluginManifest } from '@runflux/plugin-system/types';
-import type { WorkflowNodeAppearance, WorkflowNodeShape } from '../domain/types';
+import type { WorkflowNodeAppearance, WorkflowNodeShape } from '@runflux/workflow-model/types';
 import { buildZodSchema } from '../forms/build-zod-schema';
 import { Button } from './ui/button';
 import { Checkbox } from './ui/checkbox';

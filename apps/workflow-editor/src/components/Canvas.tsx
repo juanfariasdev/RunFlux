@@ -11,6 +11,7 @@ import {
   type Connection,
   type EdgeChange,
   type NodeChange,
+  type OnNodeDrag,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import type { PluginManifest } from '@runflux/plugin-system/types';
@@ -18,7 +19,7 @@ import type { PluginCatalogAdapter } from '../adapters/plugin-catalog-adapter';
 import { fromReactFlowEdge, toReactFlowEdge, toReactFlowNode, type FlowNode } from '../adapters/react-flow-adapter';
 import { isConnectionCompatible } from '../domain/connection-compatibility';
 import { layoutWorkflowNodes, type WorkflowLayout } from '../domain/layout';
-import type { WorkflowNode } from '../domain/types';
+import type { WorkflowNode } from '@runflux/workflow-model/types';
 import { useWorkflowStore } from '../store/workflow-store';
 import { SubflowNodeView, WorkflowNodeView } from './WorkflowNodeView';
 
@@ -99,6 +100,43 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge }: CanvasProps) {
     };
   }, []);
 
+  useEffect(() => {
+    const handleAddPlugin = (event: Event) => {
+      const manifest = (event as CustomEvent<DraggedPlugin>).detail;
+      if (!manifest?.id) return;
+
+      const bounds = canvasRef.current?.getBoundingClientRect();
+      const center = screenToFlowPosition({
+        x: (bounds?.left ?? 0) + (bounds?.width ?? 900) / 2,
+        y: (bounds?.top ?? 0) + (bounds?.height ?? 600) / 2,
+      });
+
+      const offset = (workflow.nodes.length % 8) * 28;
+      const newNode: WorkflowNode = {
+        id: crypto.randomUUID(),
+        pluginId: manifest.id,
+        pluginVersion: manifest.version ?? '0.0.0',
+        parameters: {},
+        position: {
+          x: (Number.isFinite(center.x) ? center.x : 200) - 110 + offset,
+          y: (Number.isFinite(center.y) ? center.y : 150) - 52 + offset,
+        },
+        appearance: {
+          shape: 'card',
+          color: categoryColor(manifest.category),
+          width: 220,
+          height: 104,
+        },
+      };
+
+      addNode(newNode);
+      requestAnimationFrame(() => onSelectNode(newNode.id));
+    };
+
+    window.addEventListener('runflux:palette-add-plugin', handleAddPlugin);
+    return () => window.removeEventListener('runflux:palette-add-plugin', handleAddPlugin);
+  }, [addNode, onSelectNode, screenToFlowPosition, workflow.nodes.length]);
+
   const onConnect = useCallback((connection: Connection) => {
     const sourceNode = workflow.nodes.find((node) => node.id === connection.source);
     const targetNode = workflow.nodes.find((node) => node.id === connection.target);
@@ -148,8 +186,9 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge }: CanvasProps) {
 
   const onDrop = useCallback((event: React.DragEvent) => {
     event.preventDefault();
+    event.stopPropagation();
     const previewPlugin = draggedPlugin;
-    let pluginId = event.dataTransfer.getData(PLUGIN_DRAG_TYPE);
+    let pluginId: string | undefined = event.dataTransfer.getData(PLUGIN_DRAG_TYPE);
     let payloadManifest: DraggedPlugin | undefined = previewPlugin;
 
     if (!pluginId) {
@@ -169,7 +208,7 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge }: CanvasProps) {
 
     if (!pluginId) {
       const text = event.dataTransfer.getData('text/plain');
-      if (text && (manifests[text] || previewPlugin?.id === text)) {
+      if (text) {
         pluginId = text;
       }
     }
@@ -182,14 +221,32 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge }: CanvasProps) {
     if (!pluginId) return;
 
     const manifest = manifests[pluginId] || payloadManifest;
-    const absolutePosition = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+    const clientX = event.clientX || event.nativeEvent?.clientX || 0;
+    const clientY = event.clientY || event.nativeEvent?.clientY || 0;
+
+    let absolutePosition: { x: number; y: number };
+    if (clientX && clientY) {
+      absolutePosition = screenToFlowPosition({ x: clientX, y: clientY });
+    } else {
+      const bounds = canvasRef.current?.getBoundingClientRect();
+      absolutePosition = screenToFlowPosition({
+        x: (bounds?.left ?? 0) + (bounds?.width ?? 900) / 2,
+        y: (bounds?.top ?? 0) + (bounds?.height ?? 600) / 2,
+      });
+    }
+
+    if (!Number.isFinite(absolutePosition.x) || !Number.isFinite(absolutePosition.y)) {
+      absolutePosition = { x: 200, y: 150 };
+    }
+
     const parent = findContainingSubflow(workflow.nodes, absolutePosition);
     const position = parent
       ? { x: absolutePosition.x - parent.position.x, y: absolutePosition.y - parent.position.y }
       : absolutePosition;
 
+    const newNodeId = crypto.randomUUID();
     addNode({
-      id: crypto.randomUUID(),
+      id: newNodeId,
       pluginId,
       pluginVersion: manifest?.version ?? previewPlugin?.version ?? '0.0.0',
       parameters: {},
@@ -202,7 +259,8 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge }: CanvasProps) {
         height: 104,
       },
     });
-  }, [addNode, draggedPlugin, manifests, resetDragState, screenToFlowPosition, workflow.nodes]);
+    requestAnimationFrame(() => onSelectNode(newNodeId));
+  }, [addNode, draggedPlugin, manifests, onSelectNode, resetDragState, screenToFlowPosition, workflow.nodes]);
 
   const onDragEnter = useCallback((event: React.DragEvent) => {
     const types = Array.from(event.dataTransfer.types);
@@ -233,7 +291,7 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge }: CanvasProps) {
     if (!isDragActive) setIsDragActive(true);
   }, [isDragActive]);
 
-  const onNodeDragStop = useCallback((_event: React.MouseEvent, node: FlowNode) => {
+  const onNodeDragStop: OnNodeDrag<FlowNode> = useCallback((_event, node) => {
     const currentParent = workflow.nodes.find((n) => n.id === node.parentId);
     const absolutePosition = currentParent
       ? { x: node.position.x + currentParent.position.x, y: node.position.y + currentParent.position.y }

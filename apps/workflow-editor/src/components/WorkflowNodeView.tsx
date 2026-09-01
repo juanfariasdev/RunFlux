@@ -5,11 +5,11 @@ import type { FlowNode } from '../adapters/react-flow-adapter';
 const CATEGORY_LABELS: Record<string, string> = { trigger: 'Gatilho', action: 'Ação', output: 'Saída', 'control-flow': 'Controle', subworkflow: 'Subfluxo' };
 
 export function WorkflowNodeView({ data, selected, dragging }: NodeProps<FlowNode>) {
-  const status = data.referenceStatus.status;
-  const appearance = data.appearance ?? {};
-  const legacyLabel = data.parameters.label;
-  const label = appearance.label?.trim() || (typeof legacyLabel === 'string' && legacyLabel.trim() ? legacyLabel : undefined) || data.manifest?.name || data.pluginId;
-  const category = data.manifest?.category;
+  const status = data?.referenceStatus?.status ?? 'missing';
+  const appearance = data?.appearance ?? {};
+  const legacyLabel = data?.parameters?.label;
+  const label = appearance.label?.trim() || (typeof legacyLabel === 'string' && legacyLabel.trim() ? legacyLabel : undefined) || data?.manifest?.name || data?.pluginId || 'Plugin';
+  const category = data?.manifest?.category;
   const shape = appearance.shape ?? 'card';
   const color = appearance.color ?? categoryColor(category);
   const isDiamond = shape === 'diamond';
@@ -21,7 +21,7 @@ export function WorkflowNodeView({ data, selected, dragging }: NodeProps<FlowNod
 
   return (
     <>
-      <NodeResizer isVisible={selected && !dragging} minWidth={isDiamond ? 150 : 180} minHeight={isDiamond ? 120 : 82} color={color} lineClassName="!border-[var(--node-accent)]" handleClassName="!h-[9px] !w-[9px] !rounded-[3px] !border-2 !border-white !bg-[var(--node-accent)] !shadow" />
+      <NodeResizer isVisible={Boolean(selected && !dragging)} minWidth={isDiamond ? 150 : 180} minHeight={isDiamond ? 120 : 82} color={color} lineClassName="!border-[var(--node-accent)]" handleClassName="!h-[9px] !w-[9px] !rounded-[3px] !border-2 !border-white !bg-[var(--node-accent)] !shadow" />
       <article
         className={`relative h-full w-full overflow-visible bg-white transition duration-150 ${shapeClasses(shape)} ${status === 'missing' ? 'border-dashed' : ''} ${dragging ? 'scale-[1.025] rotate-[.4deg] opacity-90 shadow-2xl' : ''}`}
         data-testid="workflow-node"
@@ -36,7 +36,7 @@ export function WorkflowNodeView({ data, selected, dragging }: NodeProps<FlowNod
           <span className={`flex min-w-0 flex-1 flex-col ${isDiamond ? 'items-center' : ''}`}>
             <small className="text-[8px] font-extrabold uppercase tracking-[.11em] text-[var(--node-accent)]">{CATEGORY_LABELS[category ?? ''] ?? 'Plugin'}</small>
             <strong className="mt-px max-w-full truncate text-xs leading-tight text-slate-800">{label}</strong>
-            {!isDiamond && <small className="mt-0.5 truncate text-[8px] text-slate-400">{data.pluginId}</small>}
+            {!isDiamond && <small className="mt-0.5 truncate text-[8px] text-slate-400">{data?.pluginId}</small>}
           </span>
           {!isDiamond && <span className="self-start text-xs tracking-[-3px] text-slate-300" aria-hidden="true">⋮⋮</span>}
         </div>
@@ -50,14 +50,14 @@ export function WorkflowNodeView({ data, selected, dragging }: NodeProps<FlowNod
 }
 
 export function SubflowNodeView({ data, selected, dragging }: NodeProps<FlowNode>) {
-  const color = data.appearance.color ?? '#8b5cf6';
+  const color = data?.appearance?.color ?? '#8b5cf6';
   return (
     <>
-      <NodeResizer isVisible={selected && !dragging} minWidth={360} minHeight={220} color={color} lineClassName="!border-[var(--node-accent)]" handleClassName="!h-[9px] !w-[9px] !rounded-[3px] !border-2 !border-white !bg-[var(--node-accent)] !shadow" />
+      <NodeResizer isVisible={Boolean(selected && !dragging)} minWidth={360} minHeight={220} color={color} lineClassName="!border-[var(--node-accent)]" handleClassName="!h-[9px] !w-[9px] !rounded-[3px] !border-2 !border-white !bg-[var(--node-accent)] !shadow" />
       <section className={`relative h-full w-full overflow-hidden rounded-[20px] border-2 border-dashed bg-white/80 shadow-inner transition ${selected ? 'border-solid ring-4 ring-violet-100 shadow-lg' : 'border-violet-300'} ${dragging ? 'shadow-2xl' : ''}`} style={{ '--node-accent': color, borderColor: selected ? color : undefined } as CSSProperties} data-testid="subflow-node">
         <header className="flex h-[58px] items-center gap-2.5 border-b border-violet-100 bg-violet-50/70 px-4">
           <span className="grid h-8 w-8 place-items-center rounded-[9px] bg-white text-[var(--node-accent)] shadow-sm"><LayersIcon /></span>
-          <span className="flex flex-col"><small className="text-[8px] font-extrabold tracking-[.13em] text-[var(--node-accent)]">SUBFLOW</small><strong className="text-xs text-slate-800">{data.appearance.label?.trim() || 'Novo subflow'}</strong></span>
+          <span className="flex flex-col"><small className="text-[8px] font-extrabold tracking-[.13em] text-[var(--node-accent)]">SUBFLOW</small><strong className="text-xs text-slate-800">{data?.appearance?.label?.trim() || 'Novo subflow'}</strong></span>
           <small className="ml-auto text-[9px] text-slate-400">Arraste nodes para dentro</small>
         </header>
         <div className="pointer-events-none absolute bottom-3.5 left-3.5 right-3.5 top-[72px] rounded-xl border border-dashed border-violet-200" />

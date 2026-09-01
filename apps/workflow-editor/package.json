@@ -14,6 +14,8 @@
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
     "@runflux/plugin-system": "*",
+    "@runflux/validation-runtime": "*",
+    "@runflux/workflow-model": "*",
     "@xyflow/react": "^12.3.5",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

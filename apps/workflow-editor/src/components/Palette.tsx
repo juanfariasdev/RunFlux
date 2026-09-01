@@ -63,9 +63,16 @@ function PaletteItem({ manifest }: { manifest: PluginManifest }) {
       JSON.stringify({ id: manifest.id, name: manifest.name, category: manifest.category, version: manifest.version }),
     );
     event.dataTransfer.effectAllowed = 'copyMove';
-    const bounds = event.currentTarget.getBoundingClientRect();
-    event.dataTransfer.setDragImage(event.currentTarget, event.clientX - bounds.left, event.clientY - bounds.top);
-    event.currentTarget.classList.add('opacity-40', 'border-dashed');
+    try {
+      const bounds = event.currentTarget.getBoundingClientRect();
+      event.dataTransfer.setDragImage(event.currentTarget, event.clientX - bounds.left, event.clientY - bounds.top);
+    } catch {
+      // ignore
+    }
+    const target = event.currentTarget;
+    setTimeout(() => {
+      target?.classList.add('opacity-40', 'border-dashed');
+    }, 0);
     window.dispatchEvent(new CustomEvent('runflux:palette-drag-start', {
       detail: { id: manifest.id, name: manifest.name, category: manifest.category, version: manifest.version },
     }));
@@ -76,11 +83,39 @@ function PaletteItem({ manifest }: { manifest: PluginManifest }) {
     window.dispatchEvent(new Event('runflux:palette-drag-end'));
   };
 
+  const onAddClick = () => {
+    window.dispatchEvent(new CustomEvent('runflux:palette-add-plugin', {
+      detail: { id: manifest.id, name: manifest.name, category: manifest.category, version: manifest.version },
+    }));
+  };
+
   return (
-    <div draggable onDragStart={onDragStart} onDragEnd={onDragEnd} className="group flex min-h-[58px] cursor-grab select-none items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-2.5 py-2 shadow-sm transition hover:-translate-y-px hover:border-indigo-200 hover:shadow-lg active:cursor-grabbing" data-plugin-id={manifest.id}>
+    <div
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      onDoubleClick={onAddClick}
+      className="group flex min-h-[58px] cursor-grab select-none items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-2.5 py-2 shadow-sm transition hover:-translate-y-px hover:border-indigo-200 hover:shadow-lg active:cursor-grabbing"
+      data-plugin-id={manifest.id}
+    >
       <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-[10px] ${categoryClasses(manifest.category)}`}><PluginIcon category={manifest.category} /></span>
-      <span className="flex min-w-0 flex-1 flex-col"><strong className="truncate text-[11px] text-slate-800">{manifest.name}</strong>{manifest.id !== manifest.name && <small className="truncate text-[9px] text-slate-400">{manifest.id}</small>}</span>
-      <span className="text-[15px] text-slate-300 transition group-hover:text-indigo-400" aria-hidden="true">⠿</span>
+      <span className="flex min-w-0 flex-1 flex-col">
+        <strong className="truncate text-[11px] text-slate-800">{manifest.name}</strong>
+        {manifest.id !== manifest.name && <small className="truncate text-[9px] text-slate-400">{manifest.id}</small>}
+      </span>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onAddClick();
+        }}
+        className="opacity-0 group-hover:opacity-100 grid h-6 w-6 place-items-center rounded-lg bg-indigo-50 text-xs font-bold text-indigo-600 transition hover:bg-indigo-600 hover:text-white"
+        title="Clique para adicionar ao fluxo"
+        aria-label={`Adicionar ${manifest.name} ao fluxo`}
+      >
+        ＋
+      </button>
+      <span className="text-[15px] text-slate-300 transition group-hover:hidden" aria-hidden="true">⠿</span>
     </div>
   );
 }

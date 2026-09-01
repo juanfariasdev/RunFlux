@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useWorkflowStore } from '../workflow-store';
-import type { WorkflowConnection, WorkflowNode } from '../../domain/types';
+import type { WorkflowConnection, WorkflowNode } from '@runflux/workflow-model/types';
 
 function node(id: string): WorkflowNode {
   return { id, pluginId: 'action-example', pluginVersion: '1.0.0', parameters: {}, position: { x: 0, y: 0 } };
@@ -76,6 +76,21 @@ describe('updateNodeParameters / moveNode', () => {
       parameters: {},
       appearance: { label: 'Webhook', shape: 'pill', color: '#4f46e5', width: 280, height: 120 },
     });
+  });
+
+  it('updates parentId on node and ensures parent nodes precede child nodes', () => {
+    const { addNode, updateNodeGeometry } = useWorkflowStore.getState();
+    addNode(node('child'));
+    addNode(node('parent'));
+
+    updateNodeGeometry('child', { parentId: 'parent' });
+
+    const nodes = useWorkflowStore.getState().workflow.nodes;
+    expect(nodes.map((n) => n.id)).toEqual(['parent', 'child']);
+    expect(nodes.find((n) => n.id === 'child')?.parentId).toBe('parent');
+
+    updateNodeGeometry('child', { parentId: null });
+    expect(useWorkflowStore.getState().workflow.nodes.find((n) => n.id === 'child')?.parentId).toBeUndefined();
   });
 });
 

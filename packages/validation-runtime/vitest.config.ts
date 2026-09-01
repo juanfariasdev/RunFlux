@@ -6,6 +6,6 @@ export default defineConfig({
     // fail to match a *top-level* dist/ (a known picomatch "**" boundary
     // quirk) — add the root-relative form explicitly so a stray `tsc -b`
     // output here never gets picked up as test files.
-    exclude: [...configDefaults.exclude, 'dist/**'],
+    exclude: [...configDefaults.exclude, 'dist/**', 'dist-node/**'],
   },
 });

@@ -1,4 +1,4 @@
-import type { WorkflowDefinition } from '../domain/types';
+import type { WorkflowDefinition } from '@runflux/workflow-model/types';
 
 /**
  * Seam to the `workflow-project-management` feature (not yet built, D-07).

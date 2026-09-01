@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { layoutWorkflowNodes } from '../layout';
-import type { WorkflowConnection, WorkflowNode } from '../types';
+import type { WorkflowConnection, WorkflowNode } from '@runflux/workflow-model/types';
 
 const nodes: WorkflowNode[] = ['a', 'b', 'c'].map((id) => ({
   id,

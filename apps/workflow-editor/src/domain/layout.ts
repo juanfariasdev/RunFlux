@@ -1,4 +1,4 @@
-import type { WorkflowConnection, WorkflowNode } from './types';
+import type { WorkflowConnection, WorkflowNode } from '@runflux/workflow-model/types';
 
 export type WorkflowLayout = 'horizontal' | 'vertical' | 'grid';
 

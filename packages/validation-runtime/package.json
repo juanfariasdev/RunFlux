@@ -5,19 +5,25 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./node": {
+      "types": "./node.d.ts",
+      "import": "./dist-node/index.mjs"
+    },
     "./engine": "./src/engine.ts",
     "./topological-order": "./src/topological-order.ts"
   },
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -b tsconfig.json"
+    "typecheck": "tsc -b tsconfig.json",
+    "build:node": "esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist-node/index.mjs --external:zod"
   },
   "dependencies": {
     "@runflux/plugin-system": "*",
     "@runflux/workflow-model": "*"
   },
   "devDependencies": {
+    "esbuild": "^0.25.0",
     "typescript": "^5.5.4",
     "vitest": "^4.1.9",
     "@types/node": "^22.5.0"

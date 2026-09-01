@@ -43,7 +43,7 @@ export function Toolbar({ catalog, persistence, validation }: ToolbarProps) {
       }
     }
 
-    const result = await validation.run(workflow);
+    const result = await validation.run(workflow, { mode: 'sandbox' });
     setStatus({ kind: 'tested', message: result.message ?? result.status });
   };
 

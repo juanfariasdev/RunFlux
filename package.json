@@ -11,7 +11,7 @@
     "apps/*"
   ],
   "scripts": {
-    "postinstall": "npm run build:node --workspace=@runflux/plugin-system --if-present",
+    "postinstall": "npm run build:node --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present"
   },

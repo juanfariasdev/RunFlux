@@ -1,4 +1,4 @@
-import type { WorkflowConnection, WorkflowEdgeType } from '../domain/types';
+import type { WorkflowConnection, WorkflowEdgeType } from '@runflux/workflow-model/types';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';

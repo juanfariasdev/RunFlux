@@ -1,12 +1,12 @@
 import { create } from 'zustand';
-import { wouldCreateCycle } from '../domain/dag';
+import { wouldCreateCycle } from '@runflux/workflow-model/dag';
 import type {
   WorkflowConnection,
   WorkflowDefinition,
   WorkflowEdgeType,
   WorkflowNode,
   WorkflowNodeAppearance,
-} from '../domain/types';
+} from '@runflux/workflow-model/types';
 
 export interface WorkflowStoreState {
   workflow: WorkflowDefinition;

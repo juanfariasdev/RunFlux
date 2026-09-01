@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { NoopValidationRuntimeAdapter } from '../validation-runtime-adapter';
 import { InMemoryWorkflowPersistenceAdapter } from '../workflow-persistence-adapter';
-import type { WorkflowDefinition } from '../../domain/types';
+import type { WorkflowDefinition } from '@runflux/workflow-model/types';
 
 const workflow: WorkflowDefinition = {
   id: 'wf-1',
@@ -11,10 +11,18 @@ const workflow: WorkflowDefinition = {
 };
 
 describe('NoopValidationRuntimeAdapter', () => {
-  it('always resolves with status "success" and never throws', async () => {
+  it('always resolves run() with status "success" and an empty nodeResults, and never throws', async () => {
     const adapter = new NoopValidationRuntimeAdapter();
-    const result = await adapter.run(workflow);
+    const result = await adapter.run(workflow, { mode: 'sandbox' });
     expect(result.status).toBe('success');
+    expect(result.nodeResults).toEqual([]);
+  });
+
+  it('always resolves runNode() with a result carrying no error', async () => {
+    const adapter = new NoopValidationRuntimeAdapter();
+    const result = await adapter.runNode(workflow, 'n1', { mode: 'sandbox' });
+    expect(result.nodeId).toBe('n1');
+    expect(result.error).toBeNull();
   });
 });
 

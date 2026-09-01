@@ -42,7 +42,7 @@ describe('Toolbar — Save (RF-07, RN-04)', () => {
 
     const save = vi.fn().mockResolvedValue(undefined);
     const persistence: WorkflowPersistenceAdapter = { save, load: vi.fn() };
-    const validation: ValidationRuntimeAdapter = { run: vi.fn() };
+    const validation: ValidationRuntimeAdapter = { run: vi.fn(), runNode: vi.fn() };
 
     render(<Toolbar catalog={fakeCatalog()} persistence={persistence} validation={validation} />);
     fireEvent.click(screen.getByRole('button', { name: /save/i }));
@@ -67,7 +67,7 @@ describe('Toolbar — Test (RF-06, RF-12, RN-04)', () => {
       <Toolbar
         catalog={fakeCatalog()}
         persistence={{ save: vi.fn(), load: vi.fn() }}
-        validation={{ run }}
+        validation={{ run, runNode: vi.fn() }}
       />,
     );
     fireEvent.click(screen.getByRole('button', { name: /test/i }));
@@ -90,7 +90,7 @@ describe('Toolbar — Test (RF-06, RF-12, RN-04)', () => {
       <Toolbar
         catalog={fakeCatalog()}
         persistence={{ save: vi.fn(), load: vi.fn() }}
-        validation={{ run }}
+        validation={{ run, runNode: vi.fn() }}
       />,
     );
     fireEvent.click(screen.getByRole('button', { name: /test/i }));
