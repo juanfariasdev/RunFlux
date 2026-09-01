@@ -1,4 +1,4 @@
-import type { DiscoveredPlugin, GeneratorFn, PluginManifest } from './types';
+import type { DiscoveredPlugin, ExecutorFn, GeneratorFn, PluginManifest } from './types';
 import { scanDirectory, type ScanError } from './discovery/directory-scanner';
 import { scanPackages } from './discovery/package-scanner';
 
@@ -98,5 +98,16 @@ export class PluginRegistry {
   /** Returns the manifest for a plugin id, or undefined if not registered (used by RF-08 fallback checks). */
   getManifest(pluginId: string): PluginManifest | undefined {
     return this.plugins.get(pluginId)?.manifest;
+  }
+
+  /**
+   * Returns the local executor for a plugin id, or undefined if the plugin
+   * is not registered or does not declare one (003-validation-runtime, D-04).
+   * Unlike `resolveGenerator`, this never throws — the caller (the
+   * validation engine) turns "no executor" into a per-node result, not an
+   * exception that would abort the whole run.
+   */
+  getExecutor(pluginId: string): ExecutorFn | undefined {
+    return this.plugins.get(pluginId)?.execute;
   }
 }

@@ -32,3 +32,13 @@ export const generators: PluginModule['generators'] = {
     infra: [],
   }),
 };
+
+/**
+ * Runtime executor (003-validation-runtime, D-05): fires the trigger on
+ * demand during validation, distinct from `generators.local` above (which
+ * only produces compile-time file/infra text, never runs anything).
+ */
+export const execute: PluginModule['execute'] = (params) => ({
+  label: (params.label as string | undefined) ?? 'Manual run',
+  triggeredAt: new Date().toISOString(),
+});

@@ -58,6 +58,7 @@ export async function scanDirectory(dirPath: string): Promise<ScanResult> {
       plugins.push({
         manifest: validation.manifest,
         generators: mod.generators,
+        execute: mod.execute,
         sourcePath: pluginDir,
       });
     } catch (err) {

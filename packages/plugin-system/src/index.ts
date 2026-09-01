@@ -4,11 +4,13 @@
 
 export type {
   DiscoveredPlugin,
+  ExecutorFn,
   GeneratedArtifact,
   GeneratorFn,
   InfraFragment,
   ParameterSchema,
   PluginCategory,
+  PluginExecutionContext,
   PluginManifest,
   PluginModule,
   WorkflowContext,
@@ -25,3 +27,4 @@ export { serializeManifest, deserializeManifest } from './manifest-serializer';
 export { listPlugins } from './api/list-plugins';
 export { resolveGenerator, checkPluginReference } from './api/resolve-generator';
 export type { PluginReferenceStatus } from './api/resolve-generator';
+export { resolveExecutor } from './api/resolve-executor';

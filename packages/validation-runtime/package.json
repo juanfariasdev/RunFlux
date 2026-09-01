@@ -1,0 +1,25 @@
+{
+  "name": "@runflux/validation-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./engine": "./src/engine.ts",
+    "./topological-order": "./src/topological-order.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -b tsconfig.json"
+  },
+  "dependencies": {
+    "@runflux/plugin-system": "*",
+    "@runflux/workflow-model": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "vitest": "^4.1.9",
+    "@types/node": "^22.5.0"
+  }
+}

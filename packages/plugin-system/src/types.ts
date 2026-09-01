@@ -50,12 +50,39 @@ export type GeneratorFn = (
 ) => GeneratedArtifact;
 
 /**
+ * Context passed to a plugin's `execute` function (003-validation-runtime,
+ * D-03/RN-04). Distinct from `WorkflowContext`: this one carries `mode`,
+ * needed only at runtime, never at compile-time code generation.
+ */
+export interface PluginExecutionContext {
+  workflowId: string;
+  nodeId: string;
+  mode: 'sandbox' | 'production';
+}
+
+/**
+ * Runs a plugin's actual logic against real/mock data (003-validation-runtime,
+ * D-03). Deliberately a third, independent function from `GeneratorFn`:
+ * `GeneratorFn` takes config and produces file/infra text for a compile
+ * target; `ExecutorFn` takes data and produces data, for interactive
+ * validation before anything is compiled. Optional — a plugin without
+ * `execute` simply cannot be validated at runtime yet (still fully usable for
+ * compilation via its generators).
+ */
+export type ExecutorFn = (
+  params: Record<string, unknown>,
+  input: unknown,
+  context: PluginExecutionContext,
+) => unknown | Promise<unknown>;
+
+/**
  * A discovered plugin, pairing its manifest with one generator per platform it
- * declares support for.
+ * declares support for, plus an optional local executor (D-03).
  */
 export interface DiscoveredPlugin {
   manifest: PluginManifest;
   generators: Record<string, GeneratorFn>;
+  execute?: ExecutorFn;
   sourcePath: string;
 }
 
@@ -63,4 +90,5 @@ export interface DiscoveredPlugin {
 export interface PluginModule {
   manifest: PluginManifest;
   generators: Record<string, GeneratorFn>;
+  execute?: ExecutorFn;
 }

@@ -101,6 +101,7 @@ export async function scanPackages(nodeModulesDir: string): Promise<ScanResult> 
       plugins.push({
         manifest: validation.manifest,
         generators: mod.generators,
+        execute: mod.execute,
         sourcePath: pkgDir,
       });
     } catch (err) {

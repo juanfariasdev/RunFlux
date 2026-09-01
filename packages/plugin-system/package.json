@@ -17,7 +17,8 @@
     "./discovery/package-scanner": "./src/discovery/package-scanner.ts",
     "./discovery/logger": "./src/discovery/logger.ts",
     "./api/list-plugins": "./src/api/list-plugins.ts",
-    "./api/resolve-generator": "./src/api/resolve-generator.ts"
+    "./api/resolve-generator": "./src/api/resolve-generator.ts",
+    "./api/resolve-executor": "./src/api/resolve-executor.ts"
   },
   "scripts": {
     "test": "vitest run",
