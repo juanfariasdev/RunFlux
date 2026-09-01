@@ -10,7 +10,11 @@ function manifest(category: PluginManifest['category']): PluginManifest {
 }
 
 // Minimal NodeProps stand-in — only the fields WorkflowNodeView actually reads.
-function makeProps(manifestOrUndefined: PluginManifest | undefined, selected = false): NodeProps<FlowNode> {
+function makeProps(
+  manifestOrUndefined: PluginManifest | undefined,
+  selected = false,
+  parameters: Record<string, unknown> = {},
+): NodeProps<FlowNode> {
   return {
     id: 'node-1',
     type: 'workflowNode',
@@ -18,17 +22,17 @@ function makeProps(manifestOrUndefined: PluginManifest | undefined, selected = f
     data: {
       pluginId: manifestOrUndefined?.id ?? 'unknown',
       pluginVersion: '1.0.0',
-      parameters: {},
+      parameters,
       manifest: manifestOrUndefined,
       referenceStatus: manifestOrUndefined ? { status: 'ok' as const } : { status: 'missing' as const },
     },
   } as NodeProps<FlowNode>;
 }
 
-function renderNode(manifestOrUndefined: PluginManifest | undefined) {
+function renderNode(manifestOrUndefined: PluginManifest | undefined, parameters: Record<string, unknown> = {}) {
   return render(
     <ReactFlowProvider>
-      <WorkflowNodeView {...makeProps(manifestOrUndefined)} />
+      <WorkflowNodeView {...makeProps(manifestOrUndefined, false, parameters)} />
     </ReactFlowProvider>,
   );
 }
@@ -56,5 +60,22 @@ describe('WorkflowNodeView — handle layout by category', () => {
     const { container } = renderNode(undefined);
     expect(container.querySelector('.react-flow__handle-left')).not.toBeNull();
     expect(container.querySelector('.react-flow__handle-right')).not.toBeNull();
+  });
+});
+
+describe('WorkflowNodeView — node title reflects the user-set "label" parameter', () => {
+  it('falls back to the plugin manifest name when no label parameter is set', () => {
+    const { getByTestId } = renderNode(manifest('action'));
+    expect(getByTestId('workflow-node')).toHaveTextContent('action node');
+  });
+
+  it('shows the user-typed label instead of the manifest name once one is set', () => {
+    const { getByTestId } = renderNode(manifest('action'), { label: 'My Custom Label' });
+    expect(getByTestId('workflow-node')).toHaveTextContent('My Custom Label');
+  });
+
+  it('ignores a label parameter that is empty or only whitespace', () => {
+    const { getByTestId } = renderNode(manifest('action'), { label: '   ' });
+    expect(getByTestId('workflow-node')).toHaveTextContent('action node');
   });
 });
