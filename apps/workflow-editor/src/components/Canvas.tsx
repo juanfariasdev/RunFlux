@@ -11,6 +11,7 @@ import '@xyflow/react/dist/style.css';
 import type { PluginManifest } from '@runflux/plugin-system/types';
 import type { PluginCatalogAdapter } from '../adapters/plugin-catalog-adapter';
 import { fromReactFlowEdge, toReactFlowEdge, toReactFlowNode, type FlowNode } from '../adapters/react-flow-adapter';
+import { isConnectionCompatible } from '../domain/connection-compatibility';
 import { useWorkflowStore } from '../store/workflow-store';
 import { WorkflowNodeView } from './WorkflowNodeView';
 
@@ -19,13 +20,6 @@ const nodeTypes = { workflowNode: WorkflowNodeView };
 export interface CanvasProps {
   catalog: PluginCatalogAdapter;
   onSelectNode: (nodeId: string | undefined) => void;
-}
-
-/** Returns false when connecting `source`'s output into `target`'s input is not allowed (RF-05). */
-function isConnectionCompatible(sourceManifest: PluginManifest | undefined, targetManifest: PluginManifest | undefined): boolean {
-  if (!sourceManifest || !targetManifest) return true; // unresolved plugin — don't block on top of an already-broken node (EC-01)
-  // A trigger starts a flow — it never accepts an incoming connection.
-  return targetManifest.category !== 'trigger';
 }
 
 export function Canvas({ catalog, onSelectNode }: CanvasProps) {
@@ -76,7 +70,9 @@ export function Canvas({ catalog, onSelectNode }: CanvasProps) {
       );
 
       if (!compatible) {
-        setRejectionMessage('Incompatible connection: a trigger cannot receive an incoming connection.');
+        setRejectionMessage(
+          'Incompatible connection: triggers cannot receive an incoming connection, and outputs cannot send to a further node.',
+        );
         return;
       }
 

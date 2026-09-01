@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import { Palette } from '../Palette';
 import type { PluginCatalogAdapter } from '../../adapters/plugin-catalog-adapter';
 import type { PluginManifest } from '@runflux/plugin-system/types';
@@ -48,5 +48,22 @@ describe('Palette', () => {
     const item = await screen.findByText('trigger-cron');
     expect(item.closest('[data-plugin-id]')).toHaveAttribute('data-plugin-id', 'trigger-cron');
     expect(item.closest('[draggable]')).toHaveAttribute('draggable', 'true');
+  });
+
+  it('explicitly sets a drag preview image on dragstart, so a ghost is always visible', async () => {
+    render(<Palette catalog={fakeCatalog({ trigger: [manifest('trigger-cron', 'trigger')] })} />);
+    const item = (await screen.findByText('trigger-cron')).closest('[draggable]') as HTMLElement;
+
+    const setData = vi.fn();
+    const setDragImage = vi.fn();
+    fireEvent.dragStart(item, {
+      dataTransfer: { setData, setDragImage, effectAllowed: '' },
+      clientX: 15,
+      clientY: 8,
+    });
+
+    expect(setData).toHaveBeenCalledWith('application/runflux-plugin-id', 'trigger-cron');
+    expect(setDragImage).toHaveBeenCalledTimes(1);
+    expect(setDragImage.mock.calls[0][0]).toBe(item);
   });
 });

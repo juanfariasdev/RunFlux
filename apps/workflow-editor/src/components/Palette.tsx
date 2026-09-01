@@ -61,9 +61,17 @@ export function Palette({ catalog }: PaletteProps) {
 }
 
 function PaletteItem({ manifest }: { manifest: PluginManifest }) {
-  const onDragStart = (event: React.DragEvent) => {
+  const onDragStart = (event: React.DragEvent<HTMLDivElement>) => {
     event.dataTransfer.setData('application/runflux-plugin-id', manifest.id);
     event.dataTransfer.effectAllowed = 'move';
+
+    // Explicitly set the drag preview to the element itself, offset to the
+    // exact point the user grabbed it. Some environments don't reliably
+    // paint a default ghost image for an element still attached to the live
+    // DOM (no snapshot is taken otherwise in those cases) — being explicit
+    // here guarantees a visible drag preview everywhere.
+    const rect = event.currentTarget.getBoundingClientRect();
+    event.dataTransfer.setDragImage(event.currentTarget, event.clientX - rect.left, event.clientY - rect.top);
   };
 
   return (

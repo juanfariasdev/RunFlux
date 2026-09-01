@@ -8,7 +8,16 @@ import type { FlowNode } from '../adapters/react-flow-adapter';
  */
 export function WorkflowNodeView({ data, selected }: NodeProps<FlowNode>) {
   const status = data.referenceStatus.status;
-  const label = data.manifest?.name ?? data.pluginId;
+  const customLabel = data.parameters.label;
+  const label =
+    typeof customLabel === 'string' && customLabel.trim().length > 0
+      ? customLabel
+      : (data.manifest?.name ?? data.pluginId);
+  const category = data.manifest?.category;
+  // A trigger starts a flow — it never receives an incoming connection (RF-05).
+  // An output node is a terminal step — it never sends to a further node.
+  const showTargetHandle = category !== 'trigger';
+  const showSourceHandle = category !== 'output';
 
   const borderClass =
     status === 'missing'
@@ -25,7 +34,7 @@ export function WorkflowNodeView({ data, selected }: NodeProps<FlowNode>) {
       data-testid="workflow-node"
       data-status={status}
     >
-      <Handle type="target" position={Position.Left} />
+      {showTargetHandle && <Handle type="target" position={Position.Left} />}
       <div className="text-sm font-medium text-slate-900">{label}</div>
       {status === 'missing' && (
         <div className="mt-1 text-xs text-red-600" role="alert">
@@ -37,7 +46,7 @@ export function WorkflowNodeView({ data, selected }: NodeProps<FlowNode>) {
           Plugin updated (installed v{data.referenceStatus.status === 'outdated' ? data.referenceStatus.installedVersion : ''})
         </div>
       )}
-      <Handle type="source" position={Position.Right} />
+      {showSourceHandle && <Handle type="source" position={Position.Right} />}
     </div>
   );
 }
