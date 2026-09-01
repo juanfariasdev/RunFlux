@@ -50,7 +50,7 @@ describe('Palette', () => {
     expect(item.closest('[draggable]')).toHaveAttribute('draggable', 'true');
   });
 
-  it('explicitly sets a drag preview image on dragstart, so a ghost is always visible', async () => {
+  it('uses a transparent native drag image so only the zoom-aware canvas preview is visible', async () => {
     render(<Palette catalog={fakeCatalog({ trigger: [manifest('trigger-cron', 'trigger')] })} />);
     const item = (await screen.findByText('trigger-cron')).closest('[draggable]') as HTMLElement;
 
@@ -64,7 +64,10 @@ describe('Palette', () => {
 
     expect(setData).toHaveBeenCalledWith('application/runflux-plugin-id', 'trigger-cron');
     expect(setDragImage).toHaveBeenCalledTimes(1);
-    expect(setDragImage.mock.calls[0][0]).toBe(item);
+    const dragImage = setDragImage.mock.calls[0][0] as HTMLElement;
+    expect(dragImage).not.toBe(item);
+    expect(dragImage.style.opacity).toBe('0');
+    expect(dragImage.style.width).toBe('1px');
   });
 
   it('publishes the dragged plugin metadata for the canvas preview', async () => {

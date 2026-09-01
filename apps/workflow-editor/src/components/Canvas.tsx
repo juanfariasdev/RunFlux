@@ -8,6 +8,7 @@ import {
   Panel,
   ReactFlow,
   useReactFlow,
+  useViewport,
   type Connection,
   type EdgeChange,
   type NodeChange,
@@ -25,6 +26,8 @@ import { SubflowNodeView, WorkflowNodeView } from './WorkflowNodeView';
 
 const nodeTypes = { workflowNode: WorkflowNodeView, subflowNode: SubflowNodeView };
 const PLUGIN_DRAG_TYPE = 'application/runflux-plugin-id';
+const DEFAULT_NODE_WIDTH = 220;
+const DEFAULT_NODE_HEIGHT = 104;
 type DraggedPlugin = Pick<PluginManifest, 'id' | 'name' | 'category' | 'version'>;
 
 export interface CanvasProps {
@@ -50,6 +53,7 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge }: CanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const dragDepth = useRef(0);
   const { fitView, screenToFlowPosition } = useReactFlow();
+  const { zoom } = useViewport();
 
   const manifestFor = useCallback((pluginId: string) => manifests[pluginId], [manifests]);
   const nodes: FlowNode[] = useMemo(
@@ -240,10 +244,14 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge }: CanvasProps) {
       absolutePosition = { x: 200, y: 150 };
     }
 
+    const nodePosition = {
+      x: absolutePosition.x - DEFAULT_NODE_WIDTH / 2,
+      y: absolutePosition.y - DEFAULT_NODE_HEIGHT / 2,
+    };
     const parent = findContainingSubflow(workflow.nodes, absolutePosition);
     const position = parent
-      ? { x: absolutePosition.x - parent.position.x, y: absolutePosition.y - parent.position.y }
-      : absolutePosition;
+      ? { x: nodePosition.x - parent.position.x, y: nodePosition.y - parent.position.y }
+      : nodePosition;
 
     const newNodeId = crypto.randomUUID();
     addNode({
@@ -256,8 +264,8 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge }: CanvasProps) {
       appearance: {
         shape: 'card',
         color: categoryColor(manifest?.category ?? previewPlugin?.category),
-        width: 220,
-        height: 104,
+        width: DEFAULT_NODE_WIDTH,
+        height: DEFAULT_NODE_HEIGHT,
       },
     });
     requestAnimationFrame(() => onSelectNode(newNodeId));
@@ -362,12 +370,19 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge }: CanvasProps) {
       )}
 
       {isDragActive && (
-        <div className="pointer-events-none absolute inset-2.5 z-[15] rounded-[18px] border-2 border-dashed border-indigo-400 bg-indigo-500/5 shadow-[inset_0_0_60px_rgb(99_102_241_/.06)]" aria-live="polite">
+        <div className="pointer-events-none absolute inset-0 z-[15]" aria-live="polite">
+          <div className="absolute inset-2.5 rounded-[18px] border-2 border-dashed border-indigo-400 bg-indigo-500/5 shadow-[inset_0_0_60px_rgb(99_102_241_/.06)]" />
           {draggedPlugin ? (
             <div
               data-testid="dragged-node-preview"
-              className="absolute flex h-[76px] w-[220px] -translate-y-1/2 translate-x-4 items-center gap-3 rounded-[14px] border bg-white/95 px-4 shadow-2xl shadow-indigo-200/80 backdrop-blur transition-[left,top] duration-75"
-              style={{ left: dragPoint.x, top: dragPoint.y, borderColor: categoryColor(draggedPlugin.category) }}
+              className="absolute flex h-[104px] w-[220px] items-center gap-3 rounded-[14px] border bg-white/95 px-4 shadow-2xl shadow-indigo-200/80 backdrop-blur"
+              style={{
+                left: dragPoint.x,
+                top: dragPoint.y,
+                borderColor: categoryColor(draggedPlugin.category),
+                transform: `translate(-50%, -50%) scale(${zoom})`,
+                transformOrigin: 'center',
+              }}
             >
               <span className="absolute bottom-3 left-0 top-3 w-1 rounded-r" style={{ backgroundColor: categoryColor(draggedPlugin.category) }} />
               <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-slate-50 text-sm font-extrabold" style={{ color: categoryColor(draggedPlugin.category) }}>
@@ -409,7 +424,6 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge }: CanvasProps) {
         connectionLineStyle={{ stroke: '#4f46e5', strokeWidth: 2 }}
         defaultEdgeOptions={{ type: 'smoothstep' }}
         deleteKeyCode={['Backspace', 'Delete']}
-        fitView
         fitViewOptions={{ padding: 0.2 }}
         minZoom={0.25}
         maxZoom={2.25}
@@ -427,7 +441,7 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge }: CanvasProps) {
           nodeStrokeColor="#ffffff"
           nodeStrokeWidth={3}
           maskColor="rgba(15, 23, 42, 0.08)"
-          ariaLabel="Mapa do workflow"
+          ariaLabel="Workflow map"
         />
         <Panel position="top-center" className="!flex !items-center !gap-1 !rounded-xl !border !border-slate-200 !bg-white/95 !p-1 !shadow-xl !backdrop-blur">
           <span className="px-1.5 text-[9px] font-extrabold uppercase tracking-wider text-slate-400 max-[1120px]:hidden">Layout</span>

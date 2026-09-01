@@ -4,15 +4,22 @@ import type { PluginCatalogAdapter } from '../../adapters/plugin-catalog-adapter
 import { useWorkflowStore } from '../../store/workflow-store';
 import { Canvas } from '../Canvas';
 
+const reactFlowMocks = vi.hoisted(() => ({
+  fitView: vi.fn(),
+  screenToFlowPosition: vi.fn(({ x, y }: { x: number; y: number }) => ({ x, y })),
+  zoom: 1,
+}));
+
 vi.mock('@xyflow/react', async () => {
   const actual = await vi.importActual<typeof import('@xyflow/react')>('@xyflow/react');
 
   return {
     ...actual,
-    ReactFlow: ({ children, onDrop, nodes = [] }: React.HTMLAttributes<HTMLDivElement> & { nodes?: unknown[] }) => (
+    ReactFlow: ({ children, onDrop, nodes = [], fitView: shouldFitView }: React.HTMLAttributes<HTMLDivElement> & { nodes?: unknown[]; fitView?: boolean }) => (
       <div
         data-testid="react-flow-pane"
         data-node-count={nodes.length}
+        data-fit-view={shouldFitView ? 'true' : 'false'}
         onDrop={(event) => {
           onDrop?.(event);
           event.stopPropagation();
@@ -26,9 +33,10 @@ vi.mock('@xyflow/react', async () => {
     MiniMap: () => null,
     Panel: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
     useReactFlow: () => ({
-      screenToFlowPosition: ({ x, y }: { x: number; y: number }) => ({ x, y }),
-      fitView: vi.fn(),
+      screenToFlowPosition: reactFlowMocks.screenToFlowPosition,
+      fitView: reactFlowMocks.fitView,
     }),
+    useViewport: () => ({ x: 0, y: 0, zoom: reactFlowMocks.zoom }),
   };
 });
 
@@ -38,6 +46,10 @@ const catalog: PluginCatalogAdapter = {
 };
 
 beforeEach(() => {
+  reactFlowMocks.fitView.mockReset();
+  reactFlowMocks.zoom = 1;
+  reactFlowMocks.screenToFlowPosition.mockReset();
+  reactFlowMocks.screenToFlowPosition.mockImplementation(({ x, y }) => ({ x, y }));
   useWorkflowStore.setState({
     workflow: { id: 'wf-test', name: 'Test', nodes: [], connections: [] },
     selectedNodeId: undefined,
@@ -96,8 +108,68 @@ describe('Canvas external drag feedback', () => {
     expect(useWorkflowStore.getState().workflow.nodes[0]).toMatchObject({
       pluginId: 'action-http',
       pluginVersion: '1.2.3',
-      position: { x: 240, y: 180 },
+      position: { x: 130, y: 128 },
     });
+  });
+
+  it('keeps the current viewport when a node is dropped', async () => {
+    render(<Canvas catalog={catalog} onSelectNode={vi.fn()} />);
+
+    window.dispatchEvent(new CustomEvent('runflux:palette-drag-start', {
+      detail: { id: 'action-http', name: 'HTTP Request', category: 'action', version: '1.2.3' },
+    }));
+    const pane = screen.getByTestId('react-flow-pane');
+    fireEvent.dragEnter(pane, {
+      dataTransfer: { types: ['application/runflux-plugin-id'] },
+    });
+    const dropEvent = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperties(dropEvent, {
+      clientX: { value: 320 },
+      clientY: { value: 240 },
+      dataTransfer: { value: { getData: () => '' } },
+    });
+    fireEvent(pane, dropEvent);
+
+    await vi.waitFor(() => expect(useWorkflowStore.getState().workflow.nodes).toHaveLength(1));
+    expect(reactFlowMocks.fitView).not.toHaveBeenCalled();
+    expect(pane).toHaveAttribute('data-fit-view', 'false');
+  });
+
+  it('matches the drag preview and dropped node to a zoomed viewport', async () => {
+    reactFlowMocks.zoom = 0.5;
+    reactFlowMocks.screenToFlowPosition.mockImplementation(({ x, y }) => ({ x: x / 0.5, y: y / 0.5 }));
+    render(<Canvas catalog={catalog} onSelectNode={vi.fn()} />);
+
+    window.dispatchEvent(new CustomEvent('runflux:palette-drag-start', {
+      detail: { id: 'action-http', name: 'HTTP Request', category: 'action', version: '1.2.3' },
+    }));
+    const pane = screen.getByTestId('react-flow-pane');
+    fireEvent.dragEnter(pane, { dataTransfer: { types: ['application/runflux-plugin-id'] } });
+    const dragOverEvent = new Event('dragover', { bubbles: true, cancelable: true });
+    Object.defineProperties(dragOverEvent, {
+      clientX: { value: 300 },
+      clientY: { value: 200 },
+      dataTransfer: { value: { types: ['application/runflux-plugin-id'], dropEffect: 'none' } },
+    });
+    fireEvent(screen.getByTestId('canvas'), dragOverEvent);
+
+    const preview = screen.getByTestId('dragged-node-preview');
+    expect(preview).toHaveStyle({
+      left: '300px',
+      top: '200px',
+      transform: 'translate(-50%, -50%) scale(0.5)',
+    });
+
+    const dropEvent = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperties(dropEvent, {
+      clientX: { value: 300 },
+      clientY: { value: 200 },
+      dataTransfer: { value: { getData: () => '' } },
+    });
+    fireEvent(pane, dropEvent);
+
+    await vi.waitFor(() => expect(useWorkflowStore.getState().workflow.nodes).toHaveLength(1));
+    expect(useWorkflowStore.getState().workflow.nodes[0].position).toEqual({ x: 490, y: 348 });
   });
 
   it('adds a plugin dropped onto the main canvas container using application/json payload', async () => {
@@ -125,7 +197,7 @@ describe('Canvas external drag feedback', () => {
     expect(useWorkflowStore.getState().workflow.nodes[0]).toMatchObject({
       pluginId: 'action-json',
       pluginVersion: '2.0.0',
-      position: { x: 300, y: 200 },
+      position: { x: 190, y: 148 },
     });
   });
 
@@ -168,6 +240,6 @@ describe('Canvas external drag feedback', () => {
     const childNode = useWorkflowStore.getState().workflow.nodes.find((n) => n.pluginId === 'trigger-http');
     expect(childNode).toBeDefined();
     expect(childNode?.parentId).toBe('subflow-1');
-    expect(childNode?.position).toEqual({ x: 150, y: 120 });
+    expect(childNode?.position).toEqual({ x: 40, y: 68 });
   });
 });

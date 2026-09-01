@@ -64,8 +64,18 @@ function PaletteItem({ manifest }: { manifest: PluginManifest }) {
     );
     event.dataTransfer.effectAllowed = 'copyMove';
     try {
-      const bounds = event.currentTarget.getBoundingClientRect();
-      event.dataTransfer.setDragImage(event.currentTarget, event.clientX - bounds.left, event.clientY - bounds.top);
+      const transparentDragImage = document.createElement('div');
+      Object.assign(transparentDragImage.style, {
+        position: 'fixed',
+        top: '-1000px',
+        left: '-1000px',
+        width: '1px',
+        height: '1px',
+        opacity: '0',
+      });
+      document.body.appendChild(transparentDragImage);
+      event.dataTransfer.setDragImage(transparentDragImage, 0, 0);
+      setTimeout(() => transparentDragImage.remove(), 0);
     } catch {
       // ignore
     }
