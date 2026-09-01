@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import type { PluginManifest } from '@runflux/plugin-system/types';
+import type { NodeResult } from '@runflux/validation-runtime';
 import type { WorkflowNodeAppearance, WorkflowNodeShape } from '@runflux/workflow-model/types';
 import { buildZodSchema } from '../forms/build-zod-schema';
 import { Button } from './ui/button';
@@ -25,6 +26,11 @@ export interface NodeConfigPanelProps {
   onAppearanceChange?: (appearance: Partial<WorkflowNodeAppearance>) => void;
   onDelete?: () => void;
   onClose: () => void;
+  /** RF-04: test this node in isolation. Omitted for nodes that cannot be tested (e.g. subflows). */
+  onTest?: () => void;
+  isTesting?: boolean;
+  /** RF-02/RF-05: the node's last validation result, if it has one this session. */
+  testResult?: NodeResult;
 }
 
 export function NodeConfigPanel({
@@ -35,6 +41,9 @@ export function NodeConfigPanel({
   onAppearanceChange,
   onDelete,
   onClose,
+  onTest,
+  isTesting = false,
+  testResult,
 }: NodeConfigPanelProps) {
   const parameters = manifest?.parameters ?? [];
   const schema = buildZodSchema(parameters);
@@ -159,6 +168,28 @@ export function NodeConfigPanel({
         </section>
       )}
 
+      {!isSubflow && onTest && (
+        <section className="border-b border-slate-100 p-[17px]">
+          <div className="mb-[15px] flex flex-col">
+            <h3 className="m-0 text-[11px] font-bold text-slate-800">Validation</h3>
+            <span className="mt-0.5 text-[9px] text-slate-400">Run this node on its own with sandbox data (RF-04)</span>
+          </div>
+          <Button variant="outline" size="sm" onClick={onTest} disabled={isTesting}>
+            {isTesting ? 'Testing…' : '▶ Test this node'}
+          </Button>
+          {testResult && (
+            <div className="mt-3 space-y-2 text-[10px]" data-testid="node-test-result">
+              <ResultField label="Input" value={testResult.input} />
+              {testResult.error ? (
+                <p className="mb-0 rounded-md bg-red-50 px-2 py-1.5 font-semibold text-red-700" role="alert">{testResult.error}</p>
+              ) : (
+                <ResultField label="Output" value={testResult.output} />
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
       {onDelete && (
         <footer className="flex justify-end px-[17px] pb-6 pt-3.5">
           <Button variant="destructive" size="sm" onClick={onDelete}>Delete node</Button>
@@ -166,6 +197,26 @@ export function NodeConfigPanel({
       )}
     </aside>
   );
+}
+
+function ResultField({ label, value }: { label: string; value: unknown }) {
+  return (
+    <div className="rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-2">
+      <small className="block text-[7px] font-extrabold tracking-widest text-slate-400">{label.toUpperCase()}</small>
+      <pre className="mb-0 mt-0.5 max-h-24 overflow-auto whitespace-pre-wrap break-words font-mono text-[9px] text-slate-700">{formatResultValue(value)}</pre>
+    </div>
+  );
+}
+
+function formatResultValue(value: unknown): string {
+  if (value === undefined) return '(none — no upstream connection)';
+  if (value === null) return 'null';
+  if (typeof value === 'string') return value;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
 }
 
 function shapePreviewClasses(shape: WorkflowNodeShape) {

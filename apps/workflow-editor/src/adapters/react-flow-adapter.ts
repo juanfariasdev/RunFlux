@@ -1,13 +1,16 @@
 import { MarkerType, type Edge as ReactFlowEdge, type Node as ReactFlowNode } from '@xyflow/react';
 import type { PluginManifest } from '@runflux/plugin-system/types';
 import type { PluginReferenceStatus } from '@runflux/plugin-system/api/resolve-generator';
+import type { NodeResult } from '@runflux/validation-runtime';
 import type { WorkflowConnection, WorkflowNode, WorkflowNodeAppearance } from '@runflux/workflow-model/types';
 
 /**
  * Data carried on every React Flow node (D-05). Keeps the canonical
  * WorkflowNode fields needed for a lossless round-trip, plus display-only
  * info (the resolved manifest and plugin-reference status) the node's visual
- * component uses to render its label/icon and error state (RF-11).
+ * component uses to render its label/icon and error state (RF-11), plus its
+ * last validation result if it has one this session (003-validation-runtime,
+ * RF-02/RF-05, D-09).
  */
 export interface WorkflowNodeData extends Record<string, unknown> {
   pluginId: string;
@@ -16,6 +19,7 @@ export interface WorkflowNodeData extends Record<string, unknown> {
   manifest: PluginManifest | undefined;
   referenceStatus: PluginReferenceStatus;
   appearance: WorkflowNodeAppearance;
+  result: NodeResult | undefined;
 }
 
 export type FlowNode = ReactFlowNode<WorkflowNodeData>;
@@ -25,6 +29,7 @@ export function toReactFlowNode(
   node: WorkflowNode,
   manifest: PluginManifest | undefined,
   referenceStatus: PluginReferenceStatus,
+  result?: NodeResult,
 ): FlowNode {
   const appearance = node.appearance ?? {};
   const isSubflow = appearance.shape === 'subflow';
@@ -55,6 +60,7 @@ export function toReactFlowNode(
       manifest,
       referenceStatus,
       appearance,
+      result,
     },
   };
 }

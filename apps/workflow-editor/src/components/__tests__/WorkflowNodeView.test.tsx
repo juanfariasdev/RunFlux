@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { WorkflowNodeView } from '../WorkflowNodeView';
 import type { FlowNode } from '../../adapters/react-flow-adapter';
 import type { PluginManifest } from '@runflux/plugin-system/types';
+import type { NodeResult } from '@runflux/validation-runtime';
 
 function manifest(category: PluginManifest['category']): PluginManifest {
   return { id: `m-${category}`, name: `${category} node`, category, version: '1.0.0', parameters: [], supportedPlatforms: ['local'] };
@@ -14,6 +15,7 @@ function makeProps(
   manifestOrUndefined: PluginManifest | undefined,
   selected = false,
   parameters: Record<string, unknown> = {},
+  result?: NodeResult,
 ): NodeProps<FlowNode> {
   return {
     id: 'node-1',
@@ -25,16 +27,21 @@ function makeProps(
       parameters,
       manifest: manifestOrUndefined,
       referenceStatus: manifestOrUndefined ? { status: 'ok' as const } : { status: 'missing' as const },
+      result,
     },
   } as NodeProps<FlowNode>;
 }
 
-function renderNode(manifestOrUndefined: PluginManifest | undefined, parameters: Record<string, unknown> = {}) {
+function renderNode(manifestOrUndefined: PluginManifest | undefined, parameters: Record<string, unknown> = {}, result?: NodeResult) {
   return render(
     <ReactFlowProvider>
-      <WorkflowNodeView {...makeProps(manifestOrUndefined, false, parameters)} />
+      <WorkflowNodeView {...makeProps(manifestOrUndefined, false, parameters, result)} />
     </ReactFlowProvider>,
   );
+}
+
+function nodeResult(error: string | null = null): NodeResult {
+  return { nodeId: 'node-1', input: null, output: 'ok', error, startedAt: 't0', finishedAt: 't1' };
 }
 
 describe('WorkflowNodeView — handle layout by category', () => {
@@ -77,5 +84,30 @@ describe('WorkflowNodeView — node title reflects the user-set "label" paramete
   it('ignores a label parameter that is empty or only whitespace', () => {
     const { getByTestId } = renderNode(manifest('action'), { label: '   ' });
     expect(getByTestId('workflow-node')).toHaveTextContent('action node');
+  });
+});
+
+
+describe('WorkflowNodeView — validation result badge (003-validation-runtime, RF-02/RF-05)', () => {
+  it('shows no badge when the node has never been tested', () => {
+    const { queryByTestId } = renderNode(manifest('action'));
+    expect(queryByTestId('node-result-badge')).toBeNull();
+  });
+
+  it('shows a success badge after a successful test', () => {
+    const { getByTestId } = renderNode(manifest('action'), {}, nodeResult());
+    expect(getByTestId('node-result-badge')).toHaveAttribute('data-result-status', 'success');
+  });
+
+  it('shows an error badge, with the error as its title, after a failed test', () => {
+    const { getByTestId } = renderNode(manifest('action'), {}, nodeResult('boom'));
+    const badge = getByTestId('node-result-badge');
+    expect(badge).toHaveAttribute('data-result-status', 'error');
+    expect(badge).toHaveAttribute('title', 'boom');
+  });
+
+  it('does not show a result badge for a node whose plugin is missing, even if it has a stale result', () => {
+    const { queryByTestId } = renderNode(undefined, {}, nodeResult());
+    expect(queryByTestId('node-result-badge')).toBeNull();
   });
 });

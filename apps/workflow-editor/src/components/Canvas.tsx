@@ -35,6 +35,7 @@ export interface CanvasProps {
 
 export function Canvas({ catalog, onSelectNode, onSelectEdge }: CanvasProps) {
   const workflow = useWorkflowStore((state) => state.workflow);
+  const nodeResults = useWorkflowStore((state) => state.nodeResults);
   const addNode = useWorkflowStore((state) => state.addNode);
   const addConnection = useWorkflowStore((state) => state.addConnection);
   const removeNode = useWorkflowStore((state) => state.removeNode);
@@ -52,8 +53,8 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge }: CanvasProps) {
 
   const manifestFor = useCallback((pluginId: string) => manifests[pluginId], [manifests]);
   const nodes: FlowNode[] = useMemo(
-    () => workflow.nodes.map((node) => toReactFlowNode(node, manifestFor(node.pluginId), node.appearance?.shape === 'subflow' ? { status: 'ok' } : { status: manifestFor(node.pluginId) ? 'ok' : 'missing' })),
-    [workflow.nodes, manifestFor],
+    () => workflow.nodes.map((node) => toReactFlowNode(node, manifestFor(node.pluginId), node.appearance?.shape === 'subflow' ? { status: 'ok' } : { status: manifestFor(node.pluginId) ? 'ok' : 'missing' }, nodeResults[node.id])),
+    [workflow.nodes, manifestFor, nodeResults],
   );
   const edges = useMemo(() => workflow.connections.map(toReactFlowEdge), [workflow.connections]);
 

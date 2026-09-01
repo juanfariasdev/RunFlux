@@ -43,6 +43,16 @@ export function WorkflowNodeView({ data, selected, dragging }: NodeProps<FlowNod
 
         {status === 'missing' && <div className="absolute -bottom-2 right-2 rounded-md bg-red-100 px-1.5 py-0.5 text-[8px] font-bold text-red-700 shadow" role="alert">Plugin not found</div>}
         {status === 'outdated' && <div className="absolute -bottom-2 right-2 rounded-md bg-amber-100 px-1.5 py-0.5 text-[8px] font-bold text-amber-800 shadow">Update available · v{data.referenceStatus.status === 'outdated' ? data.referenceStatus.installedVersion : ''}</div>}
+        {status !== 'missing' && data?.result && (
+          <div
+            className={`absolute -top-2 right-2 grid h-4 w-4 place-items-center rounded-full text-[9px] font-bold text-white shadow ${data.result.error ? 'bg-red-500' : 'bg-emerald-500'}`}
+            data-testid="node-result-badge"
+            data-result-status={data.result.error ? 'error' : 'success'}
+            title={data.result.error ?? 'Last test succeeded'}
+          >
+            {data.result.error ? '!' : '✓'}
+          </div>
+        )}
         {category !== 'output' && <Handle id="main" type="source" position={Position.Right} className="!h-3 !w-3 !border-[3px] !border-white !bg-[var(--node-accent)] !shadow-md transition hover:scale-125" />}
       </article>
     </>

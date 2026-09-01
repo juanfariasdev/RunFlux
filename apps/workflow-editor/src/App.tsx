@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
 import type { PluginManifest } from '@runflux/plugin-system/types';
 import { HttpPluginCatalogAdapter } from './adapters/plugin-catalog-adapter';
@@ -21,17 +21,33 @@ const validation = new HttpValidationRuntimeAdapter();
 export function App() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | undefined>();
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | undefined>();
-  const nodes = useWorkflowStore((s) => s.workflow.nodes);
-  const connections = useWorkflowStore((s) => s.workflow.connections);
+  const workflow = useWorkflowStore((s) => s.workflow);
+  const nodes = workflow.nodes;
+  const connections = workflow.connections;
+  const nodeResults = useWorkflowStore((s) => s.nodeResults);
+  const setNodeResult = useWorkflowStore((s) => s.setNodeResult);
   const updateNodeParameters = useWorkflowStore((s) => s.updateNodeParameters);
   const updateNodeAppearance = useWorkflowStore((s) => s.updateNodeAppearance);
   const updateConnection = useWorkflowStore((s) => s.updateConnection);
   const removeNode = useWorkflowStore((s) => s.removeNode);
   const removeConnection = useWorkflowStore((s) => s.removeConnection);
   const [manifestsById, setManifestsById] = useState<Map<string, PluginManifest>>(new Map());
+  const [testingNodeId, setTestingNodeId] = useState<string | undefined>();
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
   const selectedConnection = connections.find((connection) => connectionId(connection) === selectedEdgeId);
+
+  // RF-04: test a single node in isolation, reusing cached upstream results
+  // the validation runtime already knows about (RN-03/RN-06).
+  const handleTestNode = useCallback(async (nodeId: string) => {
+    setTestingNodeId(nodeId);
+    try {
+      const result = await validation.runNode(workflow, nodeId, { mode: 'sandbox' });
+      setNodeResult(result);
+    } finally {
+      setTestingNodeId(undefined);
+    }
+  }, [workflow, setNodeResult]);
 
   useEffect(() => {
     let cancelled = false;
@@ -64,6 +80,9 @@ export function App() {
               setSelectedNodeId(undefined);
             }}
             onClose={() => setSelectedNodeId(undefined)}
+            onTest={() => handleTestNode(selectedNode.id)}
+            isTesting={testingNodeId === selectedNode.id}
+            testResult={nodeResults[selectedNode.id]}
           />
         )}
         {selectedConnection && (

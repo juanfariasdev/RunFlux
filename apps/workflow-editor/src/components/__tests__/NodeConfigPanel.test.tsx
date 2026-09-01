@@ -69,3 +69,37 @@ describe('NodeConfigPanel — form never navigates away on Enter', () => {
     expect(submitEvent.defaultPrevented).toBe(true);
   });
 });
+
+
+describe('NodeConfigPanel — test this node in isolation (003-validation-runtime, RF-02/RF-04)', () => {
+  it('does not render the Validation section when onTest is not provided', () => {
+    render(<NodeConfigPanel manifest={manifest} values={{ label: '' }} onChange={vi.fn()} onClose={vi.fn()} />);
+    expect(screen.queryByRole('button', { name: /test this node/i })).not.toBeInTheDocument();
+  });
+
+  it('calls onTest when the "Test this node" button is clicked', () => {
+    const onTest = vi.fn();
+    render(<NodeConfigPanel manifest={manifest} values={{ label: '' }} onChange={vi.fn()} onClose={vi.fn()} onTest={onTest} />);
+    fireEvent.click(screen.getByRole('button', { name: /test this node/i }));
+    expect(onTest).toHaveBeenCalledTimes(1);
+  });
+
+  it('disables the test button and shows a busy label while isTesting is true', () => {
+    render(<NodeConfigPanel manifest={manifest} values={{ label: '' }} onChange={vi.fn()} onClose={vi.fn()} onTest={vi.fn()} isTesting />);
+    expect(screen.getByRole('button', { name: /testing/i })).toBeDisabled();
+  });
+
+  it('shows the input and output of the last test result', () => {
+    const testResult = { nodeId: 'n1', input: null, output: { ok: true }, error: null, startedAt: 't0', finishedAt: 't1' };
+    render(<NodeConfigPanel manifest={manifest} values={{ label: '' }} onChange={vi.fn()} onClose={vi.fn()} onTest={vi.fn()} testResult={testResult} />);
+    const result = screen.getByTestId('node-test-result');
+    expect(result).toHaveTextContent('null');
+    expect(result).toHaveTextContent('"ok": true');
+  });
+
+  it('shows the error message instead of output when the last test failed', () => {
+    const testResult = { nodeId: 'n1', input: null, output: null, error: 'boom', startedAt: 't0', finishedAt: 't1' };
+    render(<NodeConfigPanel manifest={manifest} values={{ label: '' }} onChange={vi.fn()} onClose={vi.fn()} onTest={vi.fn()} testResult={testResult} />);
+    expect(screen.getByRole('alert')).toHaveTextContent('boom');
+  });
+});
