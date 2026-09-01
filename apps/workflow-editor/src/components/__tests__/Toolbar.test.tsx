@@ -86,7 +86,7 @@ describe('Toolbar — Test (RF-06, RF-12, RN-04)', () => {
       position: { x: 0, y: 0 },
     });
 
-    const run = vi.fn().mockResolvedValue({ status: 'success', message: 'ok' });
+    const run = vi.fn().mockResolvedValue({ status: 'success', message: 'ok', nodeResults: [] });
     render(
       <Toolbar
         catalog={fakeCatalog()}
@@ -98,5 +98,44 @@ describe('Toolbar — Test (RF-06, RF-12, RN-04)', () => {
 
     await waitFor(() => expect(run).toHaveBeenCalledTimes(1));
     expect(await screen.findByText('ok')).toBeInTheDocument();
+  });
+
+  it('stores per-node results from the run in the workflow store (RF-02)', async () => {
+    useWorkflowStore.getState().addNode({
+      id: 'n1',
+      pluginId: 'action-example',
+      pluginVersion: '1.0.0',
+      parameters: { url: 'https://example.com' },
+      position: { x: 0, y: 0 },
+    });
+
+    const nodeResult = { nodeId: 'n1', input: null, output: 'ok', error: null, startedAt: 't0', finishedAt: 't1' };
+    const run = vi.fn().mockResolvedValue({ status: 'success', nodeResults: [nodeResult] });
+    render(
+      <Toolbar
+        catalog={fakeCatalog()}
+        persistence={{ save: vi.fn(), load: vi.fn() }}
+        validation={{ run, runNode: vi.fn() }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /test/i }));
+
+    await waitFor(() => expect(useWorkflowStore.getState().nodeResults.n1).toEqual(nodeResult));
+  });
+
+  it('defaults to sandbox mode and passes the selected mode to the validation runtime (RF-08)', async () => {
+    const run = vi.fn().mockResolvedValue({ status: 'success', nodeResults: [] });
+    render(
+      <Toolbar
+        catalog={fakeCatalog()}
+        persistence={{ save: vi.fn(), load: vi.fn() }}
+        validation={{ run, runNode: vi.fn() }}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText(/execution mode/i), { target: { value: 'production' } });
+    fireEvent.click(screen.getByRole('button', { name: /test/i }));
+
+    await waitFor(() => expect(run).toHaveBeenCalledWith(expect.anything(), { mode: 'production' }));
   });
 });
