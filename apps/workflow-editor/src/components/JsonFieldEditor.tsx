@@ -14,6 +14,16 @@ type Shape = 'list' | 'map' | 'unknown';
 type Mode = 'json' | 'fields';
 type Primitive = string | number | boolean | null | undefined;
 type PrimitiveType = 'string' | 'number' | 'boolean' | 'null' | 'undefined';
+type JsonValueType = 'string' | 'number' | 'boolean' | 'null' | 'array' | 'object';
+
+const JSON_VALUE_TYPES: { value: JsonValueType; label: string }[] = [
+  { value: 'string', label: 'String' },
+  { value: 'number', label: 'Number' },
+  { value: 'boolean', label: 'Boolean' },
+  { value: 'null', label: 'Null' },
+  { value: 'array', label: 'Array' },
+  { value: 'object', label: 'Object' },
+];
 
 interface KnownField {
   key: string;
@@ -207,17 +217,27 @@ function ObjectEditor({
   if (knownFields && rowIndex !== undefined) {
     return (
       <div className="grid min-w-0 gap-2">
-        {knownFields.map(({ key, label }) => (
-          <label key={key} className="grid min-w-0 gap-0.5 text-[9px] font-semibold text-slate-500">
-            {label}
-            <FieldValueEditor
+        {knownFields.map(({ key, label }) =>
+          listId === 'fields' && key === 'value' ? (
+            <SetFieldValueEditor
+              key={key}
               value={obj[key]}
-              ariaLabel={`Row ${rowIndex + 1} ${label}`}
+              rowIndex={rowIndex}
               sampleJson={sampleJson}
               onChange={(newValue) => onChange({ ...obj, [key]: newValue })}
             />
-          </label>
-        ))}
+          ) : (
+            <label key={key} className="grid min-w-0 gap-0.5 text-[9px] font-semibold text-slate-500">
+              {label}
+              <FieldValueEditor
+                value={obj[key]}
+                ariaLabel={`Row ${rowIndex + 1} ${label}`}
+                sampleJson={sampleJson}
+                onChange={(newValue) => onChange({ ...obj, [key]: newValue })}
+              />
+            </label>
+          ),
+        )}
       </div>
     );
   }
@@ -276,22 +296,111 @@ function ObjectEditor({
   );
 }
 
+function SetFieldValueEditor({
+  value,
+  onChange,
+  rowIndex,
+  sampleJson,
+}: {
+  value: unknown;
+  onChange: (value: unknown) => void;
+  rowIndex: number;
+  sampleJson: unknown;
+}) {
+  const [selectedType, setSelectedType] = useState<JsonValueType>(() => getJsonValueType(value));
+  const valueLabel = `Row ${rowIndex + 1} Value`;
+
+  return (
+    <div className="grid min-w-0 gap-2">
+      <label className="grid min-w-0 gap-0.5 text-[9px] font-semibold text-slate-500">
+        Type
+        <select
+          value={selectedType}
+          aria-label={`Row ${rowIndex + 1} Type`}
+          className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2 text-[10px] text-slate-700 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50"
+          onChange={(event) => {
+            const nextType = event.target.value;
+            if (!isJsonValueType(nextType)) return;
+            setSelectedType(nextType);
+            onChange(convertToJsonType(value, nextType));
+          }}
+        >
+          {JSON_VALUE_TYPES.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+      </label>
+      <label className="grid min-w-0 gap-0.5 text-[9px] font-semibold text-slate-500">
+        Value
+        {selectedType === 'null' ? (
+          <Input type="text" value="null" aria-label={valueLabel} className="!h-8 text-[10px]" disabled />
+        ) : (
+          <FieldValueEditor
+            value={value}
+            ariaLabel={valueLabel}
+            sampleJson={sampleJson}
+            conversionType={isPrimitiveType(selectedType) ? selectedType : undefined}
+            onChange={onChange}
+          />
+        )}
+      </label>
+    </div>
+  );
+}
+
+function getJsonValueType(value: unknown): JsonValueType {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'array';
+  if (typeof value === 'number') return 'number';
+  if (typeof value === 'boolean') return 'boolean';
+  if (typeof value === 'object') return 'object';
+  return 'string';
+}
+
+function isJsonValueType(value: string): value is JsonValueType {
+  return JSON_VALUE_TYPES.some((option) => option.value === value);
+}
+
+function isPrimitiveType(value: JsonValueType): value is 'string' | 'number' | 'boolean' {
+  return value === 'string' || value === 'number' || value === 'boolean';
+}
+
+function convertToJsonType(value: unknown, type: JsonValueType): unknown {
+  if (type === 'null') return null;
+  if (type === 'array') return Array.isArray(value) ? value : [];
+  if (type === 'object') return value !== null && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  if (type === 'boolean') {
+    if (typeof value === 'boolean') return value;
+    if (value === 'true') return true;
+    return false;
+  }
+  if (type === 'number') {
+    const numberValue = typeof value === 'number' ? value : Number(value);
+    return Number.isFinite(numberValue) ? numberValue : 0;
+  }
+  if (typeof value === 'string') return value;
+  if (value === null || value === undefined) return '';
+  return typeof value === 'object' ? JSON.stringify(value) : String(value);
+}
+
 function FieldValueEditor({
   value,
   onChange,
   ariaLabel,
   sampleJson,
+  conversionType,
 }: {
   value: unknown;
   onChange: (value: unknown) => void;
   ariaLabel: string;
   sampleJson: unknown;
+  conversionType?: PrimitiveType;
 }) {
   if (!isPrimitive(value)) {
     return <JsonLeafInput value={value} onChange={onChange} ariaLabel={ariaLabel} />;
   }
 
-  return <ValueInput value={value} onChange={onChange} ariaLabel={ariaLabel} sampleJson={sampleJson} />;
+  return <ValueInput value={value} onChange={onChange} ariaLabel={ariaLabel} sampleJson={sampleJson} conversionType={conversionType} />;
 }
 
 function isPrimitive(value: unknown): value is Primitive {
@@ -349,13 +458,16 @@ function ValueInput({
   onChange,
   ariaLabel,
   sampleJson,
+  conversionType,
 }: {
   value: Primitive;
   onChange: (value: unknown) => void;
   ariaLabel: string;
   sampleJson: unknown;
+  conversionType?: PrimitiveType;
 }) {
-  const originalType = useRef<PrimitiveType>(getPrimitiveType(value)).current;
+  const inferredType = useRef<PrimitiveType>(getPrimitiveType(value)).current;
+  const outputType = conversionType ?? inferredType;
   const text = value === null || value === undefined ? '' : String(value);
   const preview = hasExpressionSyntax(text) ? resolveExpressionPreview(text, sampleJson) : undefined;
   const previewId = `expression-preview-${ariaLabel.toLowerCase().replaceAll(' ', '-')}`;
@@ -368,7 +480,7 @@ function ValueInput({
         placeholder="value or {{ }}"
         aria-label={ariaLabel}
         className={`!h-8 text-[10px] ${preview ? (preview.ok ? '!border-emerald-400 focus:!border-emerald-400 focus:!ring-emerald-50' : '!border-red-400 focus:!border-red-400 focus:!ring-red-50') : ''}`}
-        onChange={(event) => onChange(convertValue(event.target.value, originalType))}
+        onChange={(event) => onChange(convertValue(event.target.value, outputType))}
       />
       {preview && (
         <p className={`mb-0 mt-1 truncate text-[9px] ${preview.ok ? 'text-emerald-600' : 'text-red-600'}`} data-testid={previewId}>

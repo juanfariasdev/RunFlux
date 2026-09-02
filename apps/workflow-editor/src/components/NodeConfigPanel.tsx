@@ -116,7 +116,12 @@ export function NodeConfigPanel({
     mode: 'onChange',
   });
   const [revealed, setRevealed] = useState<Record<string, boolean>>({});
+  const [lastTestInput, setLastTestInput] = useState<{ value: unknown } | undefined>(() =>
+    testResult ? { value: testResult.input } : undefined,
+  );
   const isSubflow = appearance.shape === 'subflow';
+  const displayedTestInput = testResult ? testResult.input : lastTestInput?.value;
+  const hasDisplayedTestInput = testResult !== undefined || lastTestInput !== undefined;
 
   useEffect(() => {
     if (initialFormState.changed) onChange(initialFormState.values);
@@ -126,6 +131,10 @@ export function NodeConfigPanel({
     const subscription = watch((formValues) => onChange(formValues as Record<string, unknown>));
     return () => subscription.unsubscribe();
   }, [watch, onChange]);
+
+  useEffect(() => {
+    if (testResult) setLastTestInput({ value: testResult.input });
+  }, [testResult]);
 
   return (
     <aside className="w-[310px] shrink-0 overflow-y-auto border-l border-slate-200 bg-white max-[1120px]:w-[280px] [scrollbar-color:#cbd5e1_transparent] [scrollbar-width:thin]" aria-label="Node configuration">
@@ -215,7 +224,7 @@ export function NodeConfigPanel({
             {parameters.map((param) => {
               const liveValue = param.type === 'string' ? watch(param.name) : undefined;
               const preview =
-                typeof liveValue === 'string' && hasExpressionSyntax(liveValue) ? resolveExpressionPreview(liveValue, testResult?.input) : undefined;
+                typeof liveValue === 'string' && hasExpressionSyntax(liveValue) ? resolveExpressionPreview(liveValue, displayedTestInput) : undefined;
 
               return (
                 <div key={param.name}>
@@ -226,7 +235,7 @@ export function NodeConfigPanel({
                     <Controller
                       name={param.name}
                       control={control}
-                      render={({ field }) => <JsonFieldEditor id={param.name} value={field.value} onChange={field.onChange} sampleJson={testResult?.input} />}
+                      render={({ field }) => <JsonFieldEditor id={param.name} value={field.value} onChange={field.onChange} sampleJson={displayedTestInput} />}
                     />
                   ) : param.sensitive ? (
                     <div className="flex gap-1.5">
@@ -269,13 +278,15 @@ export function NodeConfigPanel({
           <Button variant="outline" size="sm" onClick={onTest} disabled={isTesting}>
             {isTesting ? 'Testing…' : '▶ Test this node'}
           </Button>
-          {testResult && (
+          {hasDisplayedTestInput && (
             <div className="mt-3 space-y-2 text-[10px]" data-testid="node-test-result">
-              <ResultField label="Input" value={testResult.input} />
-              {testResult.error ? (
+              <ResultField label={testResult ? 'Input' : 'Previous input'} value={displayedTestInput} />
+              {testResult?.error ? (
                 <p className="mb-0 rounded-md bg-red-50 px-2 py-1.5 font-semibold text-red-700" role="alert">{testResult.error}</p>
-              ) : (
+              ) : testResult ? (
                 <ResultField label="Output" value={testResult.output} />
+              ) : (
+                <p className="mb-0 text-[9px] text-slate-400">Run the node again to refresh its output.</p>
               )}
             </div>
           )}

@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { NodeConfigPanel } from '../NodeConfigPanel';
 import type { PluginManifest } from '@runflux/plugin-system/types';
+import type { NodeResult } from '@runflux/validation-runtime';
 
 const manifest: PluginManifest = {
   id: 'trigger-manual-example',
@@ -62,6 +63,38 @@ function SetHarness({ initialParameters = {} }: { initialParameters?: Record<str
   );
 }
 
+function ExecutedSetHarness() {
+  const [parameters, setParameters] = useState<Record<string, unknown>>({
+    fields: [{ name: 'greeting', value: '' }],
+    includeOtherFields: false,
+  });
+  const [testResult, setTestResult] = useState<NodeResult | undefined>({
+    nodeId: 'set-1',
+    input: { name: 'Ada' },
+    output: { greeting: '' },
+    error: null,
+    startedAt: 't0',
+    finishedAt: 't1',
+  });
+
+  return (
+    <div>
+      <div data-testid="stored-executed-set-value">{JSON.stringify(parameters)}</div>
+      <NodeConfigPanel
+        manifest={setManifest}
+        values={parameters}
+        onChange={(values) => {
+          setParameters(values);
+          setTestResult(undefined);
+        }}
+        onClose={() => {}}
+        onTest={() => {}}
+        testResult={testResult}
+      />
+    </div>
+  );
+}
+
 describe('NodeConfigPanel — repeated typing across parent re-renders (store round-trip)', () => {
   it('keeps accepting keystrokes after the parent re-renders with a fresh values object', async () => {
     render(<Harness />);
@@ -112,5 +145,43 @@ describe('NodeConfigPanel — set fields from an empty or legacy configuration (
     });
     expect(screen.getByLabelText('Row 1 Name')).toHaveValue('message');
     expect(screen.getByLabelText('Row 1 Value')).toHaveValue('hello');
+  });
+});
+
+describe('NodeConfigPanel — retained execution input and explicit set value types (004-core-nodes-catalog, E010–E011)', () => {
+  it('keeps the previous input visible and available to $json previews after an edit invalidates the output', async () => {
+    render(<ExecutedSetHarness />);
+
+    expect(screen.getByTestId('node-test-result')).toHaveTextContent('"name": "Ada"');
+    fireEvent.change(screen.getByLabelText('Row 1 Value'), { target: { value: '{{ $json.name }}' } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('stored-executed-set-value')).toHaveTextContent('{{ $json.name }}');
+    });
+    expect(screen.getByTestId('node-test-result')).toHaveTextContent('"name": "Ada"');
+    expect(screen.getByTestId('expression-preview-row-1-value')).toHaveTextContent('Ada');
+    expect(screen.getByTestId('node-test-result')).not.toHaveTextContent('OUTPUT');
+  });
+
+  it('stores the JSON value selected for each supported set field type', async () => {
+    render(<SetHarness initialParameters={{ fields: [{ name: 'value', value: '' }], includeOtherFields: false }} />);
+    const type = screen.getByLabelText('Row 1 Type');
+
+    fireEvent.change(type, { target: { value: 'number' } });
+    await waitFor(() => expect(screen.getByTestId('stored-set-value')).toHaveTextContent('"value":0'));
+    fireEvent.change(screen.getByLabelText('Row 1 Value'), { target: { value: '42' } });
+    await waitFor(() => expect(screen.getByTestId('stored-set-value')).toHaveTextContent('"value":42'));
+
+    fireEvent.change(type, { target: { value: 'boolean' } });
+    await waitFor(() => expect(screen.getByTestId('stored-set-value')).toHaveTextContent('"value":false'));
+    fireEvent.change(screen.getByLabelText('Row 1 Value'), { target: { value: 'true' } });
+    await waitFor(() => expect(screen.getByTestId('stored-set-value')).toHaveTextContent('"value":true'));
+
+    fireEvent.change(type, { target: { value: 'null' } });
+    await waitFor(() => expect(screen.getByTestId('stored-set-value')).toHaveTextContent('"value":null'));
+    fireEvent.change(type, { target: { value: 'array' } });
+    await waitFor(() => expect(screen.getByTestId('stored-set-value')).toHaveTextContent('"value":[]'));
+    fireEvent.change(type, { target: { value: 'object' } });
+    await waitFor(() => expect(screen.getByTestId('stored-set-value')).toHaveTextContent('"value":{}'));
   });
 });
