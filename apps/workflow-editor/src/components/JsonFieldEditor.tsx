@@ -1,16 +1,45 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import { resolveExpressions } from '@runflux/expression-engine';
 import { Button } from './ui/button';
-import { Checkbox } from './ui/checkbox';
 import { Input } from './ui/input';
 
 export interface JsonFieldEditorProps {
   id: string;
   value: unknown;
   onChange: (value: unknown) => void;
+  sampleJson?: unknown;
 }
 
 type Shape = 'list' | 'map' | 'unknown';
 type Mode = 'json' | 'fields';
+type Primitive = string | number | boolean | null | undefined;
+type PrimitiveType = 'string' | 'number' | 'boolean' | 'null' | 'undefined';
+
+interface KnownField {
+  key: string;
+  label: string;
+  initialValue: Primitive | unknown[];
+}
+
+const LIST_ROW_FIELDS: Record<string, KnownField[]> = {
+  fields: [
+    { key: 'name', label: 'Name', initialValue: '' },
+    { key: 'value', label: 'Value', initialValue: '' },
+  ],
+  conditions: [
+    { key: 'leftValue', label: 'Left value', initialValue: '' },
+    { key: 'operator', label: 'Operator', initialValue: 'equals' },
+    { key: 'rightValue', label: 'Right value', initialValue: '' },
+  ],
+  rules: [
+    { key: 'combinator', label: 'Combinator', initialValue: 'and' },
+    {
+      key: 'conditions',
+      label: 'Conditions',
+      initialValue: [{ leftValue: '', operator: 'equals', rightValue: '' }],
+    },
+  ],
+};
 
 function detectShape(value: unknown): Shape {
   if (Array.isArray(value)) {
@@ -29,7 +58,7 @@ function detectShape(value: unknown): Shape {
  * a key/value list. No per-plugin schema is involved: this stays generic
  * across `conditions`/`fields`/`rules`/`headers`/`body`.
  */
-export function JsonFieldEditor({ id, value, onChange }: JsonFieldEditorProps) {
+export function JsonFieldEditor({ id, value, onChange, sampleJson }: JsonFieldEditorProps) {
   const shape = detectShape(value);
   const [mode, setMode] = useState<Mode>(shape === 'unknown' ? 'json' : 'fields');
   const [jsonDraft, setJsonDraft] = useState<string | null>(null);
@@ -89,24 +118,34 @@ export function JsonFieldEditor({ id, value, onChange }: JsonFieldEditorProps) {
           )}
         </>
       ) : shape === 'list' ? (
-        <ListEditor id={id} items={value as unknown[]} onChange={onChange} />
+        <ListEditor id={id} items={value as unknown[]} onChange={onChange} sampleJson={sampleJson} />
       ) : (
         <div id={id}>
-          <ObjectEditor obj={value as Record<string, unknown>} onChange={onChange} />
+          <ObjectEditor obj={value as Record<string, unknown>} onChange={onChange} sampleJson={sampleJson} />
         </div>
       )}
     </div>
   );
 }
 
-function ListEditor({ id, items, onChange }: { id: string; items: unknown[]; onChange: (value: unknown) => void }) {
+function ListEditor({
+  id,
+  items,
+  onChange,
+  sampleJson,
+}: {
+  id: string;
+  items: unknown[];
+  onChange: (value: unknown) => void;
+  sampleJson: unknown;
+}) {
   return (
     <div id={id} className="grid gap-2">
       {items.map((item, index) => (
         // eslint-disable-next-line react/no-array-index-key -- rows have no stable id of their own; index is fine since removal always re-renders the whole list.
-        <div key={index} className="rounded-lg border border-slate-200 bg-slate-50/60 p-2">
+        <div key={index} className="min-w-0 rounded-lg border border-slate-200 bg-slate-50/60 p-2">
           <div className="mb-1.5 flex items-center justify-between">
-            <span className="text-[8px] font-bold uppercase tracking-wide text-slate-400">Row {index + 1}</span>
+            <span className="text-[8px] font-bold uppercase tracking-wide text-slate-400">{id === 'fields' ? 'Field' : 'Row'} {index + 1}</span>
             <button
               type="button"
               onClick={() => onChange(items.filter((_, i) => i !== index))}
@@ -117,24 +156,71 @@ function ListEditor({ id, items, onChange }: { id: string; items: unknown[]; onC
             </button>
           </div>
           <ObjectEditor
+            listId={id}
+            rowIndex={index}
             obj={item !== null && typeof item === 'object' && !Array.isArray(item) ? (item as Record<string, unknown>) : {}}
             onChange={(next) => {
               const copy = items.slice();
               copy[index] = next;
               onChange(copy);
             }}
+            sampleJson={sampleJson}
           />
         </div>
       ))}
-      <Button type="button" variant="outline" size="sm" onClick={() => onChange([...items, {}])} className="justify-self-start">
-        + Add row
+      <Button type="button" variant="outline" size="sm" onClick={() => onChange([...items, createListRow(id)])} className="justify-self-start">
+        {id === 'fields' ? '+ Add field' : '+ Add row'}
       </Button>
     </div>
   );
 }
 
-function ObjectEditor({ obj, onChange }: { obj: Record<string, unknown>; onChange: (value: Record<string, unknown>) => void }) {
+function createListRow(id: string): Record<string, unknown> {
+  const fields = LIST_ROW_FIELDS[id];
+  if (!fields) return {};
+
+  return Object.fromEntries(fields.map(({ key, initialValue }) => [key, initialValue]));
+}
+
+function getKnownFields(listId: string | undefined, obj: Record<string, unknown>): KnownField[] | undefined {
+  const fields = listId ? LIST_ROW_FIELDS[listId] : undefined;
+  if (!fields || Object.keys(obj).length !== fields.length || !fields.every(({ key }) => Object.hasOwn(obj, key))) return undefined;
+  return fields;
+}
+
+function ObjectEditor({
+  obj,
+  onChange,
+  listId,
+  rowIndex,
+  sampleJson,
+}: {
+  obj: Record<string, unknown>;
+  onChange: (value: Record<string, unknown>) => void;
+  listId?: string;
+  rowIndex?: number;
+  sampleJson: unknown;
+}) {
   const entries = Object.entries(obj);
+  const knownFields = getKnownFields(listId, obj);
+
+  if (knownFields && rowIndex !== undefined) {
+    return (
+      <div className="grid min-w-0 gap-2">
+        {knownFields.map(({ key, label }) => (
+          <label key={key} className="grid min-w-0 gap-0.5 text-[9px] font-semibold text-slate-500">
+            {label}
+            <FieldValueEditor
+              value={obj[key]}
+              ariaLabel={`Row ${rowIndex + 1} ${label}`}
+              sampleJson={sampleJson}
+              onChange={(newValue) => onChange({ ...obj, [key]: newValue })}
+            />
+          </label>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="grid gap-1.5">
@@ -155,9 +241,10 @@ function ObjectEditor({ obj, onChange }: { obj: Record<string, unknown>; onChang
               onChange(next);
             }}
           />
-          <ValueInput
+          <FieldValueEditor
             value={entryValue}
             ariaLabel={`Field ${index + 1} value`}
+            sampleJson={sampleJson}
             onChange={(newValue) => {
               const next: Record<string, unknown> = {};
               entries.forEach(([existingKey, existingValue], i) => {
@@ -189,34 +276,107 @@ function ObjectEditor({ obj, onChange }: { obj: Record<string, unknown>; onChang
   );
 }
 
-function ValueInput({ value, onChange, ariaLabel }: { value: unknown; onChange: (value: unknown) => void; ariaLabel: string }) {
-  if (typeof value === 'boolean') {
-    return <Checkbox checked={value} onChange={(event) => onChange(event.target.checked)} aria-label={ariaLabel} />;
+function FieldValueEditor({
+  value,
+  onChange,
+  ariaLabel,
+  sampleJson,
+}: {
+  value: unknown;
+  onChange: (value: unknown) => void;
+  ariaLabel: string;
+  sampleJson: unknown;
+}) {
+  if (!isPrimitive(value)) {
+    return <JsonLeafInput value={value} onChange={onChange} ariaLabel={ariaLabel} />;
   }
-  if (typeof value === 'number') {
-    return (
-      <Input
-        type="number"
-        value={value}
-        aria-label={ariaLabel}
-        className="!h-8 flex-1 text-[10px]"
-        onChange={(event) => onChange(event.target.valueAsNumber)}
-      />
-    );
+
+  return <ValueInput value={value} onChange={onChange} ariaLabel={ariaLabel} sampleJson={sampleJson} />;
+}
+
+function isPrimitive(value: unknown): value is Primitive {
+  return value === null || value === undefined || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
+}
+
+function getPrimitiveType(value: Primitive): PrimitiveType {
+  if (value === null) return 'null';
+  if (typeof value === 'string') return 'string';
+  if (typeof value === 'number') return 'number';
+  if (typeof value === 'boolean') return 'boolean';
+  return 'undefined';
+}
+
+function hasExpressionSyntax(value: string): boolean {
+  return /\{\{[\s\S]*?\}\}/.test(value);
+}
+
+type ExpressionPreview = { ok: true; value: unknown } | { ok: false; error: string };
+
+function resolveExpressionPreview(value: string, sampleJson: unknown): ExpressionPreview {
+  try {
+    return { ok: true, value: resolveExpressions({ value }, { $json: sampleJson ?? {} }).value };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
-  if (value === null || value === undefined || typeof value === 'string') {
-    return (
+}
+
+function formatPreviewValue(value: unknown): string {
+  if (value === undefined) return 'undefined';
+  if (value === null) return 'null';
+  if (typeof value === 'string') return value;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function convertValue(value: string, originalType: PrimitiveType): unknown {
+  if (hasExpressionSyntax(value)) return value;
+  if (originalType === 'number') {
+    const numberValue = Number(value);
+    return value.trim() !== '' && Number.isFinite(numberValue) ? numberValue : value;
+  }
+  if (originalType === 'boolean') {
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+  }
+  return value;
+}
+
+function ValueInput({
+  value,
+  onChange,
+  ariaLabel,
+  sampleJson,
+}: {
+  value: Primitive;
+  onChange: (value: unknown) => void;
+  ariaLabel: string;
+  sampleJson: unknown;
+}) {
+  const originalType = useRef<PrimitiveType>(getPrimitiveType(value)).current;
+  const text = value === null || value === undefined ? '' : String(value);
+  const preview = hasExpressionSyntax(text) ? resolveExpressionPreview(text, sampleJson) : undefined;
+  const previewId = `expression-preview-${ariaLabel.toLowerCase().replaceAll(' ', '-')}`;
+
+  return (
+    <div className="min-w-0 flex-1">
       <Input
         type="text"
-        value={typeof value === 'string' ? value : ''}
+        value={text}
         placeholder="value or {{ }}"
         aria-label={ariaLabel}
-        className="!h-8 flex-1 text-[10px]"
-        onChange={(event) => onChange(event.target.value)}
+        className={`!h-8 text-[10px] ${preview ? (preview.ok ? '!border-emerald-400 focus:!border-emerald-400 focus:!ring-emerald-50' : '!border-red-400 focus:!border-red-400 focus:!ring-red-50') : ''}`}
+        onChange={(event) => onChange(convertValue(event.target.value, originalType))}
       />
-    );
-  }
-  return <JsonLeafInput value={value} onChange={onChange} ariaLabel={ariaLabel} />;
+      {preview && (
+        <p className={`mb-0 mt-1 truncate text-[9px] ${preview.ok ? 'text-emerald-600' : 'text-red-600'}`} data-testid={previewId}>
+          {preview.ok ? `→ ${formatPreviewValue(preview.value)}` : preview.error}
+        </p>
+      )}
+    </div>
+  );
 }
 
 /** Fallback cell for a nested object/array value inside a row — kept flat, not recursed further. */

@@ -13,6 +13,18 @@ const manifest: PluginManifest = {
   supportedPlatforms: ['local'],
 };
 
+const setManifest: PluginManifest = {
+  id: 'set',
+  name: 'Edit Fields (Set)',
+  category: 'action',
+  version: '1.0.0',
+  parameters: [
+    { name: 'fields', label: 'Fields', type: 'json', required: true, default: [] },
+    { name: 'includeOtherFields', label: 'Include other input fields', type: 'boolean', required: false, default: false },
+  ],
+  supportedPlatforms: ['local'],
+};
+
 /**
  * Mimics App.tsx's real wiring: `values` is store state, and every keystroke
  * round-trips through a parent re-render with a brand-new `values` object —
@@ -27,6 +39,21 @@ function Harness() {
       {/* Inline arrow function, same as App.tsx: `onChange={(values) => updateNodeParameters(id, values)}` — a fresh function identity every render, unlike a stable useState setter. */}
       <NodeConfigPanel
         manifest={manifest}
+        values={parameters}
+        onChange={(values) => setParameters(values)}
+        onClose={() => {}}
+      />
+    </div>
+  );
+}
+
+function SetHarness({ initialParameters = {} }: { initialParameters?: Record<string, unknown> }) {
+  const [parameters, setParameters] = useState<Record<string, unknown>>(initialParameters);
+  return (
+    <div>
+      <div data-testid="stored-set-value">{JSON.stringify(parameters)}</div>
+      <NodeConfigPanel
+        manifest={setManifest}
         values={parameters}
         onChange={(values) => setParameters(values)}
         onClose={() => {}}
@@ -50,5 +77,40 @@ describe('NodeConfigPanel — repeated typing across parent re-renders (store ro
     await waitFor(() => expect(screen.getByTestId('stored-value')).toHaveTextContent('"hello"'));
 
     expect(input).toHaveValue('hello');
+  });
+});
+
+describe('NodeConfigPanel — set fields from an empty or legacy configuration (004-core-nodes-catalog, E007–E009)', () => {
+  it('shows the Fields editor immediately when a new set node has empty parameters', () => {
+    render(<SetHarness />);
+
+    expect(screen.getByRole('button', { name: 'Fields' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: '+ Add field' })).toBeInTheDocument();
+  });
+
+  it('adds Name above Value and persists the canonical fields list', async () => {
+    render(<SetHarness />);
+    fireEvent.click(screen.getByRole('button', { name: '+ Add field' }));
+
+    const name = screen.getByLabelText('Row 1 Name');
+    const value = screen.getByLabelText('Row 1 Value');
+    expect(name.closest('label')).not.toBe(value.closest('label'));
+
+    fireEvent.change(name, { target: { value: 'message' } });
+    fireEvent.change(value, { target: { value: 'hello' } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('stored-set-value')).toHaveTextContent('"fields":[{"name":"message","value":"hello"}]');
+    });
+  });
+
+  it('repairs a map entered through the old JSON-only flow into fields that the set executor can emit', async () => {
+    render(<SetHarness initialParameters={{ fields: { message: 'hello' }, includeOtherFields: false }} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('stored-set-value')).toHaveTextContent('"fields":[{"name":"message","value":"hello"}]');
+    });
+    expect(screen.getByLabelText('Row 1 Name')).toHaveValue('message');
+    expect(screen.getByLabelText('Row 1 Value')).toHaveValue('hello');
   });
 });

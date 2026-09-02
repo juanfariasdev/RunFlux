@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { resolveExpressions } from '@runflux/expression-engine';
@@ -26,6 +26,43 @@ function hasExpressionSyntax(text: string): boolean {
 }
 
 type ExpressionPreview = { ok: true; value: unknown } | { ok: false; error: string };
+
+interface InitialFormState {
+  values: Record<string, unknown>;
+  changed: boolean;
+}
+
+function normalizeLegacySetFields(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value;
+  if (value === null || typeof value !== 'object') return [];
+
+  const record = value as Record<string, unknown>;
+  if (Object.hasOwn(record, 'name') || Object.hasOwn(record, 'key') || Object.hasOwn(record, 'value')) {
+    const name = record.name ?? record.key ?? '';
+    return [{ name: typeof name === 'string' ? name : String(name), value: record.value ?? '' }];
+  }
+
+  return Object.entries(record).map(([name, fieldValue]) => ({ name, value: fieldValue }));
+}
+
+function buildInitialFormState(manifest: PluginManifest | undefined, values: Record<string, unknown>): InitialFormState {
+  const initialValues = { ...values };
+  let changed = false;
+
+  for (const parameter of manifest?.parameters ?? []) {
+    if (initialValues[parameter.name] === undefined && parameter.default !== undefined) {
+      initialValues[parameter.name] = parameter.default;
+      changed = true;
+    }
+
+    if (manifest?.id === 'set' && parameter.name === 'fields' && !Array.isArray(initialValues.fields)) {
+      initialValues.fields = normalizeLegacySetFields(initialValues.fields);
+      changed = true;
+    }
+  }
+
+  return { values: initialValues, changed };
+}
 
 /**
  * Resolves a parameter's live text through the same `resolveExpressions` the
@@ -72,13 +109,18 @@ export function NodeConfigPanel({
 }: NodeConfigPanelProps) {
   const parameters = manifest?.parameters ?? [];
   const schema = buildZodSchema(parameters);
+  const initialFormState = useMemo(() => buildInitialFormState(manifest, values), [manifest, values]);
   const { register, watch, control, formState } = useForm<Record<string, unknown>>({
     resolver: zodResolver(schema),
-    defaultValues: values,
+    defaultValues: initialFormState.values,
     mode: 'onChange',
   });
   const [revealed, setRevealed] = useState<Record<string, boolean>>({});
   const isSubflow = appearance.shape === 'subflow';
+
+  useEffect(() => {
+    if (initialFormState.changed) onChange(initialFormState.values);
+  }, [initialFormState, onChange]);
 
   useEffect(() => {
     const subscription = watch((formValues) => onChange(formValues as Record<string, unknown>));
@@ -184,7 +226,7 @@ export function NodeConfigPanel({
                     <Controller
                       name={param.name}
                       control={control}
-                      render={({ field }) => <JsonFieldEditor id={param.name} value={field.value} onChange={field.onChange} />}
+                      render={({ field }) => <JsonFieldEditor id={param.name} value={field.value} onChange={field.onChange} sampleJson={testResult?.input} />}
                     />
                   ) : param.sensitive ? (
                     <div className="flex gap-1.5">

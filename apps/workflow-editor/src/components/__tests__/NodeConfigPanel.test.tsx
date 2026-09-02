@@ -136,11 +136,28 @@ describe('NodeConfigPanel — json parameter type, Fields mode (004-core-nodes-c
     });
   });
 
-  it('"+ Add row" appends an empty object to the array', () => {
+  it('"+ Add field" creates the visible name/value fields for set', () => {
+    const onChange = vi.fn();
+    const fieldsManifest: PluginManifest = { ...manifest, parameters: [{ name: 'fields', label: 'Fields', type: 'json', required: true }] };
+    render(<NodeConfigPanel manifest={fieldsManifest} values={{ fields: [] }} onChange={onChange} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: '+ Add field' }));
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ fields: [{ name: '', value: '' }] }));
+  });
+
+  it('"+ Add row" creates the visible condition fields', () => {
     const onChange = vi.fn();
     render(<NodeConfigPanel manifest={jsonManifest} values={{ conditions: [] }} onChange={onChange} onClose={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: '+ Add row' }));
-    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ conditions: [{}] }));
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ conditions: [{ leftValue: '', operator: 'equals', rightValue: '' }] }),
+    );
+  });
+
+  it('labels the fields created for a new set row', () => {
+    const fieldsManifest: PluginManifest = { ...manifest, parameters: [{ name: 'fields', label: 'Fields', type: 'json', required: true }] };
+    render(<NodeConfigPanel manifest={fieldsManifest} values={{ fields: [{ name: '', value: '' }] }} onChange={vi.fn()} onClose={vi.fn()} />);
+    expect(screen.getByLabelText('Row 1 Name')).toBeInTheDocument();
+    expect(screen.getByLabelText('Row 1 Value')).toBeInTheDocument();
   });
 
   it('"+ Add field" adds an empty key to a row', () => {
@@ -200,6 +217,63 @@ describe('NodeConfigPanel — live {{ }} expression preview and validity colorin
 
     await vi.waitFor(() => {
       expect(screen.getByTestId('expression-preview-label')).toHaveTextContent('2');
+    });
+  });
+});
+
+describe('NodeConfigPanel — Fields mode expressions and free-text values (004-core-nodes-catalog, E004–E006)', () => {
+  const fieldsManifest: PluginManifest = {
+    ...manifest,
+    parameters: [{ name: 'fields', label: 'Fields', type: 'json', required: true }],
+  };
+
+  it('previews a valid expression in a nested value field', async () => {
+    const testResult = { nodeId: 'n1', input: { name: 'Ada' }, output: null, error: null, startedAt: 't0', finishedAt: 't1' };
+    render(<NodeConfigPanel manifest={fieldsManifest} values={{ fields: [{ name: 'greeting', value: '' }] }} onChange={vi.fn()} onClose={vi.fn()} testResult={testResult} />);
+    fireEvent.change(screen.getByLabelText('Row 1 Value'), { target: { value: '{{ $json.name }}' } });
+
+    await vi.waitFor(() => {
+      expect(screen.getByLabelText('Row 1 Value')).toHaveClass('!border-emerald-400');
+    });
+    expect(screen.getByTestId('expression-preview-row-1-value')).toHaveTextContent('Ada');
+  });
+
+  it('marks an invalid expression in a nested value field red', async () => {
+    render(<NodeConfigPanel manifest={fieldsManifest} values={{ fields: [{ name: 'greeting', value: '' }] }} onChange={vi.fn()} onClose={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText('Row 1 Value'), { target: { value: '{{ $json.a.b.c }}' } });
+
+    await vi.waitFor(() => {
+      expect(screen.getByLabelText('Row 1 Value')).toHaveClass('!border-red-400');
+    });
+  });
+
+  it('uses a text input for number and boolean values while preserving their types when the text is valid', async () => {
+    const onChange = vi.fn();
+    render(<NodeConfigPanel manifest={fieldsManifest} values={{ fields: [{ name: 'count', value: 3 }, { name: 'enabled', value: true }] }} onChange={onChange} onClose={vi.fn()} />);
+
+    const count = screen.getByLabelText('Row 1 Value');
+    const enabled = screen.getByLabelText('Row 2 Value');
+    expect(count).toHaveAttribute('type', 'text');
+    expect(enabled).toHaveAttribute('type', 'text');
+
+    fireEvent.change(count, { target: { value: '4' } });
+    await vi.waitFor(() => {
+      expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ fields: [{ name: 'count', value: 4 }, { name: 'enabled', value: true }] }));
+    });
+
+    fireEvent.change(enabled, { target: { value: 'false' } });
+    await vi.waitFor(() => {
+      expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ fields: [{ name: 'count', value: 4 }, { name: 'enabled', value: false }] }));
+    });
+  });
+
+  it('allows an expression in a value that was initially a number', async () => {
+    const onChange = vi.fn();
+    render(<NodeConfigPanel manifest={fieldsManifest} values={{ fields: [{ name: 'count', value: 3 }] }} onChange={onChange} onClose={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText('Row 1 Value'), { target: { value: '{{ $json.count }}' } });
+
+    await vi.waitFor(() => {
+      expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ fields: [{ name: 'count', value: '{{ $json.count }}' }] }));
     });
   });
 });
