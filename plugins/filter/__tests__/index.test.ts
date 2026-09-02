@@ -46,4 +46,10 @@ describe('filter plugin (004-core-nodes-catalog, RF-03, RN-01, RN-02)', () => {
     const blocked = await runGenerated(nodeConfig, { status: 'nope' });
     expect(blocked.activeOutput).toBeNull();
   });
+
+  it('does not throw when "conditions" is not an array (E001)', async () => {
+    const params = { combinator: 'and', conditions: { leftValue: 'a', operator: 'equals', rightValue: 'a' } };
+    const result = (await execute!(params, { id: 1 }, { workflowId: 'wf-1', nodeId: 'n1', mode: 'sandbox' })) as { activeOutput: string | null };
+    expect(result.activeOutput).toBe('main'); // zero conditions => vacuously true, per combine()'s convention
+  });
 });

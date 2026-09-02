@@ -65,4 +65,16 @@ describe('condition-switch plugin (004-core-nodes-catalog, RF-02, RN-01)', () =>
     const generatedFallback = await runGenerated(nodeConfig, { role: 'guest' });
     expect(generatedFallback.activeOutput).toBe('fallback');
   });
+
+  it('does not throw when "rules" is not an array (E001)', async () => {
+    const params = { rules: { combinator: 'and', conditions: [] }, fallbackEnabled: true };
+    const result = (await execute!(params, {}, { workflowId: 'wf-1', nodeId: 'n1', mode: 'sandbox' })) as { activeOutput: string | null };
+    expect(result.activeOutput).toBe('fallback'); // zero rules => none match => falls through to fallback
+  });
+
+  it('does not throw when a rule\'s own "conditions" is not an array (E001)', async () => {
+    const params = { rules: [{ combinator: 'and', conditions: { leftValue: 'a', operator: 'equals', rightValue: 'a' } }], fallbackEnabled: false };
+    const result = (await execute!(params, {}, { workflowId: 'wf-1', nodeId: 'n1', mode: 'sandbox' })) as { activeOutput: string | null };
+    expect(result.activeOutput).toBe(manifest.outputs![0]); // zero conditions in the rule => vacuously matches
+  });
 });

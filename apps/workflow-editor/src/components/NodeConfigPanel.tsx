@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { resolveExpressions } from '@runflux/expression-engine';
 import type { PluginManifest } from '@runflux/plugin-system/types';
 import type { NodeResult } from '@runflux/validation-runtime';
 import type { WorkflowNodeAppearance, WorkflowNodeShape } from '@runflux/workflow-model/types';
@@ -9,6 +10,7 @@ import { Button } from './ui/button';
 import { Checkbox } from './ui/checkbox';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
+import { JsonFieldEditor } from './JsonFieldEditor';
 
 const COLORS = ['#4f46e5', '#0ea5e9', '#10b981', '#f59e0b', '#f97316', '#ef4444', '#ec4899', '#8b5cf6', '#334155'];
 const SHAPES: { value: WorkflowNodeShape; label: string }[] = [
@@ -17,6 +19,29 @@ const SHAPES: { value: WorkflowNodeShape; label: string }[] = [
   { value: 'pill', label: 'Pill' },
   { value: 'diamond', label: 'Decision' },
 ];
+
+/** Does this string contain at least one `{{ }}` marker (004-core-nodes-catalog, E003)? */
+function hasExpressionSyntax(text: string): boolean {
+  return /\{\{[\s\S]*?\}\}/.test(text);
+}
+
+type ExpressionPreview = { ok: true; value: unknown } | { ok: false; error: string };
+
+/**
+ * Resolves a parameter's live text through the same `resolveExpressions` the
+ * validation engine uses (004-core-nodes-catalog, D-02), against the node's
+ * last known test input (`$json`) when one exists, otherwise an empty object
+ * — good enough to catch syntax/reference errors even before the node has
+ * ever been tested.
+ */
+function resolveExpressionPreview(text: string, sampleJson: unknown): ExpressionPreview {
+  try {
+    const resolved = resolveExpressions({ value: text }, { $json: sampleJson ?? {} });
+    return { ok: true, value: resolved.value };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
 
 export interface NodeConfigPanelProps {
   manifest?: PluginManifest;
@@ -53,10 +78,6 @@ export function NodeConfigPanel({
     mode: 'onChange',
   });
   const [revealed, setRevealed] = useState<Record<string, boolean>>({});
-  // D-06: raw textarea text per `type: 'json'` field, kept separate from the
-  // form's actual (parsed) value so invalid/in-progress JSON isn't lost while typing.
-  const [jsonDrafts, setJsonDrafts] = useState<Record<string, string>>({});
-  const [jsonErrors, setJsonErrors] = useState<Record<string, string | undefined>>({});
   const isSubflow = appearance.shape === 'subflow';
 
   useEffect(() => {
@@ -149,57 +170,49 @@ export function NodeConfigPanel({
             <span className="mt-0.5 text-[9px] text-slate-400">{manifest ? `Type · ${manifest.category}` : 'Plugin unavailable'}</span>
           </div>
           <form className="grid gap-3.5" onSubmit={(event) => event.preventDefault()}>
-            {parameters.map((param) => (
-              <div key={param.name}>
-                <Label className="mb-1 block" htmlFor={param.name}>{param.label}{param.required && <span className="ml-0.5 text-red-500">*</span>}</Label>
-                {param.type === 'boolean' ? (
-                  <Checkbox id={param.name} {...register(param.name)} />
-                ) : param.type === 'json' ? (
-                  <Controller
-                    name={param.name}
-                    control={control}
-                    render={({ field }) => {
-                      const draft = jsonDrafts[param.name] ?? JSON.stringify(field.value ?? null, null, 2);
-                      return (
-                        <>
-                          <textarea
-                            id={param.name}
-                            className="min-h-[88px] w-full resize-y rounded-lg border border-slate-200 bg-white px-3 py-2 font-mono text-[11px] text-slate-700 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50"
-                            value={draft}
-                            onChange={(event) => {
-                              const text = event.target.value;
-                              setJsonDrafts((previous) => ({ ...previous, [param.name]: text }));
-                              try {
-                                const parsed = JSON.parse(text);
-                                setJsonErrors((previous) => ({ ...previous, [param.name]: undefined }));
-                                field.onChange(parsed);
-                              } catch {
-                                setJsonErrors((previous) => ({ ...previous, [param.name]: 'Invalid JSON' }));
-                              }
-                            }}
-                          />
-                          {jsonErrors[param.name] && (
-                            <p className="mb-0 mt-1 text-[9px] text-red-600" role="alert">
-                              {jsonErrors[param.name]}
-                            </p>
-                          )}
-                        </>
-                      );
-                    }}
-                  />
-                ) : param.sensitive ? (
-                  <div className="flex gap-1.5">
-                    <Input id={param.name} type={revealed[param.name] ? 'text' : 'password'} autoComplete="off" {...register(param.name)} />
-                    <button className="grid w-9 shrink-0 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500" type="button" onClick={() => setRevealed((previous) => ({ ...previous, [param.name]: !previous[param.name] }))} aria-label={revealed[param.name] ? 'Hide value' : 'Show value'} aria-pressed={!!revealed[param.name]}>
-                      {revealed[param.name] ? <UnlockIcon /> : <LockIcon />}
-                    </button>
-                  </div>
-                ) : (
-                  <Input id={param.name} type={param.type === 'number' ? 'number' : 'text'} {...register(param.name, { valueAsNumber: param.type === 'number' })} />
-                )}
-                {formState.errors[param.name] && <p className="mb-0 mt-1 text-[9px] text-red-600">{String(formState.errors[param.name]?.message ?? 'Invalid value')}</p>}
-              </div>
-            ))}
+            {parameters.map((param) => {
+              const liveValue = param.type === 'string' ? watch(param.name) : undefined;
+              const preview =
+                typeof liveValue === 'string' && hasExpressionSyntax(liveValue) ? resolveExpressionPreview(liveValue, testResult?.input) : undefined;
+
+              return (
+                <div key={param.name}>
+                  <Label className="mb-1 block" htmlFor={param.name}>{param.label}{param.required && <span className="ml-0.5 text-red-500">*</span>}</Label>
+                  {param.type === 'boolean' ? (
+                    <Checkbox id={param.name} {...register(param.name)} />
+                  ) : param.type === 'json' ? (
+                    <Controller
+                      name={param.name}
+                      control={control}
+                      render={({ field }) => <JsonFieldEditor id={param.name} value={field.value} onChange={field.onChange} />}
+                    />
+                  ) : param.sensitive ? (
+                    <div className="flex gap-1.5">
+                      <Input id={param.name} type={revealed[param.name] ? 'text' : 'password'} autoComplete="off" {...register(param.name)} />
+                      <button className="grid w-9 shrink-0 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500" type="button" onClick={() => setRevealed((previous) => ({ ...previous, [param.name]: !previous[param.name] }))} aria-label={revealed[param.name] ? 'Hide value' : 'Show value'} aria-pressed={!!revealed[param.name]}>
+                        {revealed[param.name] ? <UnlockIcon /> : <LockIcon />}
+                      </button>
+                    </div>
+                  ) : (
+                    <Input
+                      id={param.name}
+                      type={param.type === 'number' ? 'number' : 'text'}
+                      {...register(param.name, { valueAsNumber: param.type === 'number' })}
+                      className={preview ? (preview.ok ? '!border-emerald-400 focus:!border-emerald-400 focus:!ring-emerald-50' : '!border-red-400 focus:!border-red-400 focus:!ring-red-50') : ''}
+                    />
+                  )}
+                  {preview && (
+                    <p
+                      className={`mb-0 mt-1 truncate text-[9px] ${preview.ok ? 'text-emerald-600' : 'text-red-600'}`}
+                      data-testid={`expression-preview-${param.name}`}
+                    >
+                      {preview.ok ? `→ ${formatResultValue(preview.value)}` : preview.error}
+                    </p>
+                  )}
+                  {formState.errors[param.name] && <p className="mb-0 mt-1 text-[9px] text-red-600">{String(formState.errors[param.name]?.message ?? 'Invalid value')}</p>}
+                </div>
+              );
+            })}
             {parameters.length === 0 && <p className="m-0 text-[10px] text-slate-400">This node has no additional parameters.</p>}
           </form>
         </section>

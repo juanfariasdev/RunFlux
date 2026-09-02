@@ -55,7 +55,7 @@ function combine(results: boolean[], combinator: string): boolean {
 
 export const generators: PluginModule['generators'] = {
   local: (nodeConfig) => {
-    const conditions = JSON.stringify(nodeConfig.conditions ?? []);
+    const conditions = JSON.stringify(Array.isArray(nodeConfig.conditions) ? nodeConfig.conditions : []);
     const combinator = JSON.stringify((nodeConfig.combinator as string | undefined) ?? 'and');
     return {
       files: [
@@ -107,7 +107,7 @@ export function run($json) {
 };
 
 export const execute: PluginModule['execute'] = (params, input) => {
-  const conditions = (params.conditions as ConditionRule[] | undefined) ?? [];
+  const conditions = Array.isArray(params.conditions) ? (params.conditions as ConditionRule[]) : [];
   const combinator = (params.combinator as string | undefined) ?? 'and';
   const results = conditions.map((c) => compare(c.leftValue, c.operator, c.rightValue));
   const matched = combine(results, combinator);

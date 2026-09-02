@@ -64,13 +64,14 @@ function combine(results: boolean[], combinator: string): boolean {
 }
 
 function matchRule(rule: SwitchRule): boolean {
-  const results = (rule.conditions ?? []).map((c) => compare(c.leftValue, c.operator, c.rightValue));
+  const conditions = Array.isArray(rule.conditions) ? rule.conditions : [];
+  const results = conditions.map((c) => compare(c.leftValue, c.operator, c.rightValue));
   return combine(results, rule.combinator ?? 'and');
 }
 
 export const generators: PluginModule['generators'] = {
   local: (nodeConfig) => {
-    const rules = JSON.stringify(nodeConfig.rules ?? []);
+    const rules = JSON.stringify(Array.isArray(nodeConfig.rules) ? nodeConfig.rules : []);
     const fallbackEnabled = JSON.stringify(Boolean(nodeConfig.fallbackEnabled));
     const ruleOutputs = JSON.stringify(RULE_OUTPUTS);
     return {
@@ -110,8 +111,9 @@ function combine(results, combinator) {
   return combinator === 'or' ? results.some(Boolean) : results.every(Boolean);
 }
 function matchRule(rule, $json) {
-  const results = (rule.conditions || []).map((c) => compare(resolveValue(c.leftValue, $json), c.operator, resolveValue(c.rightValue, $json)));
-  return combine(results, rule.combinator || 'and');
+  const conditions = Array.isArray(rule && rule.conditions) ? rule.conditions : [];
+  const results = conditions.map((c) => compare(resolveValue(c.leftValue, $json), c.operator, resolveValue(c.rightValue, $json)));
+  return combine(results, (rule && rule.combinator) || 'and');
 }
 
 export function run($json) {
@@ -132,7 +134,7 @@ export function run($json) {
 };
 
 export const execute: PluginModule['execute'] = (params, input) => {
-  const rules = (params.rules as SwitchRule[] | undefined) ?? [];
+  const rules = Array.isArray(params.rules) ? (params.rules as SwitchRule[]) : [];
   const fallbackEnabled = Boolean(params.fallbackEnabled);
 
   for (let i = 0; i < rules.length && i < RULE_OUTPUTS.length; i++) {

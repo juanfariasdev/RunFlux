@@ -51,4 +51,15 @@ describe('set plugin (004-core-nodes-catalog, RF-11)', () => {
     const generated = await runGenerated(nodeConfig, { label: 'ready' });
     expect(generated).toEqual({ status: 'ready' });
   });
+
+  it('does not throw when "fields" is not an array (E001: malformed JSON typed by the user, e.g. an object instead of a list)', async () => {
+    const params = { fields: { name: 'status', value: 'active' }, includeOtherFields: false };
+    const result = await execute!(params, {}, { workflowId: 'wf-1', nodeId: 'n1', mode: 'sandbox' });
+    expect(result).toEqual({});
+  });
+
+  it('generators.local does not throw when "fields" is not an array either (E001)', async () => {
+    const generated = await runGenerated({ fields: { name: 'status', value: 'active' } }, {});
+    expect(generated).toEqual({});
+  });
 });

@@ -28,14 +28,16 @@ function compose(fields: FieldConfig[], includeOtherFields: boolean, input: unkn
   const base: Record<string, unknown> =
     includeOtherFields && input !== null && typeof input === 'object' ? { ...(input as Record<string, unknown>) } : {};
   for (const field of fields) {
-    base[field.name] = field.value;
+    if (field && typeof field.name === 'string') {
+      base[field.name] = field.value;
+    }
   }
   return base;
 }
 
 export const generators: PluginModule['generators'] = {
   local: (nodeConfig) => {
-    const fields = JSON.stringify(nodeConfig.fields ?? []);
+    const fields = JSON.stringify(Array.isArray(nodeConfig.fields) ? nodeConfig.fields : []);
     const includeOtherFields = JSON.stringify(Boolean(nodeConfig.includeOtherFields));
     return {
       files: [
@@ -61,7 +63,9 @@ function resolveValue(raw, $json) {
 export function run($json) {
   const base = INCLUDE_OTHER_FIELDS && $json !== null && typeof $json === 'object' ? { ...$json } : {};
   for (const field of FIELDS) {
-    base[field.name] = resolveValue(field.value, $json);
+    if (field && typeof field.name === 'string') {
+      base[field.name] = resolveValue(field.value, $json);
+    }
   }
   return base;
 }
@@ -74,7 +78,7 @@ export function run($json) {
 };
 
 export const execute: PluginModule['execute'] = (params, input) => {
-  const fields = (params.fields as FieldConfig[] | undefined) ?? [];
+  const fields = Array.isArray(params.fields) ? (params.fields as FieldConfig[]) : [];
   const includeOtherFields = Boolean(params.includeOtherFields);
   return compose(fields, includeOtherFields, input);
 };

@@ -76,9 +76,10 @@ const jsonManifest: PluginManifest = {
   parameters: [{ name: 'conditions', label: 'Conditions', type: 'json', required: true }],
 };
 
-describe('NodeConfigPanel — json parameter type (004-core-nodes-catalog, D-06)', () => {
-  it('renders a textarea (not the generic text input) for a json-type parameter, pre-filled with pretty-printed JSON', () => {
+describe('NodeConfigPanel — json parameter type, JSON mode (004-core-nodes-catalog, D-06, E002)', () => {
+  it('switches to JSON mode via the toggle, showing a textarea pre-filled with pretty-printed JSON', () => {
     render(<NodeConfigPanel manifest={jsonManifest} values={{ conditions: [{ a: 1 }] }} onChange={vi.fn()} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'JSON' }));
     const field = screen.getByLabelText(/Conditions/);
     expect(field.tagName).toBe('TEXTAREA');
     expect(field).toHaveValue(JSON.stringify([{ a: 1 }], null, 2));
@@ -87,6 +88,7 @@ describe('NodeConfigPanel — json parameter type (004-core-nodes-catalog, D-06)
   it('calls onChange with the parsed value once valid JSON is typed', async () => {
     const onChange = vi.fn();
     render(<NodeConfigPanel manifest={jsonManifest} values={{ conditions: [] }} onChange={onChange} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'JSON' }));
     const field = screen.getByLabelText(/Conditions/);
     fireEvent.change(field, { target: { value: '{"a": 1}' } });
 
@@ -98,6 +100,7 @@ describe('NodeConfigPanel — json parameter type (004-core-nodes-catalog, D-06)
   it('shows an inline error and never calls onChange with the broken raw string when JSON is invalid', async () => {
     const onChange = vi.fn();
     render(<NodeConfigPanel manifest={jsonManifest} values={{ conditions: [] }} onChange={onChange} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'JSON' }));
     const field = screen.getByLabelText(/Conditions/);
     fireEvent.change(field, { target: { value: '{not valid' } });
 
@@ -105,6 +108,99 @@ describe('NodeConfigPanel — json parameter type (004-core-nodes-catalog, D-06)
       expect(screen.getByText(/invalid json/i)).toBeInTheDocument();
     });
     expect(onChange).not.toHaveBeenCalledWith(expect.objectContaining({ conditions: '{not valid' }));
+  });
+
+  it('falls back to JSON-only mode (no Fields toggle) for a value that is neither an array-of-objects nor a plain object', () => {
+    const scalarManifest: PluginManifest = { ...manifest, parameters: [{ name: 'raw', label: 'Raw', type: 'json', required: false }] };
+    render(<NodeConfigPanel manifest={scalarManifest} values={{ raw: 'just a string' }} onChange={vi.fn()} onClose={vi.fn()} />);
+    expect(screen.queryByRole('button', { name: 'Fields' })).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/Raw/).tagName).toBe('TEXTAREA');
+  });
+});
+
+describe('NodeConfigPanel — json parameter type, Fields mode (004-core-nodes-catalog, E002)', () => {
+  it('defaults to Fields mode for an array-of-objects value, one input per key', () => {
+    render(<NodeConfigPanel manifest={jsonManifest} values={{ conditions: [{ leftValue: 'a' }] }} onChange={vi.fn()} onClose={vi.fn()} />);
+    expect(screen.getByRole('button', { name: 'Fields' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByLabelText('Field 1 name')).toHaveValue('leftValue');
+    expect(screen.getByLabelText('Field 1 value')).toHaveValue('a');
+  });
+
+  it('editing a field value propagates to onChange with the array shape intact', async () => {
+    const onChange = vi.fn();
+    render(<NodeConfigPanel manifest={jsonManifest} values={{ conditions: [{ leftValue: 'a' }] }} onChange={onChange} onClose={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText('Field 1 value'), { target: { value: '{{ $json.x }}' } });
+
+    await vi.waitFor(() => {
+      expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ conditions: [{ leftValue: '{{ $json.x }}' }] }));
+    });
+  });
+
+  it('"+ Add row" appends an empty object to the array', () => {
+    const onChange = vi.fn();
+    render(<NodeConfigPanel manifest={jsonManifest} values={{ conditions: [] }} onChange={onChange} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: '+ Add row' }));
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ conditions: [{}] }));
+  });
+
+  it('"+ Add field" adds an empty key to a row', () => {
+    const onChange = vi.fn();
+    render(<NodeConfigPanel manifest={jsonManifest} values={{ conditions: [{}] }} onChange={onChange} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: '+ Add field' }));
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ conditions: [{ '': '' }] }));
+  });
+
+  it('"Remove row" removes that row from the array', () => {
+    const onChange = vi.fn();
+    render(<NodeConfigPanel manifest={jsonManifest} values={{ conditions: [{ a: 1 }, { b: 2 }] }} onChange={onChange} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByLabelText('Remove row 1'));
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ conditions: [{ b: 2 }] }));
+  });
+
+  it('is also available for a plain-object (map) value like headers/body, as a flat key/value list', () => {
+    const mapManifest: PluginManifest = { ...manifest, parameters: [{ name: 'headers', label: 'Headers', type: 'json', required: false }] };
+    render(<NodeConfigPanel manifest={mapManifest} values={{ headers: { Authorization: 'Bearer x' } }} onChange={vi.fn()} onClose={vi.fn()} />);
+    expect(screen.getByLabelText('Field 1 name')).toHaveValue('Authorization');
+    expect(screen.getByLabelText('Field 1 value')).toHaveValue('Bearer x');
+  });
+});
+
+describe('NodeConfigPanel — live {{ }} expression preview and validity coloring (004-core-nodes-catalog, E003)', () => {
+  it('shows no preview and no color for a plain string with no {{ }}', () => {
+    render(<NodeConfigPanel manifest={manifest} values={{ label: 'plain text' }} onChange={vi.fn()} onClose={vi.fn()} />);
+    expect(screen.queryByTestId('expression-preview-label')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Label')).not.toHaveClass('!border-emerald-400');
+    expect(screen.getByLabelText('Label')).not.toHaveClass('!border-red-400');
+  });
+
+  it('turns the field green and shows the resolved value for a valid expression', async () => {
+    const testResult = { nodeId: 'n1', input: { name: 'Ada' }, output: null, error: null, startedAt: 't0', finishedAt: 't1' };
+    render(<NodeConfigPanel manifest={manifest} values={{ label: '' }} onChange={vi.fn()} onClose={vi.fn()} testResult={testResult} />);
+    fireEvent.change(screen.getByLabelText('Label'), { target: { value: '{{ $json.name }}' } });
+
+    await vi.waitFor(() => {
+      expect(screen.getByLabelText('Label')).toHaveClass('!border-emerald-400');
+    });
+    expect(screen.getByTestId('expression-preview-label')).toHaveTextContent('Ada');
+  });
+
+  it('turns the field red and shows the error for an invalid expression', async () => {
+    render(<NodeConfigPanel manifest={manifest} values={{ label: '' }} onChange={vi.fn()} onClose={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText('Label'), { target: { value: '{{ $json.a.b.c }}' } });
+
+    await vi.waitFor(() => {
+      expect(screen.getByLabelText('Label')).toHaveClass('!border-red-400');
+    });
+    expect(screen.getByTestId('expression-preview-label')).toBeInTheDocument();
+  });
+
+  it('falls back to an empty $json when the node has never been tested', async () => {
+    render(<NodeConfigPanel manifest={manifest} values={{ label: '' }} onChange={vi.fn()} onClose={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText('Label'), { target: { value: '{{ 1 + 1 }}' } });
+
+    await vi.waitFor(() => {
+      expect(screen.getByTestId('expression-preview-label')).toHaveTextContent('2');
+    });
   });
 });
 

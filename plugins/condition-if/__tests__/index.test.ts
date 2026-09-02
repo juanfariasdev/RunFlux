@@ -86,4 +86,10 @@ describe('condition-if plugin (004-core-nodes-catalog, RF-01, RN-01)', () => {
     const generated = await runGenerated(nodeConfig, { status: 'nope' });
     expect(generated.activeOutput).toBe('false');
   });
+
+  it('does not throw when "conditions" is not an array (E001)', async () => {
+    const params = { combinator: 'and', conditions: { leftValue: 'a', operator: 'equals', rightValue: 'a' } };
+    const result = (await execute!(params, {}, { workflowId: 'wf-1', nodeId: 'n1', mode: 'sandbox' })) as { activeOutput: string | null };
+    expect(result.activeOutput).toBe('true'); // zero conditions => vacuously true, per combine()'s convention
+  });
 });
