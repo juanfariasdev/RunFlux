@@ -23,6 +23,7 @@ export interface WorkflowStoreState {
   setNodeResult: (result: NodeResult) => void;
   clearNodeResults: () => void;
 
+  setWorkflow: (workflow: WorkflowDefinition) => void;
   addNode: (node: WorkflowNode) => void;
   removeNode: (nodeId: string) => void;
   updateNodeParameters: (nodeId: string, parameters: Record<string, unknown>) => void;
@@ -73,6 +74,13 @@ export const useWorkflowStore = create<WorkflowStoreState>((set, get) => ({
     set((state) => ({ nodeResults: { ...state.nodeResults, [result.nodeId]: result } })),
 
   clearNodeResults: () => set({ nodeResults: {} }),
+
+  setWorkflow: (workflow) =>
+    set({
+      workflow,
+      selectedNodeId: undefined,
+      nodeResults: {},
+    }),
 
   addNode: (node) =>
     set((state) => ({

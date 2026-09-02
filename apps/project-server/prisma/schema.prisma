@@ -1,0 +1,33 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Project {
+  id                     String            @id @default(uuid())
+  name                   String
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
+  archivedAt             DateTime?
+  currentWorkflowVersion String?
+  versions               WorkflowVersion[]
+
+  @@index([archivedAt])
+  @@index([name])
+}
+
+model WorkflowVersion {
+  id         String   @id @default(uuid())
+  projectId  String
+  version    String
+  definition String
+  savedAt    DateTime @default(now())
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([savedAt])
+}

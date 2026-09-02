@@ -6,6 +6,14 @@ import { runfluxValidationPlugin } from './vite-plugin-validation-runtime.ts';
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), runfluxPluginCatalogPlugin(['../../plugins']), runfluxValidationPlugin(['../../plugins'])],
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+    },
+  },
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test-setup.ts'],

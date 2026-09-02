@@ -14,11 +14,17 @@
     "postinstall": "npm run build:node --workspaces --if-present",
     "test": "npm run typecheck && npm run test:unit",
     "test:unit": "npm run test --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present -- --force --pretty false"
+    "typecheck": "npm run typecheck --workspaces --if-present -- --force --pretty false",
+    "dev:editor": "npm run dev --workspace=@runflux/app-workflow-editor",
+    "dev:server": "npm run dev --workspace=@runflux/project-server",
+    "dev:all": "concurrently -n \"server,editor\" -c \"cyan,magenta\" \"npm run dev:server\" \"npm run dev:editor\"",
+    "db:generate": "npm run db:generate --workspace=@runflux/project-server",
+    "db:migrate": "npm run db:migrate --workspace=@runflux/project-server"
   },
   "devDependencies": {
+    "@types/node": "^22.5.0",
+    "concurrently": "^9.1.2",
     "typescript": "^5.5.4",
-    "vitest": "^4.1.9",
-    "@types/node": "^22.5.0"
+    "vitest": "^4.1.9"
   }
 }

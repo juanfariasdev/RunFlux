@@ -3,7 +3,7 @@ import { ReactFlowProvider } from '@xyflow/react';
 import type { PluginManifest } from '@runflux/plugin-system/types';
 import { HttpPluginCatalogAdapter } from './adapters/plugin-catalog-adapter';
 import { HttpValidationRuntimeAdapter } from './adapters/validation-runtime-adapter';
-import { InMemoryWorkflowPersistenceAdapter } from './adapters/workflow-persistence-adapter';
+import { HttpProjectApiAdapter } from './adapters/project-api-adapter';
 import { connectionId } from './adapters/react-flow-adapter';
 import { Canvas } from './components/Canvas';
 import { EdgeConfigPanel } from './components/EdgeConfigPanel';
@@ -11,14 +11,13 @@ import { NodeConfigPanel } from './components/NodeConfigPanel';
 import { Palette } from './components/Palette';
 import { Toolbar } from './components/Toolbar';
 import { useWorkflowStore } from './store/workflow-store';
+import { ProjectProvider, useProject } from './context/ProjectContext';
 
-// Browser-safe: fetches the catalog served by vite-plugin-plugin-catalog.ts
-// (dev middleware / static build asset) instead of running discovery here.
 const catalog = new HttpPluginCatalogAdapter();
-const persistence = new InMemoryWorkflowPersistenceAdapter();
+const projectAdapter = new HttpProjectApiAdapter();
 const validation = new HttpValidationRuntimeAdapter();
 
-export function App() {
+function WorkflowEditorContent() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | undefined>();
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | undefined>();
   const workflow = useWorkflowStore((s) => s.workflow);
@@ -34,11 +33,24 @@ export function App() {
   const [manifestsById, setManifestsById] = useState<Map<string, PluginManifest>>(new Map());
   const [testingNodeId, setTestingNodeId] = useState<string | undefined>();
 
+  const { isDirty } = useProject();
+
+  // T021: Previne fechamento acidental da aba se houver alterações não salvas (RF-11)
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirty) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isDirty]);
+
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
   const selectedConnection = connections.find((connection) => connectionId(connection) === selectedEdgeId);
 
   // RF-04: test a single node in isolation, reusing cached upstream results
-  // the validation runtime already knows about (RN-03/RN-06).
   const handleTestNode = useCallback(async (nodeId: string) => {
     setTestingNodeId(nodeId);
     try {
@@ -61,7 +73,7 @@ export function App() {
 
   return (
     <div className="flex h-full min-w-[900px] flex-col overflow-hidden bg-slate-50 text-slate-900">
-      <Toolbar catalog={catalog} persistence={persistence} validation={validation} />
+      <Toolbar catalog={catalog} persistence={projectAdapter} validation={validation} />
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <Palette catalog={catalog} />
         <ReactFlowProvider>
@@ -104,5 +116,13 @@ export function App() {
         )}
       </div>
     </div>
+  );
+}
+
+export function App() {
+  return (
+    <ProjectProvider adapter={projectAdapter}>
+      <WorkflowEditorContent />
+    </ProjectProvider>
   );
 }
