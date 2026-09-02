@@ -43,7 +43,10 @@ export async function scanDirectory(dirPath: string): Promise<ScanResult> {
     }
 
     try {
-      const mod = (await import(pathToFileURL(entryFile).href)) as Partial<PluginModule>;
+      const entryUrl = pathToFileURL(entryFile);
+      const { mtimeNs, size } = await fs.stat(entryFile, { bigint: true });
+      entryUrl.searchParams.set('runflux-version', `${mtimeNs}-${size}`);
+      const mod = (await import(entryUrl.href)) as Partial<PluginModule>;
       if (!mod.manifest || !mod.generators) {
         errors.push({ path: pluginDir, error: 'module must export "manifest" and "generators"' });
         continue;

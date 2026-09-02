@@ -1,3 +1,5 @@
+import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -45,5 +47,40 @@ describe('scanDirectory — edge cases', () => {
     const result = await scanDirectory(edgeCasesDir);
     expect(result.plugins).toHaveLength(0);
     expect(result.errors).toHaveLength(2);
+  });
+});
+
+describe('scanDirectory — changed modules', () => {
+  it('loads the new module version when an entry file changes', async () => {
+    const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), 'runflux-plugin-scan-'));
+    const pluginDir = path.join(rootDir, 'reloadable-plugin');
+    const entryFile = path.join(pluginDir, 'index.js');
+    const source = (value: string) => `
+export const manifest = {
+  id: 'reloadable-plugin',
+  name: 'Reloadable Plugin',
+  category: 'action',
+  version: '1.0.0',
+  parameters: [],
+  supportedPlatforms: ['local'],
+};
+export const generators = { local: () => ({ files: [], infra: [] }) };
+export const execute = () => ${JSON.stringify(value)};
+`;
+
+    try {
+      await fs.mkdir(pluginDir);
+      await fs.writeFile(entryFile, source('before'));
+      const first = await scanDirectory(rootDir);
+
+      await fs.writeFile(entryFile, source('after-change'));
+      const second = await scanDirectory(rootDir);
+
+      const context = { workflowId: 'wf-test', nodeId: 'node-test', mode: 'sandbox' as const };
+      expect(await first.plugins[0].execute?.({}, null, context)).toBe('before');
+      expect(await second.plugins[0].execute?.({}, null, context)).toBe('after-change');
+    } finally {
+      await fs.rm(rootDir, { recursive: true, force: true });
+    }
   });
 });

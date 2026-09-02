@@ -257,6 +257,17 @@ describe('NodeConfigPanel — retained execution input and explicit set value ty
 });
 
 describe('NodeConfigPanel — persisted set types and type-specific JSON shapes', () => {
+  it('persists String when its value is an expression that resolves to a number', async () => {
+    render(<SetHarness initialParameters={{ fields: [{ name: 'countAsText', value: '' }], includeOtherFields: false }} />);
+
+    fireEvent.change(screen.getByLabelText('Row 1 Value'), { target: { value: '{{ $json.count }}' } });
+
+    await waitFor(() => {
+      const stored = JSON.parse(screen.getByTestId('stored-set-value').textContent ?? '{}');
+      expect(stored.fields).toEqual([{ name: 'countAsText', value: '{{ $json.count }}', type: 'string' }]);
+    });
+  });
+
   it('keeps Number selected for expression and partial negative values after the panel remounts', async () => {
     render(<RemountableSetHarness />);
 

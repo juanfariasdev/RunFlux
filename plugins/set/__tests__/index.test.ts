@@ -101,4 +101,13 @@ describe('set plugin (004-core-nodes-catalog, RF-11)', () => {
     await expect(runGenerated(nodeConfig, { items: { invalid: true } })).rejects.toThrow('Field "items" must be an array');
     await expect(runGenerated(nodeConfig, { items: ['valid'] })).resolves.toEqual({ items: ['valid'] });
   });
+
+  it('converts a numeric expression result to text for String in generated code', async () => {
+    const nodeConfig = {
+      fields: [{ name: 'countAsText', value: '{{ $json.count }}', type: 'string' }],
+      includeOtherFields: false,
+    };
+
+    await expect(runGenerated(nodeConfig, { count: 42 })).resolves.toEqual({ countAsText: '42' });
+  });
 });

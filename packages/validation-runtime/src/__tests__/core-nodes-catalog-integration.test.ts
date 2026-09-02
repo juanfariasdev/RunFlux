@@ -157,4 +157,33 @@ describe('core-nodes-catalog acceptance scenarios (004-core-nodes-catalog, requi
     });
     expect(run.nodeResults.find((r) => r.nodeId === 'http')).toMatchObject({ error: null });
   });
+
+  it('converts a numeric expression result to text when the set field type is String', async () => {
+    const wf: WorkflowDefinition = {
+      id: 'wf-set-string-type',
+      name: 'Set string type',
+      nodes: [
+        { id: 'trigger', pluginId: 'trigger', pluginVersion: '1.0.0', parameters: { seed: { count: 42 } }, position: { x: 0, y: 0 } },
+        {
+          id: 'set',
+          pluginId: 'set',
+          pluginVersion: '1.0.0',
+          parameters: {
+            fields: [{ name: 'countAsText', value: '{{ $json.count }}', type: 'string' }],
+            includeOtherFields: false,
+          },
+          position: { x: 0, y: 0 },
+        },
+      ],
+      connections: [
+        { sourceNodeId: 'trigger', sourceOutput: 'main', targetNodeId: 'set', targetInput: 'main' },
+      ],
+    };
+
+    const run = await runWorkflow(wf, registryWithRealPlugins(), { mode: 'sandbox' });
+
+    const output = run.nodeResults.find((result) => result.nodeId === 'set')?.output;
+    expect(output).toEqual({ countAsText: '42' });
+    expect(typeof (output as { countAsText: unknown }).countAsText).toBe('string');
+  });
 });
