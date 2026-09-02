@@ -17,6 +17,7 @@ const manifestSchema = z.object({
   version: z.string().min(1),
   parameters: z.array(parameterSchema),
   supportedPlatforms: z.array(z.string().min(1)).min(1),
+  outputs: z.array(z.string().min(1)).optional(),
 });
 
 export type ManifestValidationResult =

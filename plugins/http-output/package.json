@@ -1,0 +1,19 @@
+{
+  "name": "@runflux/plugin-http-output",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./index.ts",
+  "runflux": { "plugin": true },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -b tsconfig.json"
+  },
+  "dependencies": {
+    "@runflux/plugin-system": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "vitest": "^4.1.9"
+  }
+}

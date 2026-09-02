@@ -48,6 +48,22 @@ describe('validateManifest — happy path', () => {
     const result = validateManifest({ ...validManifest, parameters: [] });
     expect(result.success).toBe(true);
   });
+
+  it('accepts and preserves a manifest declaring named outputs (004-core-nodes-catalog, RF-06)', () => {
+    const result = validateManifest({ ...validManifest, outputs: ['true', 'false'] });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.manifest.outputs).toEqual(['true', 'false']);
+    }
+  });
+
+  it('accepts a manifest without "outputs" (legacy single implicit output)', () => {
+    const result = validateManifest(validManifest);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.manifest.outputs).toBeUndefined();
+    }
+  });
 });
 
 describe('validateManifest — rejections (RF-04)', () => {

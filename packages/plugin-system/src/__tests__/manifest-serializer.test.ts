@@ -22,6 +22,16 @@ describe('serializeManifest', () => {
       expect(result.manifest).toEqual(manifest);
     }
   });
+
+  it('round-trips a manifest with named outputs without dropping the field (004-core-nodes-catalog, RF-06)', () => {
+    const manifestWithOutputs: PluginManifest = { ...manifest, outputs: ['true', 'false'] };
+    const json = serializeManifest(manifestWithOutputs);
+    const result = deserializeManifest(json);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.manifest.outputs).toEqual(['true', 'false']);
+    }
+  });
 });
 
 describe('deserializeManifest', () => {

@@ -27,6 +27,13 @@ export interface PluginManifest {
   version: string;
   parameters: ParameterSchema[];
   supportedPlatforms: string[];
+  /**
+   * Named output ports (004-core-nodes-catalog, D-03). Absent = one implicit
+   * "main" output, always active (legacy behavior, e.g. trigger-manual-example).
+   * Present = `execute()` returns an `ExecutorResult` object instead of a raw
+   * value, and the validation engine only propagates through the output it names.
+   */
+  outputs?: string[];
 }
 
 export interface InfraFragment {
@@ -69,11 +76,20 @@ export interface PluginExecutionContext {
  * `execute` simply cannot be validated at runtime yet (still fully usable for
  * compilation via its generators).
  */
+/**
+ * What `ExecutorFn` returns (004-core-nodes-catalog, D-03). The engine decides
+ * which shape to expect by checking the plugin's own `manifest.outputs`, not
+ * by inspecting the returned value: absent `outputs` means the plain `unknown`
+ * form; present `outputs` means the `{ value, activeOutput }` form, where
+ * `activeOutput: null` means no output was activated — propagation stops here.
+ */
+export type ExecutorResult = unknown | { value: unknown; activeOutput: string | null };
+
 export type ExecutorFn = (
   params: Record<string, unknown>,
   input: unknown,
   context: PluginExecutionContext,
-) => unknown | Promise<unknown>;
+) => ExecutorResult | Promise<ExecutorResult>;
 
 /**
  * A discovered plugin, pairing its manifest with one generator per platform it

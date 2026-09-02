@@ -71,6 +71,43 @@ describe('NodeConfigPanel — form never navigates away on Enter', () => {
 });
 
 
+const jsonManifest: PluginManifest = {
+  ...manifest,
+  parameters: [{ name: 'conditions', label: 'Conditions', type: 'json', required: true }],
+};
+
+describe('NodeConfigPanel — json parameter type (004-core-nodes-catalog, D-06)', () => {
+  it('renders a textarea (not the generic text input) for a json-type parameter, pre-filled with pretty-printed JSON', () => {
+    render(<NodeConfigPanel manifest={jsonManifest} values={{ conditions: [{ a: 1 }] }} onChange={vi.fn()} onClose={vi.fn()} />);
+    const field = screen.getByLabelText('Conditions');
+    expect(field.tagName).toBe('TEXTAREA');
+    expect(field).toHaveValue(JSON.stringify([{ a: 1 }], null, 2));
+  });
+
+  it('calls onChange with the parsed value once valid JSON is typed', async () => {
+    const onChange = vi.fn();
+    render(<NodeConfigPanel manifest={jsonManifest} values={{ conditions: [] }} onChange={onChange} onClose={vi.fn()} />);
+    const field = screen.getByLabelText('Conditions');
+    fireEvent.change(field, { target: { value: '{"a": 1}' } });
+
+    await vi.waitFor(() => {
+      expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ conditions: { a: 1 } }));
+    });
+  });
+
+  it('shows an inline error and never calls onChange with the broken raw string when JSON is invalid', async () => {
+    const onChange = vi.fn();
+    render(<NodeConfigPanel manifest={jsonManifest} values={{ conditions: [] }} onChange={onChange} onClose={vi.fn()} />);
+    const field = screen.getByLabelText('Conditions');
+    fireEvent.change(field, { target: { value: '{not valid' } });
+
+    await vi.waitFor(() => {
+      expect(screen.getByText(/invalid json/i)).toBeInTheDocument();
+    });
+    expect(onChange).not.toHaveBeenCalledWith(expect.objectContaining({ conditions: '{not valid' }));
+  });
+});
+
 describe('NodeConfigPanel — test this node in isolation (003-validation-runtime, RF-02/RF-04)', () => {
   it('does not render the Validation section when onTest is not provided', () => {
     render(<NodeConfigPanel manifest={manifest} values={{ label: '' }} onChange={vi.fn()} onClose={vi.fn()} />);

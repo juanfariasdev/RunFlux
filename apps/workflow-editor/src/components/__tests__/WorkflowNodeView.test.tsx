@@ -6,8 +6,8 @@ import type { FlowNode } from '../../adapters/react-flow-adapter';
 import type { PluginManifest } from '@runflux/plugin-system/types';
 import type { NodeResult } from '@runflux/validation-runtime';
 
-function manifest(category: PluginManifest['category']): PluginManifest {
-  return { id: `m-${category}`, name: `${category} node`, category, version: '1.0.0', parameters: [], supportedPlatforms: ['local'] };
+function manifest(category: PluginManifest['category'], outputs?: string[]): PluginManifest {
+  return { id: `m-${category}`, name: `${category} node`, category, version: '1.0.0', parameters: [], supportedPlatforms: ['local'], outputs };
 }
 
 // Minimal NodeProps stand-in — only the fields WorkflowNodeView actually reads.
@@ -67,6 +67,33 @@ describe('WorkflowNodeView — handle layout by category', () => {
     const { container } = renderNode(undefined);
     expect(container.querySelector('.react-flow__handle-left')).not.toBeNull();
     expect(container.querySelector('.react-flow__handle-right')).not.toBeNull();
+  });
+});
+
+describe('WorkflowNodeView — named output handles (004-core-nodes-catalog, RF-08)', () => {
+  it('renders exactly one unlabeled source handle when manifest.outputs is absent (legacy behavior preserved)', () => {
+    const { container, queryAllByTestId } = renderNode(manifest('action'));
+    expect(container.querySelectorAll('.react-flow__handle-right')).toHaveLength(1);
+    expect(queryAllByTestId('output-handle-label')).toHaveLength(0);
+  });
+
+  it('renders one labeled source handle per entry in manifest.outputs', () => {
+    const { container, getAllByTestId } = renderNode(manifest('control-flow', ['true', 'false']));
+    expect(container.querySelectorAll('.react-flow__handle-right')).toHaveLength(2);
+    const labels = getAllByTestId('output-handle-label').map((el) => el.textContent);
+    expect(labels).toEqual(['true', 'false']);
+  });
+
+  it('gives each named output handle a distinct id matching its manifest.outputs entry', () => {
+    const { getAllByTestId } = renderNode(manifest('control-flow', ['true', 'false']));
+    const ids = getAllByTestId('output-handle').map((el) => el.getAttribute('data-handleid'));
+    expect(ids).toEqual(['true', 'false']);
+  });
+
+  it('renders a single named handle for a manifest declaring exactly one output (e.g. filter)', () => {
+    const { container, getAllByTestId } = renderNode(manifest('control-flow', ['main']));
+    expect(container.querySelectorAll('.react-flow__handle-right')).toHaveLength(1);
+    expect(getAllByTestId('output-handle-label').map((el) => el.textContent)).toEqual(['main']);
   });
 });
 

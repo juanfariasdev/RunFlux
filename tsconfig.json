@@ -3,6 +3,7 @@
   "references": [
     { "path": "packages/plugin-system" },
     { "path": "packages/workflow-model" },
-    { "path": "packages/validation-runtime" }
+    { "path": "packages/validation-runtime" },
+    { "path": "packages/expression-engine" }
   ]
 }
