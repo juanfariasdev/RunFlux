@@ -191,7 +191,7 @@ describe('NodeConfigPanel — set fields from an empty or legacy configuration (
     fireEvent.change(value, { target: { value: 'hello' } });
 
     await waitFor(() => {
-      expect(screen.getByTestId('stored-set-value')).toHaveTextContent('"fields":[{"name":"message","value":"hello"}]');
+      expect(screen.getByTestId('stored-set-value')).toHaveTextContent('"fields":[{"name":"message","value":"hello","type":"string"}]');
     });
   });
 

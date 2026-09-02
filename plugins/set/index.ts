@@ -22,6 +22,36 @@ export const manifest: PluginModule['manifest'] = {
 interface FieldConfig {
   name: string;
   value: unknown;
+  type?: 'string' | 'number' | 'boolean' | 'null' | 'array' | 'object';
+}
+
+function normalizeFieldValue(field: FieldConfig): unknown {
+  const { value, type } = field;
+  if (type === 'null') return null;
+  if (type === 'array') {
+    if (Array.isArray(value)) return value;
+    throw new Error(`Field "${field.name}" must be an array`);
+  }
+  if (type === 'object') {
+    if (value !== null && typeof value === 'object' && !Array.isArray(value)) return value;
+    throw new Error(`Field "${field.name}" must be an object`);
+  }
+  if (type === 'number') {
+    const numberValue = typeof value === 'number' ? value : typeof value === 'string' && value.trim() !== '' ? Number(value) : Number.NaN;
+    if (Number.isFinite(numberValue)) return numberValue;
+    throw new Error(`Field "${field.name}" must be a number`);
+  }
+  if (type === 'boolean') {
+    if (typeof value === 'boolean') return value;
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    throw new Error(`Field "${field.name}" must be a boolean`);
+  }
+  if (type === 'string' && typeof value !== 'string') {
+    if (value === null || value === undefined) return '';
+    return typeof value === 'object' ? JSON.stringify(value) : String(value);
+  }
+  return value;
 }
 
 function compose(fields: FieldConfig[], includeOtherFields: boolean, input: unknown): Record<string, unknown> {
@@ -29,7 +59,7 @@ function compose(fields: FieldConfig[], includeOtherFields: boolean, input: unkn
     includeOtherFields && input !== null && typeof input === 'object' ? { ...(input as Record<string, unknown>) } : {};
   for (const field of fields) {
     if (field && typeof field.name === 'string') {
-      base[field.name] = field.value;
+      base[field.name] = normalizeFieldValue(field);
     }
   }
   return base;
@@ -59,12 +89,39 @@ function resolveValue(raw, $json) {
   if (whole) return evaluateExpression(whole[1].trim(), $json);
   return raw.replace(/{{([\\s\\S]*?)}}/g, (_m, expr) => String(evaluateExpression(expr.trim(), $json)));
 }
+function normalizeFieldValue(field, value) {
+  if (field.type === 'null') return null;
+  if (field.type === 'array') {
+    if (Array.isArray(value)) return value;
+    throw new Error('Field "' + field.name + '" must be an array');
+  }
+  if (field.type === 'object') {
+    if (value !== null && typeof value === 'object' && !Array.isArray(value)) return value;
+    throw new Error('Field "' + field.name + '" must be an object');
+  }
+  if (field.type === 'number') {
+    const numberValue = typeof value === 'number' ? value : typeof value === 'string' && value.trim() !== '' ? Number(value) : Number.NaN;
+    if (Number.isFinite(numberValue)) return numberValue;
+    throw new Error('Field "' + field.name + '" must be a number');
+  }
+  if (field.type === 'boolean') {
+    if (typeof value === 'boolean') return value;
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    throw new Error('Field "' + field.name + '" must be a boolean');
+  }
+  if (field.type === 'string' && typeof value !== 'string') {
+    if (value === null || value === undefined) return '';
+    return typeof value === 'object' ? JSON.stringify(value) : String(value);
+  }
+  return value;
+}
 
 export function run($json) {
   const base = INCLUDE_OTHER_FIELDS && $json !== null && typeof $json === 'object' ? { ...$json } : {};
   for (const field of FIELDS) {
     if (field && typeof field.name === 'string') {
-      base[field.name] = resolveValue(field.value, $json);
+      base[field.name] = normalizeFieldValue(field, resolveValue(field.value, $json));
     }
   }
   return base;

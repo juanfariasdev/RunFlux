@@ -62,4 +62,43 @@ describe('set plugin (004-core-nodes-catalog, RF-11)', () => {
     const generated = await runGenerated({ fields: { name: 'status', value: 'active' } }, {});
     expect(generated).toEqual({});
   });
+
+  it('uses persisted field types to normalize resolved values without forwarding the type metadata', async () => {
+    const params = {
+      fields: [
+        { name: 'count', value: '42', type: 'number' },
+        { name: 'enabled', value: 'false', type: 'boolean' },
+        { name: 'empty', value: 'ignored', type: 'null' },
+      ],
+      includeOtherFields: false,
+    };
+
+    const result = await execute!(params, {}, { workflowId: 'wf-1', nodeId: 'n1', mode: 'sandbox' });
+    expect(result).toEqual({ count: 42, enabled: false, empty: null });
+  });
+
+  it('rejects an object for Array and an array for Object in execute()', async () => {
+    const context = { workflowId: 'wf-1', nodeId: 'n1', mode: 'sandbox' } as const;
+
+    await expect(Promise.resolve().then(() => execute!(
+      { fields: [{ name: 'list', value: {}, type: 'array' }] },
+      {},
+      context,
+    ))).rejects.toThrow('Field "list" must be an array');
+    await expect(Promise.resolve().then(() => execute!(
+      { fields: [{ name: 'record', value: [], type: 'object' }] },
+      {},
+      context,
+    ))).rejects.toThrow('Field "record" must be an object');
+  });
+
+  it('applies the persisted Array type after resolving an expression in generated code', async () => {
+    const nodeConfig = {
+      fields: [{ name: 'items', value: '{{ $json.items }}', type: 'array' }],
+      includeOtherFields: false,
+    };
+
+    await expect(runGenerated(nodeConfig, { items: { invalid: true } })).rejects.toThrow('Field "items" must be an array');
+    await expect(runGenerated(nodeConfig, { items: ['valid'] })).resolves.toEqual({ items: ['valid'] });
+  });
 });

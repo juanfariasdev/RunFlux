@@ -54,6 +54,7 @@ const LIST_ROW_FIELDS: Record<string, KnownField[]> = {
   fields: [
     { key: 'name', label: 'Name', initialValue: '' },
     { key: 'value', label: 'Value', initialValue: '' },
+    { key: 'type', label: 'Type', initialValue: 'string' },
   ],
   conditions: [
     { key: 'leftValue', label: 'Left value', initialValue: '' },
@@ -213,7 +214,15 @@ function createListRow(id: string): Record<string, unknown> {
 
 function getKnownFields(listId: string | undefined, obj: Record<string, unknown>): KnownField[] | undefined {
   const fields = listId ? LIST_ROW_FIELDS[listId] : undefined;
-  if (!fields || Object.keys(obj).length !== fields.length || !fields.every(({ key }) => Object.hasOwn(obj, key))) return undefined;
+  if (!fields) return undefined;
+
+  if (listId === 'fields') {
+    const allowedKeys = new Set(fields.map(({ key }) => key));
+    const keys = Object.keys(obj);
+    return Object.hasOwn(obj, 'name') && Object.hasOwn(obj, 'value') && keys.every((key) => allowedKeys.has(key)) ? fields : undefined;
+  }
+
+  if (Object.keys(obj).length !== fields.length || !fields.every(({ key }) => Object.hasOwn(obj, key))) return undefined;
   return fields;
 }
 
@@ -239,13 +248,17 @@ function ObjectEditor({
         {knownFields.map(({ key, label }) => {
           const options = key === 'operator' ? OPERATOR_OPTIONS : key === 'combinator' ? COMBINATOR_OPTIONS : undefined;
 
+          if (listId === 'fields' && key === 'type') return null;
+          if (key === 'rightValue' && obj.operator === 'isEmpty') return null;
+
           return listId === 'fields' && key === 'value' ? (
             <SetFieldValueEditor
               key={key}
               value={obj[key]}
+              selectedType={isJsonValueType(obj.type) ? obj.type : getJsonValueType(obj[key])}
               rowIndex={rowIndex}
               sampleJson={sampleJson}
-              onChange={(newValue) => onChange({ ...obj, [key]: newValue })}
+              onChange={(newValue, type) => onChange({ ...obj, [key]: newValue, type })}
             />
           ) : options ? (
             <label key={key} className="grid min-w-0 gap-0.5 text-[9px] font-semibold text-slate-500">
@@ -254,7 +267,11 @@ function ObjectEditor({
                 value={obj[key]}
                 ariaLabel={`Row ${rowIndex + 1} ${label}`}
                 options={options}
-                onChange={(newValue) => onChange({ ...obj, [key]: newValue })}
+                onChange={(newValue) => onChange({
+                  ...obj,
+                  [key]: newValue,
+                  ...(key === 'operator' && newValue === 'isEmpty' ? { rightValue: '' } : {}),
+                })}
               />
             </label>
           ) : (
@@ -329,16 +346,17 @@ function ObjectEditor({
 
 function SetFieldValueEditor({
   value,
+  selectedType,
   onChange,
   rowIndex,
   sampleJson,
 }: {
   value: unknown;
-  onChange: (value: unknown) => void;
+  selectedType: JsonValueType;
+  onChange: (value: unknown, type: JsonValueType) => void;
   rowIndex: number;
   sampleJson: unknown;
 }) {
-  const [selectedType, setSelectedType] = useState<JsonValueType>(() => getJsonValueType(value));
   const valueLabel = `Row ${rowIndex + 1} Value`;
 
   return (
@@ -352,8 +370,7 @@ function SetFieldValueEditor({
           onChange={(event) => {
             const nextType = event.target.value;
             if (!isJsonValueType(nextType)) return;
-            setSelectedType(nextType);
-            onChange(convertToJsonType(value, nextType));
+            onChange(convertToJsonType(value, nextType), nextType);
           }}
         >
           {JSON_VALUE_TYPES.map((option) => (
@@ -370,15 +387,17 @@ function SetFieldValueEditor({
             value={value === true ? 'true' : 'false'}
             ariaLabel={valueLabel}
             options={BOOLEAN_OPTIONS}
-            onChange={(newValue) => onChange(newValue === 'true')}
+            onChange={(newValue) => onChange(newValue === 'true', selectedType)}
           />
         ) : (
           <FieldValueEditor
+            key={selectedType}
             value={value}
             ariaLabel={valueLabel}
             sampleJson={sampleJson}
             conversionType={isPrimitiveType(selectedType) ? selectedType : undefined}
-            onChange={onChange}
+            containerType={isContainerType(selectedType) ? selectedType : undefined}
+            onChange={(newValue) => onChange(newValue, selectedType)}
           />
         )}
       </label>
@@ -422,8 +441,12 @@ function getJsonValueType(value: unknown): JsonValueType {
   return 'string';
 }
 
-function isJsonValueType(value: string): value is JsonValueType {
+function isJsonValueType(value: unknown): value is JsonValueType {
   return JSON_VALUE_TYPES.some((option) => option.value === value);
+}
+
+function isContainerType(value: JsonValueType): value is 'array' | 'object' {
+  return value === 'array' || value === 'object';
 }
 
 function isPrimitiveType(value: JsonValueType): value is 'string' | 'number' | 'boolean' {
@@ -454,15 +477,17 @@ function FieldValueEditor({
   ariaLabel,
   sampleJson,
   conversionType,
+  containerType,
 }: {
   value: unknown;
   onChange: (value: unknown) => void;
   ariaLabel: string;
   sampleJson: unknown;
   conversionType?: PrimitiveType;
+  containerType?: 'array' | 'object';
 }) {
   if (!isPrimitive(value)) {
-    return <JsonLeafInput value={value} onChange={onChange} ariaLabel={ariaLabel} />;
+    return <JsonLeafInput value={value} onChange={onChange} ariaLabel={ariaLabel} requiredShape={containerType} />;
   }
 
   return <ValueInput value={value} onChange={onChange} ariaLabel={ariaLabel} sampleJson={sampleJson} conversionType={conversionType} />;
@@ -585,29 +610,50 @@ function ValueInput({
 }
 
 /** Fallback cell for a nested object/array value inside a row — kept flat, not recursed further. */
-function JsonLeafInput({ value, onChange, ariaLabel }: { value: unknown; onChange: (value: unknown) => void; ariaLabel: string }) {
+function JsonLeafInput({
+  value,
+  onChange,
+  ariaLabel,
+  requiredShape,
+}: {
+  value: unknown;
+  onChange: (value: unknown) => void;
+  ariaLabel: string;
+  requiredShape?: 'array' | 'object';
+}) {
   const [draft, setDraft] = useState<string | null>(null);
-  const [invalid, setInvalid] = useState(false);
+  const [error, setError] = useState<string | undefined>();
   const text = draft ?? JSON.stringify(value);
 
   return (
-    <Input
-      type="text"
-      value={text}
-      aria-label={ariaLabel}
-      aria-invalid={invalid}
-      className={`!h-8 flex-1 font-mono text-[10px] ${invalid ? '!border-red-400' : ''}`}
-      onChange={(event) => {
-        const text = event.target.value;
-        setDraft(text);
-        try {
-          const parsed = JSON.parse(text);
-          setInvalid(false);
-          onChange(parsed);
-        } catch {
-          setInvalid(true);
-        }
-      }}
-    />
+    <div className="min-w-0 flex-1">
+      <Input
+        type="text"
+        value={text}
+        aria-label={ariaLabel}
+        aria-invalid={Boolean(error)}
+        className={`!h-8 flex-1 font-mono text-[10px] ${error ? '!border-red-400' : ''}`}
+        onChange={(event) => {
+          const nextText = event.target.value;
+          setDraft(nextText);
+          try {
+            const parsed = JSON.parse(nextText);
+            if (requiredShape === 'array' && !Array.isArray(parsed)) {
+              setError('Value must be an array');
+              return;
+            }
+            if (requiredShape === 'object' && (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed))) {
+              setError('Value must be an object');
+              return;
+            }
+            setError(undefined);
+            onChange(parsed);
+          } catch {
+            setError('Invalid JSON');
+          }
+        }}
+      />
+      {error && <p className="mb-0 mt-1 text-[9px] text-red-600" role="alert">{error}</p>}
+    </div>
   );
 }

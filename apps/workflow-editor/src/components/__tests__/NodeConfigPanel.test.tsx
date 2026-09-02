@@ -141,7 +141,7 @@ describe('NodeConfigPanel — json parameter type, Fields mode (004-core-nodes-c
     const fieldsManifest: PluginManifest = { ...manifest, parameters: [{ name: 'fields', label: 'Fields', type: 'json', required: true }] };
     render(<NodeConfigPanel manifest={fieldsManifest} values={{ fields: [] }} onChange={onChange} onClose={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: '+ Add field' }));
-    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ fields: [{ name: '', value: '' }] }));
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ fields: [{ name: '', value: '', type: 'string' }] }));
   });
 
   it('"+ Add row" creates the visible condition fields', () => {
@@ -259,12 +259,12 @@ describe('NodeConfigPanel — Fields mode expressions and free-text values (004-
 
     fireEvent.change(count, { target: { value: '4' } });
     await vi.waitFor(() => {
-      expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ fields: [{ name: 'count', value: 4 }, { name: 'enabled', value: true }] }));
+      expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ fields: [{ name: 'count', value: 4, type: 'number' }, { name: 'enabled', value: true }] }));
     });
 
     fireEvent.change(enabled, { target: { value: 'false' } });
     await vi.waitFor(() => {
-      expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ fields: [{ name: 'count', value: 4 }, { name: 'enabled', value: false }] }));
+      expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ fields: [{ name: 'count', value: 4, type: 'number' }, { name: 'enabled', value: false, type: 'boolean' }] }));
     });
   });
 
@@ -274,7 +274,7 @@ describe('NodeConfigPanel — Fields mode expressions and free-text values (004-
     fireEvent.change(screen.getByLabelText('Row 1 Value'), { target: { value: '{{ $json.count }}' } });
 
     await vi.waitFor(() => {
-      expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ fields: [{ name: 'count', value: '{{ $json.count }}' }] }));
+      expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ fields: [{ name: 'count', value: '{{ $json.count }}', type: 'number' }] }));
     });
   });
 
@@ -290,7 +290,7 @@ describe('NodeConfigPanel — Fields mode expressions and free-text values (004-
 
     fireEvent.change(booleanValue, { target: { value: 'false' } });
     await vi.waitFor(() => {
-      expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ fields: [{ name: 'enabled', value: false }] }));
+      expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ fields: [{ name: 'enabled', value: false, type: 'boolean' }] }));
     });
   });
 });
