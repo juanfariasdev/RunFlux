@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import type { PluginManifest } from '@runflux/plugin-system/types';
 import type { NodeResult } from '@runflux/validation-runtime';
@@ -47,12 +47,16 @@ export function NodeConfigPanel({
 }: NodeConfigPanelProps) {
   const parameters = manifest?.parameters ?? [];
   const schema = buildZodSchema(parameters);
-  const { register, watch, formState } = useForm<Record<string, unknown>>({
+  const { register, watch, control, formState } = useForm<Record<string, unknown>>({
     resolver: zodResolver(schema),
     defaultValues: values,
     mode: 'onChange',
   });
   const [revealed, setRevealed] = useState<Record<string, boolean>>({});
+  // D-06: raw textarea text per `type: 'json'` field, kept separate from the
+  // form's actual (parsed) value so invalid/in-progress JSON isn't lost while typing.
+  const [jsonDrafts, setJsonDrafts] = useState<Record<string, string>>({});
+  const [jsonErrors, setJsonErrors] = useState<Record<string, string | undefined>>({});
   const isSubflow = appearance.shape === 'subflow';
 
   useEffect(() => {
@@ -150,6 +154,39 @@ export function NodeConfigPanel({
                 <Label className="mb-1 block" htmlFor={param.name}>{param.label}{param.required && <span className="ml-0.5 text-red-500">*</span>}</Label>
                 {param.type === 'boolean' ? (
                   <Checkbox id={param.name} {...register(param.name)} />
+                ) : param.type === 'json' ? (
+                  <Controller
+                    name={param.name}
+                    control={control}
+                    render={({ field }) => {
+                      const draft = jsonDrafts[param.name] ?? JSON.stringify(field.value ?? null, null, 2);
+                      return (
+                        <>
+                          <textarea
+                            id={param.name}
+                            className="min-h-[88px] w-full resize-y rounded-lg border border-slate-200 bg-white px-3 py-2 font-mono text-[11px] text-slate-700 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50"
+                            value={draft}
+                            onChange={(event) => {
+                              const text = event.target.value;
+                              setJsonDrafts((previous) => ({ ...previous, [param.name]: text }));
+                              try {
+                                const parsed = JSON.parse(text);
+                                setJsonErrors((previous) => ({ ...previous, [param.name]: undefined }));
+                                field.onChange(parsed);
+                              } catch {
+                                setJsonErrors((previous) => ({ ...previous, [param.name]: 'Invalid JSON' }));
+                              }
+                            }}
+                          />
+                          {jsonErrors[param.name] && (
+                            <p className="mb-0 mt-1 text-[9px] text-red-600" role="alert">
+                              {jsonErrors[param.name]}
+                            </p>
+                          )}
+                        </>
+                      );
+                    }}
+                  />
                 ) : param.sensitive ? (
                   <div className="flex gap-1.5">
                     <Input id={param.name} type={revealed[param.name] ? 'text' : 'password'} autoComplete="off" {...register(param.name)} />

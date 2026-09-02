@@ -1,3 +1,4 @@
+import { resolveExpressions } from '@runflux/expression-engine';
 import { resolveExecutor } from '@runflux/plugin-system/api/resolve-executor';
 import type { PluginRegistry } from '@runflux/plugin-system/plugin-registry';
 import type { WorkflowConnection, WorkflowDefinition } from '@runflux/workflow-model/types';
@@ -43,22 +44,43 @@ function resolveInput(
   return incoming.length === 1 ? outputs[0] : outputs;
 }
 
+interface ExecuteNodeResult extends Pick<NodeResult, 'output' | 'error'> {
+  /**
+   * Output ports this execution activated (004-core-nodes-catalog, D-03/D-04).
+   * `['main']` for a plugin without `manifest.outputs` (legacy: one implicit,
+   * always-active output) or `[]` when the node errored or explicitly
+   * activated no output (`activeOutput: null`, RN-02).
+   */
+  activeOutputs: string[];
+}
+
 async function executeNode(
   pluginId: string,
   params: Record<string, unknown>,
   input: unknown,
   registry: PluginRegistry,
   context: { workflowId: string; nodeId: string; mode: PluginExecutionMode },
-): Promise<Pick<NodeResult, 'output' | 'error'>> {
+): Promise<ExecuteNodeResult> {
   const executor = resolveExecutor(registry, pluginId);
   if (!executor) {
-    return { output: null, error: `Plugin "${pluginId}" does not support local execution` };
+    return { output: null, error: `Plugin "${pluginId}" does not support local execution`, activeOutputs: [] };
   }
+  const manifest = registry.getManifest(pluginId);
   try {
-    const output = await executor(params, input, context);
-    return { output: output ?? null, error: null };
+    // D-02: expressions resolve here, once, for every plugin — a plugin's
+    // execute() always receives already-resolved parameters, never a raw {{ }}.
+    const resolvedParams = resolveExpressions(params, { $json: input });
+    const raw = await executor(resolvedParams, input, context);
+    if (!manifest?.outputs) {
+      return { output: raw ?? null, error: null, activeOutputs: ['main'] };
+    }
+    // Named-output plugin (D-03): the executor returns { value, activeOutput }
+    // instead of a raw value — the manifest is the discriminator, not the shape.
+    const wrapped = raw as { value: unknown; activeOutput: string | null } | null | undefined;
+    const activeOutputs = wrapped?.activeOutput != null ? [wrapped.activeOutput] : [];
+    return { output: wrapped?.value ?? null, error: null, activeOutputs };
   } catch (err) {
-    return { output: null, error: (err as Error).message };
+    return { output: null, error: (err as Error).message, activeOutputs: [] };
   }
 }
 
@@ -77,6 +99,7 @@ export async function runWorkflow(
   const startedAt = new Date().toISOString();
   const order = getExecutionOrder(workflow.nodes, workflow.connections);
   const resultsByNodeId = new Map<string, NodeResult>();
+  const activeOutputsByNodeId = new Map<string, string[]>();
 
   for (const node of order) {
     const incoming = workflow.connections.filter((c) => c.targetNodeId === node.id);
@@ -85,9 +108,19 @@ export async function runWorkflow(
       continue; // RN-02: propagation stops here, this node is never executed
     }
 
-    const input = resolveInput(incoming, resultsByNodeId);
+    // D-04/RN-05: only a connection whose sourceOutput is one of its source
+    // node's active outputs contributes to this node's input. A node with at
+    // least one active incoming connection still executes (fan-in preserved,
+    // RN-02); one with incoming connections but none active is skipped, same
+    // as an upstream error, but without recording one.
+    const activeIncoming = incoming.filter((c) => (activeOutputsByNodeId.get(c.sourceNodeId) ?? []).includes(c.sourceOutput));
+    if (incoming.length > 0 && activeIncoming.length === 0) {
+      continue;
+    }
+
+    const input = resolveInput(activeIncoming, resultsByNodeId);
     const nodeStartedAt = new Date().toISOString();
-    const { output, error } = await executeNode(node.pluginId, node.parameters, input, registry, {
+    const { output, error, activeOutputs } = await executeNode(node.pluginId, node.parameters, input, registry, {
       workflowId: workflow.id,
       nodeId: node.id,
       mode: options.mode,
@@ -100,6 +133,7 @@ export async function runWorkflow(
       startedAt: nodeStartedAt,
       finishedAt: new Date().toISOString(),
     });
+    activeOutputsByNodeId.set(node.id, activeOutputs);
   }
 
   const nodeResults = [...resultsByNodeId.values()];

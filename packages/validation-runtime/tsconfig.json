@@ -18,6 +18,7 @@
   "include": ["src/**/*.ts"],
   "references": [
     { "path": "../plugin-system" },
-    { "path": "../workflow-model" }
+    { "path": "../workflow-model" },
+    { "path": "../expression-engine" }
   ]
 }

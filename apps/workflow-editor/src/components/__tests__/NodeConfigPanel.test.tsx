@@ -79,7 +79,7 @@ const jsonManifest: PluginManifest = {
 describe('NodeConfigPanel — json parameter type (004-core-nodes-catalog, D-06)', () => {
   it('renders a textarea (not the generic text input) for a json-type parameter, pre-filled with pretty-printed JSON', () => {
     render(<NodeConfigPanel manifest={jsonManifest} values={{ conditions: [{ a: 1 }] }} onChange={vi.fn()} onClose={vi.fn()} />);
-    const field = screen.getByLabelText('Conditions');
+    const field = screen.getByLabelText(/Conditions/);
     expect(field.tagName).toBe('TEXTAREA');
     expect(field).toHaveValue(JSON.stringify([{ a: 1 }], null, 2));
   });
@@ -87,7 +87,7 @@ describe('NodeConfigPanel — json parameter type (004-core-nodes-catalog, D-06)
   it('calls onChange with the parsed value once valid JSON is typed', async () => {
     const onChange = vi.fn();
     render(<NodeConfigPanel manifest={jsonManifest} values={{ conditions: [] }} onChange={onChange} onClose={vi.fn()} />);
-    const field = screen.getByLabelText('Conditions');
+    const field = screen.getByLabelText(/Conditions/);
     fireEvent.change(field, { target: { value: '{"a": 1}' } });
 
     await vi.waitFor(() => {
@@ -98,7 +98,7 @@ describe('NodeConfigPanel — json parameter type (004-core-nodes-catalog, D-06)
   it('shows an inline error and never calls onChange with the broken raw string when JSON is invalid', async () => {
     const onChange = vi.fn();
     render(<NodeConfigPanel manifest={jsonManifest} values={{ conditions: [] }} onChange={onChange} onClose={vi.fn()} />);
-    const field = screen.getByLabelText('Conditions');
+    const field = screen.getByLabelText(/Conditions/);
     fireEvent.change(field, { target: { value: '{not valid' } });
 
     await vi.waitFor(() => {

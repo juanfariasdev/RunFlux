@@ -43,6 +43,7 @@ export function WorkflowNodeView({ data, selected, dragging }: NodeProps<FlowNod
 
         {status === 'missing' && <div className="absolute -bottom-2 right-2 rounded-md bg-red-100 px-1.5 py-0.5 text-[8px] font-bold text-red-700 shadow" role="alert">Plugin not found</div>}
         {status === 'outdated' && <div className="absolute -bottom-2 right-2 rounded-md bg-amber-100 px-1.5 py-0.5 text-[8px] font-bold text-amber-800 shadow">Update available · v{data.referenceStatus.status === 'outdated' ? data.referenceStatus.installedVersion : ''}</div>}
+        {category !== 'output' && <OutputHandles outputs={data?.manifest?.outputs} />}
         {status !== 'missing' && data?.result && (
           <div
             className={`absolute -top-2 right-2 grid h-4 w-4 place-items-center rounded-full text-[9px] font-bold text-white shadow ${data.result.error ? 'bg-red-500' : 'bg-emerald-500'}`}
@@ -53,7 +54,6 @@ export function WorkflowNodeView({ data, selected, dragging }: NodeProps<FlowNod
             {data.result.error ? '!' : '✓'}
           </div>
         )}
-        {category !== 'output' && <Handle id="main" type="source" position={Position.Right} className="!h-3 !w-3 !border-[3px] !border-white !bg-[var(--node-accent)] !shadow-md transition hover:scale-125" />}
       </article>
     </>
   );
@@ -72,6 +72,44 @@ export function SubflowNodeView({ data, selected, dragging }: NodeProps<FlowNode
         </header>
         <div className="pointer-events-none absolute bottom-3.5 left-3.5 right-3.5 top-[72px] rounded-xl border border-dashed border-violet-200" />
       </section>
+    </>
+  );
+}
+
+const OUTPUT_HANDLE_CLASSNAME =
+  '!h-3 !w-3 !border-[3px] !border-white !bg-[var(--node-accent)] !shadow-md transition hover:scale-125';
+
+/**
+ * Renders one source handle per entry in `manifest.outputs` (004-core-nodes-catalog,
+ * RF-08), each labeled and independently connectable. A manifest without
+ * `outputs` keeps the single unlabeled `id="main"` handle every plugin had
+ * before this feature (backward compatibility).
+ */
+function OutputHandles({ outputs }: { outputs?: string[] }) {
+  if (!outputs || outputs.length === 0) {
+    return <Handle id="main" type="source" position={Position.Right} className={OUTPUT_HANDLE_CLASSNAME} data-testid="output-handle" />;
+  }
+
+  return (
+    <>
+      {outputs.map((outputId, index) => (
+        <Handle
+          key={outputId}
+          id={outputId}
+          type="source"
+          position={Position.Right}
+          style={{ top: `${((index + 1) / (outputs.length + 1)) * 100}%` }}
+          className={OUTPUT_HANDLE_CLASSNAME}
+          data-testid="output-handle"
+        >
+          <span
+            className="pointer-events-none absolute right-[14px] top-1/2 -translate-y-1/2 whitespace-nowrap rounded bg-slate-800/90 px-1 py-0.5 text-[7px] font-bold text-white"
+            data-testid="output-handle-label"
+          >
+            {outputId}
+          </span>
+        </Handle>
+      ))}
     </>
   );
 }
