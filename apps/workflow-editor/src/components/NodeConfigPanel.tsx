@@ -19,6 +19,10 @@ const SHAPES: { value: WorkflowNodeShape; label: string }[] = [
   { value: 'pill', label: 'Pill' },
   { value: 'diamond', label: 'Decision' },
 ];
+const COMBINATOR_OPTIONS = [
+  { value: 'and', label: 'AND' },
+  { value: 'or', label: 'OR' },
+];
 
 /** Does this string contain at least one `{{ }}` marker (004-core-nodes-catalog, E003)? */
 function hasExpressionSyntax(text: string): boolean {
@@ -231,6 +235,16 @@ export function NodeConfigPanel({
                   <Label className="mb-1 block" htmlFor={param.name}>{param.label}{param.required && <span className="ml-0.5 text-red-500">*</span>}</Label>
                   {param.type === 'boolean' ? (
                     <Checkbox id={param.name} {...register(param.name)} />
+                  ) : param.type === 'string' && param.name === 'combinator' ? (
+                    <select
+                      id={param.name}
+                      className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-700 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50"
+                      {...register(param.name)}
+                    >
+                      {COMBINATOR_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
                   ) : param.type === 'json' ? (
                     <Controller
                       name={param.name}

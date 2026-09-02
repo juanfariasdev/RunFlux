@@ -26,6 +26,18 @@ const setManifest: PluginManifest = {
   supportedPlatforms: ['local'],
 };
 
+const conditionManifest: PluginManifest = {
+  id: 'condition-if',
+  name: 'If',
+  category: 'control-flow',
+  version: '1.0.0',
+  parameters: [
+    { name: 'conditions', label: 'Conditions', type: 'json', required: true, default: [] },
+    { name: 'combinator', label: 'Combinator (and/or)', type: 'string', required: false, default: 'and' },
+  ],
+  supportedPlatforms: ['local'],
+};
+
 /**
  * Mimics App.tsx's real wiring: `values` is store state, and every keystroke
  * round-trips through a parent re-render with a brand-new `values` object —
@@ -90,6 +102,52 @@ function ExecutedSetHarness() {
         onClose={() => {}}
         onTest={() => {}}
         testResult={testResult}
+      />
+    </div>
+  );
+}
+
+function RemountableSetHarness() {
+  const [parameters, setParameters] = useState<Record<string, unknown>>({
+    fields: [
+      { name: 'expression', value: '' },
+      { name: 'negative', value: '' },
+    ],
+    includeOtherFields: false,
+  });
+  const [visible, setVisible] = useState(true);
+
+  return (
+    <div>
+      <div data-testid="stored-remountable-set-value">{JSON.stringify(parameters)}</div>
+      <button type="button" onClick={() => setVisible(false)}>Hide panel</button>
+      <button type="button" onClick={() => setVisible(true)}>Show panel</button>
+      {visible && (
+        <NodeConfigPanel
+          manifest={setManifest}
+          values={parameters}
+          onChange={(values) => setParameters(values)}
+          onClose={() => {}}
+        />
+      )}
+    </div>
+  );
+}
+
+function ConditionsHarness() {
+  const [parameters, setParameters] = useState<Record<string, unknown>>({
+    conditions: [{ leftValue: 'name', operator: 'equals', rightValue: 'Ada' }],
+    combinator: 'and',
+  });
+
+  return (
+    <div>
+      <div data-testid="stored-condition-value">{JSON.stringify(parameters)}</div>
+      <NodeConfigPanel
+        manifest={conditionManifest}
+        values={parameters}
+        onChange={(values) => setParameters(values)}
+        onClose={() => {}}
       />
     </div>
   );
@@ -183,5 +241,83 @@ describe('NodeConfigPanel — retained execution input and explicit set value ty
     await waitFor(() => expect(screen.getByTestId('stored-set-value')).toHaveTextContent('"value":[]'));
     fireEvent.change(type, { target: { value: 'object' } });
     await waitFor(() => expect(screen.getByTestId('stored-set-value')).toHaveTextContent('"value":{}'));
+  });
+
+  it('does not store text in a set field configured as Number', async () => {
+    render(<SetHarness initialParameters={{ fields: [{ name: 'count', value: 3 }], includeOtherFields: false }} />);
+
+    fireEvent.change(screen.getByLabelText('Row 1 Value'), { target: { value: 'not a number' } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('stored-set-value')).toHaveTextContent('"value":3');
+    });
+    expect(screen.getByTestId('stored-set-value')).not.toHaveTextContent('not a number');
+    expect(screen.getByLabelText('Row 1 Value')).toHaveValue('3');
+  });
+});
+
+describe('NodeConfigPanel — persisted set types and type-specific JSON shapes', () => {
+  it('keeps Number selected for expression and partial negative values after the panel remounts', async () => {
+    render(<RemountableSetHarness />);
+
+    fireEvent.change(screen.getByLabelText('Row 1 Type'), { target: { value: 'number' } });
+    fireEvent.change(screen.getByLabelText('Row 1 Value'), { target: { value: '{{ $json.count }}' } });
+    fireEvent.change(screen.getByLabelText('Row 2 Type'), { target: { value: 'number' } });
+    fireEvent.change(screen.getByLabelText('Row 2 Value'), { target: { value: '-' } });
+
+    await waitFor(() => {
+      const stored = JSON.parse(screen.getByTestId('stored-remountable-set-value').textContent ?? '{}');
+      expect(stored.fields).toEqual([
+        { name: 'expression', value: '{{ $json.count }}', type: 'number' },
+        { name: 'negative', value: '-', type: 'number' },
+      ]);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide panel' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Show panel' }));
+
+    expect(screen.getByLabelText('Row 1 Type')).toHaveValue('number');
+    expect(screen.getByLabelText('Row 2 Type')).toHaveValue('number');
+  });
+
+  it('rejects an object for Array and an array for Object', async () => {
+    render(
+      <SetHarness
+        initialParameters={{
+          fields: [
+            { name: 'list', value: [] },
+            { name: 'record', value: {} },
+          ],
+          includeOtherFields: false,
+        }}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText('Row 1 Value'), { target: { value: '{"wrong":true}' } });
+    fireEvent.change(screen.getByLabelText('Row 2 Value'), { target: { value: '["wrong"]' } });
+
+    await waitFor(() => {
+      const stored = JSON.parse(screen.getByTestId('stored-set-value').textContent ?? '{}');
+      expect(stored.fields).toEqual([
+        { name: 'list', value: [] },
+        { name: 'record', value: {} },
+      ]);
+    });
+    expect(screen.getByLabelText('Row 1 Value')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByLabelText('Row 2 Value')).toHaveAttribute('aria-invalid', 'true');
+  });
+});
+
+describe('NodeConfigPanel — unary condition operators', () => {
+  it('clears and hides Right value when Operator is Is empty', async () => {
+    render(<ConditionsHarness />);
+
+    fireEvent.change(screen.getByLabelText('Row 1 Operator'), { target: { value: 'isEmpty' } });
+
+    await waitFor(() => {
+      const stored = JSON.parse(screen.getByTestId('stored-condition-value').textContent ?? '{}');
+      expect(stored.conditions).toEqual([{ leftValue: 'name', operator: 'isEmpty', rightValue: '' }]);
+    });
+    expect(screen.queryByLabelText('Row 1 Right value')).not.toBeInTheDocument();
   });
 });

@@ -247,14 +247,15 @@ describe('NodeConfigPanel — Fields mode expressions and free-text values (004-
     });
   });
 
-  it('uses a text input for number and boolean values while preserving their types when the text is valid', async () => {
+  it('uses a constrained number input and a boolean dropdown while preserving their types', async () => {
     const onChange = vi.fn();
     render(<NodeConfigPanel manifest={fieldsManifest} values={{ fields: [{ name: 'count', value: 3 }, { name: 'enabled', value: true }] }} onChange={onChange} onClose={vi.fn()} />);
 
     const count = screen.getByLabelText('Row 1 Value');
     const enabled = screen.getByLabelText('Row 2 Value');
     expect(count).toHaveAttribute('type', 'text');
-    expect(enabled).toHaveAttribute('type', 'text');
+    expect(count).toHaveAttribute('inputmode', 'decimal');
+    expect(enabled.tagName).toBe('SELECT');
 
     fireEvent.change(count, { target: { value: '4' } });
     await vi.waitFor(() => {
@@ -275,6 +276,84 @@ describe('NodeConfigPanel — Fields mode expressions and free-text values (004-
     await vi.waitFor(() => {
       expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ fields: [{ name: 'count', value: '{{ $json.count }}' }] }));
     });
+  });
+
+  it('uses a True/False dropdown for a Boolean set field', async () => {
+    const onChange = vi.fn();
+    render(<NodeConfigPanel manifest={fieldsManifest} values={{ fields: [{ name: 'enabled', value: true }] }} onChange={onChange} onClose={vi.fn()} />);
+
+    const booleanValue = screen.getByLabelText('Row 1 Value');
+    expect(booleanValue.tagName).toBe('SELECT');
+    expect(booleanValue).toHaveValue('true');
+    expect(screen.getByRole('option', { name: 'True' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'False' })).toBeInTheDocument();
+
+    fireEvent.change(booleanValue, { target: { value: 'false' } });
+    await vi.waitFor(() => {
+      expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ fields: [{ name: 'enabled', value: false }] }));
+    });
+  });
+});
+
+describe('NodeConfigPanel — condition operator and combinator dropdowns', () => {
+  it('uses the supported operations as the condition Operator options', async () => {
+    const onChange = vi.fn();
+    render(
+      <NodeConfigPanel
+        manifest={jsonManifest}
+        values={{ conditions: [{ leftValue: 'a', operator: 'equals', rightValue: 'b' }] }}
+        onChange={onChange}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const operator = screen.getByLabelText('Row 1 Operator');
+    expect(operator.tagName).toBe('SELECT');
+    expect(Array.from((operator as HTMLSelectElement).options).map((option) => option.value)).toEqual([
+      'equals',
+      'notEquals',
+      'contains',
+      'greaterThan',
+      'lessThan',
+      'isEmpty',
+    ]);
+
+    fireEvent.change(operator, { target: { value: 'greaterThan' } });
+    await vi.waitFor(() => {
+      expect(onChange).toHaveBeenCalledWith(
+        expect.objectContaining({ conditions: [{ leftValue: 'a', operator: 'greaterThan', rightValue: 'b' }] }),
+      );
+    });
+  });
+
+  it('uses AND/OR dropdowns for top-level and nested Combinator fields', async () => {
+    const topLevelManifest: PluginManifest = {
+      ...manifest,
+      parameters: [{ name: 'combinator', label: 'Combinator (and/or)', type: 'string', required: false, default: 'and' }],
+    };
+    const { unmount } = render(
+      <NodeConfigPanel manifest={topLevelManifest} values={{ combinator: 'and' }} onChange={vi.fn()} onClose={vi.fn()} />,
+    );
+    const topLevelCombinator = screen.getByLabelText('Combinator (and/or)');
+    expect(topLevelCombinator.tagName).toBe('SELECT');
+    expect(Array.from((topLevelCombinator as HTMLSelectElement).options).map((option) => option.value)).toEqual(['and', 'or']);
+    unmount();
+
+    const rulesManifest: PluginManifest = {
+      ...manifest,
+      parameters: [{ name: 'rules', label: 'Rules', type: 'json', required: true }],
+    };
+    render(
+      <NodeConfigPanel
+        manifest={rulesManifest}
+        values={{ rules: [{ combinator: 'and', conditions: [{ leftValue: '', operator: 'equals', rightValue: '' }] }] }}
+        onChange={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    const nestedCombinator = screen.getByLabelText('Row 1 Combinator');
+    expect(nestedCombinator.tagName).toBe('SELECT');
+    expect(Array.from((nestedCombinator as HTMLSelectElement).options).map((option) => option.value)).toEqual(['and', 'or']);
   });
 });
 

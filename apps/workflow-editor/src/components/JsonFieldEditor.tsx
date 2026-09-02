@@ -25,6 +25,25 @@ const JSON_VALUE_TYPES: { value: JsonValueType; label: string }[] = [
   { value: 'object', label: 'Object' },
 ];
 
+const BOOLEAN_OPTIONS = [
+  { value: 'true', label: 'True' },
+  { value: 'false', label: 'False' },
+];
+
+const OPERATOR_OPTIONS = [
+  { value: 'equals', label: 'Equals' },
+  { value: 'notEquals', label: 'Not equals' },
+  { value: 'contains', label: 'Contains' },
+  { value: 'greaterThan', label: 'Greater than' },
+  { value: 'lessThan', label: 'Less than' },
+  { value: 'isEmpty', label: 'Is empty' },
+];
+
+const COMBINATOR_OPTIONS = [
+  { value: 'and', label: 'AND' },
+  { value: 'or', label: 'OR' },
+];
+
 interface KnownField {
   key: string;
   label: string;
@@ -217,8 +236,10 @@ function ObjectEditor({
   if (knownFields && rowIndex !== undefined) {
     return (
       <div className="grid min-w-0 gap-2">
-        {knownFields.map(({ key, label }) =>
-          listId === 'fields' && key === 'value' ? (
+        {knownFields.map(({ key, label }) => {
+          const options = key === 'operator' ? OPERATOR_OPTIONS : key === 'combinator' ? COMBINATOR_OPTIONS : undefined;
+
+          return listId === 'fields' && key === 'value' ? (
             <SetFieldValueEditor
               key={key}
               value={obj[key]}
@@ -226,6 +247,16 @@ function ObjectEditor({
               sampleJson={sampleJson}
               onChange={(newValue) => onChange({ ...obj, [key]: newValue })}
             />
+          ) : options ? (
+            <label key={key} className="grid min-w-0 gap-0.5 text-[9px] font-semibold text-slate-500">
+              {label}
+              <SelectValueEditor
+                value={obj[key]}
+                ariaLabel={`Row ${rowIndex + 1} ${label}`}
+                options={options}
+                onChange={(newValue) => onChange({ ...obj, [key]: newValue })}
+              />
+            </label>
           ) : (
             <label key={key} className="grid min-w-0 gap-0.5 text-[9px] font-semibold text-slate-500">
               {label}
@@ -236,8 +267,8 @@ function ObjectEditor({
                 onChange={(newValue) => onChange({ ...obj, [key]: newValue })}
               />
             </label>
-          ),
-        )}
+          );
+        })}
       </div>
     );
   }
@@ -334,6 +365,13 @@ function SetFieldValueEditor({
         Value
         {selectedType === 'null' ? (
           <Input type="text" value="null" aria-label={valueLabel} className="!h-8 text-[10px]" disabled />
+        ) : selectedType === 'boolean' ? (
+          <SelectValueEditor
+            value={value === true ? 'true' : 'false'}
+            ariaLabel={valueLabel}
+            options={BOOLEAN_OPTIONS}
+            onChange={(newValue) => onChange(newValue === 'true')}
+          />
         ) : (
           <FieldValueEditor
             value={value}
@@ -345,6 +383,33 @@ function SetFieldValueEditor({
         )}
       </label>
     </div>
+  );
+}
+
+function SelectValueEditor({
+  value,
+  onChange,
+  ariaLabel,
+  options,
+}: {
+  value: unknown;
+  onChange: (value: string) => void;
+  ariaLabel: string;
+  options: Array<{ value: string; label: string }>;
+}) {
+  const selectedValue = typeof value === 'string' && options.some((option) => option.value === value) ? value : options[0]?.value;
+
+  return (
+    <select
+      value={selectedValue}
+      aria-label={ariaLabel}
+      className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2 text-[10px] text-slate-700 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50"
+      onChange={(event) => onChange(event.target.value)}
+    >
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>{option.label}</option>
+      ))}
+    </select>
   );
 }
 
@@ -453,6 +518,25 @@ function convertValue(value: string, originalType: PrimitiveType): unknown {
   return value;
 }
 
+function isAllowedNumberInput(value: string): boolean {
+  const text = value.trim();
+  if (text === '') return true;
+  if (text === '{' || text.startsWith('{{')) return true;
+  if (text === '-' || text === '.' || text === '-.') return true;
+  return /^-?(?:\d+\.?\d*|\.\d+)$/.test(text);
+}
+
+function convertNumberInput(value: string): unknown {
+  if (isAllowedNumberInput(value)) {
+    const text = value.trim();
+    if (text != "" && Number.isFinite(Number(text))) {
+      if (text === '-' || text === '.' || text === '-.' || text.endsWith('.')) return value;
+      return Number(text);
+    }
+    return value;
+  }
+}
+
 function ValueInput({
   value,
   onChange,
@@ -476,11 +560,20 @@ function ValueInput({
     <div className="min-w-0 flex-1">
       <Input
         type="text"
+        inputMode={conversionType === 'number' ? 'decimal' : undefined}
         value={text}
         placeholder="value or {{ }}"
         aria-label={ariaLabel}
         className={`!h-8 text-[10px] ${preview ? (preview.ok ? '!border-emerald-400 focus:!border-emerald-400 focus:!ring-emerald-50' : '!border-red-400 focus:!border-red-400 focus:!ring-red-50') : ''}`}
-        onChange={(event) => onChange(convertValue(event.target.value, outputType))}
+        onChange={(event) => {
+          const nextValue = event.target.value;
+          if (conversionType === 'number') {
+            if (!isAllowedNumberInput(nextValue)) return;
+            onChange(convertNumberInput(nextValue));
+            return;
+          }
+          onChange(convertValue(nextValue, outputType));
+        }}
       />
       {preview && (
         <p className={`mb-0 mt-1 truncate text-[9px] ${preview.ok ? 'text-emerald-600' : 'text-red-600'}`} data-testid={previewId}>
