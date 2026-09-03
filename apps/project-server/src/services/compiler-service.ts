@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import * as esbuild from 'esbuild';
 import type { WorkflowDefinition } from '@runflux/workflow-model';
 import {
   compileWorkflow,
@@ -165,7 +166,7 @@ export class CompilerService {
     const projectName = (request.projectName || request.workflow.name || 'runflux-project').trim();
     console.log(`[compiler] Starting compilation for project "${projectName}" (target: ${targetPlatform}, skipTests: ${request.skipTests ?? true})`);
 
-    // 1. Compilação através do compiler
+    // 1. Compilação do scaffold através do core compiler
     const result = await compileWorkflow(
       {
         workflow: request.workflow,
@@ -193,20 +194,84 @@ export class CompilerService {
 
     await fs.promises.mkdir(outputDir, { recursive: true });
 
-    // 3. Gravação física de cada arquivo gerado na pasta
+    // 3. Gravação física de cada arquivo fonte na pasta
     for (const file of result.files) {
       const filePath = path.join(outputDir, file.path);
       await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
       await fs.promises.writeFile(filePath, file.content, 'utf8');
     }
 
-    // 4. Empacotamento zip gerado dentro da pasta (Requisito 2)
+    // 4. Empacotamento leve com esbuild (gerando dist/ e compiled/function.zip)
+    const distDir = path.join(outputDir, 'dist');
+    const compiledDir = path.join(outputDir, 'compiled');
+    await fs.promises.mkdir(distDir, { recursive: true });
+    await fs.promises.mkdir(compiledDir, { recursive: true });
+
+    try {
+      if (targetPlatform === 'local') {
+        await esbuild.build({
+          entryPoints: [
+            path.join(outputDir, 'src', 'server.ts'),
+            path.join(outputDir, 'src', 'run.ts'),
+          ],
+          bundle: true,
+          format: 'esm',
+          splitting: true,
+          outExtension: { '.js': '.mjs' },
+          platform: 'node',
+          target: 'node24',
+          banner: {
+            js: "import { createRequire } from 'module'; const require = createRequire(import.meta.url);",
+          },
+          outdir: distDir,
+        });
+      } else {
+        await esbuild.build({
+          entryPoints: [
+            path.join(outputDir, 'src', 'handler.ts'),
+          ],
+          bundle: true,
+          format: 'esm',
+          outExtension: { '.js': '.mjs' },
+          platform: 'node',
+          target: 'node24',
+          banner: {
+            js: "import { createRequire } from 'module'; const require = createRequire(import.meta.url);",
+          },
+          outdir: distDir,
+        });
+      }
+      console.log(`[compiler] esbuild bundle criado com sucesso em ${distDir}`);
+    } catch (bundleErr) {
+      console.warn(`[compiler] Aviso durante esbuild bundling:`, bundleErr);
+    }
+
+    // 5. Coleta dos arquivos em dist/ para criar o pacote leve (function.zip e <projeto>.zip)
+    const distEntries = fs.existsSync(distDir) ? await fs.promises.readdir(distDir) : [];
+    const bundledFilesForZip: { path: string; content: string | Uint8Array }[] = [];
+
+    for (const entry of distEntries) {
+      const entryPath = path.join(distDir, entry);
+      if (fs.statSync(entryPath).isFile()) {
+        const buffer = await fs.promises.readFile(entryPath);
+        bundledFilesForZip.push({ path: entry, content: buffer });
+      }
+    }
+
+    const zipBuffer = bundledFilesForZip.length > 0
+      ? await createZipArchive(bundledFilesForZip as any)
+      : (result.zipBuffer ? Buffer.from(result.zipBuffer) : await createZipArchive(result.files));
+
+    // Grava compiled/function.zip (padrão esbuild/serverless)
+    const functionZipPath = path.join(compiledDir, 'function.zip');
+    await fs.promises.writeFile(functionZipPath, zipBuffer);
+
+    // Grava <projeto>.zip na raiz da pasta do backend
     const zipFilename = `${projectName}.zip`;
-    const zipBuffer = result.zipBuffer ? Buffer.from(result.zipBuffer) : await createZipArchive(result.files);
     const zipPath = path.join(outputDir, zipFilename);
     await fs.promises.writeFile(zipPath, zipBuffer);
 
-    console.log(`[compiler] Compilation succeeded: ${result.files.length} files generated, zip created at ${zipPath}`);
+    console.log(`[compiler] Compilation succeeded: ${result.files.length} source files, esbuild bundle in dist/, zip created at ${zipPath} (${zipBuffer.length} bytes)`);
     const downloadUrl = `/api/compiler/downloads/${encodeURIComponent(zipFilename)}`;
 
     return {
@@ -231,6 +296,11 @@ export class CompilerService {
         if (fs.existsSync(candidate)) {
           console.log(`[compiler] Serving download for "${filename}" from ${candidate}`);
           return candidate;
+        }
+        const functionZipCandidate = path.join(baseDir, entry.name, 'compiled', filename);
+        if (fs.existsSync(functionZipCandidate)) {
+          console.log(`[compiler] Serving download for "${filename}" from ${functionZipCandidate}`);
+          return functionZipCandidate;
         }
       }
     }

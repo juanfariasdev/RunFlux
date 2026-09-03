@@ -36,12 +36,12 @@ describe('Local Target Generator', () => {
   const nodeFiles: GeneratedFile[] = [
     {
       path: 'src/nodes/node-trigger.ts',
-      content: 'export async function executeTrigger() { return { ok: true }; }',
+      content: 'export async function run() { return { ok: true }; }',
       type: 'source',
     },
     {
       path: 'src/nodes/node-log.ts',
-      content: 'export async function executeLog(input: any) { console.log(input); return input; }',
+      content: 'export async function run(input: any) { console.log(input); return input; }',
       type: 'source',
     },
   ];
@@ -60,16 +60,20 @@ describe('Local Target Generator', () => {
     expect(filePaths).toContain('Dockerfile');
     expect(filePaths).toContain('.env.example');
     expect(filePaths).toContain('src/server.ts');
+    expect(filePaths).toContain('src/run.ts');
     expect(filePaths).toContain('src/nodes/node-trigger.ts');
     expect(filePaths).toContain('src/nodes/node-log.ts');
 
     const pkgFile = files.find((f) => f.path === 'package.json')!;
     const pkgJson = JSON.parse(pkgFile.content);
     expect(pkgJson.name).toBe('backend-de-teste-local');
-    expect(pkgJson.scripts.build).toBe('tsc');
-    expect(pkgJson.scripts.start).toBe('node dist/server.js');
+    expect(pkgJson.scripts.build).toContain('esbuild');
+    expect(pkgJson.scripts.package).toContain('zip -j compiled/function.zip dist/*');
+    expect(pkgJson.scripts.start).toBe('node dist/server.mjs');
+    expect(pkgJson.scripts.run).toBe('node dist/run.mjs');
     expect(pkgJson.dependencies).toHaveProperty('express');
     expect(pkgJson.dependencies).toHaveProperty('cors');
+    expect(pkgJson.devDependencies).toHaveProperty('esbuild');
 
     const serverFile = files.find((f) => f.path === 'src/server.ts')!;
     expect(serverFile.content).toContain('express');

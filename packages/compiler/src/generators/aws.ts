@@ -30,7 +30,9 @@ export function generateAwsProject(context: AwsGeneratorContext): GeneratedFile[
         [sanitizedPkgName]: 'bin/app.js',
       },
       scripts: {
-        build: 'tsc',
+        clean: 'rm -rf dist compiled',
+        build: 'NODE_ENV=production npm run clean && esbuild src/handler.ts --bundle --format=esm --out-extension:.js=.mjs --platform=node --target=node24 --banner:js="import { createRequire } from \'module\'; const require = createRequire(import.meta.url);" --outdir=dist',
+        package: 'npm run build && rm -rf compiled && mkdir -p compiled && zip -j compiled/function.zip dist/*',
         cdk: 'cdk',
         deploy: 'cdk deploy',
       },
@@ -43,6 +45,7 @@ export function generateAwsProject(context: AwsGeneratorContext): GeneratedFile[
         '@types/aws-lambda': '^8.10.145',
         '@types/node': '^22.5.0',
         'aws-cdk': '^2.155.0',
+        esbuild: '^0.28.2',
         typescript: '^5.5.4',
       },
     },
@@ -103,8 +106,8 @@ export class WorkflowStack extends Stack {
 
     const workflowFunction = new lambda.Function(this, 'WorkflowFunction', {
       runtime: lambda.Runtime.NODEJS_20_X,
-      handler: 'src/handler.handler',
-      code: lambda.Code.fromAsset(path.join(__dirname, '..')),
+      handler: 'dist/handler.mjs',
+      code: lambda.Code.fromAsset(path.join(__dirname, '..', 'compiled', 'function.zip')),
       timeout: cdk.Duration.seconds(30),
       memorySize: 512,
       environment: {
@@ -148,9 +151,6 @@ export class WorkflowStack extends Stack {
       } else {
         currentPayload = stepResult !== undefined ? stepResult : currentPayload;
       }
-    } else if (typeof ${importName}.execute === 'function') {
-      const stepResult = await ${importName}.execute({}, currentPayload);
-      currentPayload = stepResult !== undefined ? stepResult : currentPayload;
     }`);
   });
 

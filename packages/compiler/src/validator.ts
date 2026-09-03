@@ -76,7 +76,7 @@ export function getTopologicalNodeOrder(workflow: WorkflowDefinition): WorkflowN
     }
   }
 
-  // Se restou algum nó (ciclos ou nós soltos), anexa os faltantes
+  // Append any remaining isolated nodes or cycles to ensure all nodes are processed
   if (sorted.length < workflow.nodes.length) {
     for (const node of workflow.nodes) {
       if (!sorted.some((s) => s.id === node.id)) {

@@ -26,10 +26,12 @@ export function generateLocalProject(context: LocalGeneratorContext): GeneratedF
       private: true,
       type: 'module',
       scripts: {
+        clean: 'rm -rf dist compiled',
+        build: 'NODE_ENV=production npm run clean && esbuild src/server.ts src/run.ts --bundle --format=esm --splitting --out-extension:.js=.mjs --platform=node --target=node24 --banner:js="import { createRequire } from \'module\'; const require = createRequire(import.meta.url);" --outdir=dist',
+        package: 'npm run build && rm -rf compiled && mkdir -p compiled && zip -j compiled/function.zip dist/*',
+        start: 'node dist/server.mjs',
+        run: 'node dist/run.mjs',
         dev: 'tsx watch src/server.ts',
-        build: 'tsc',
-        start: 'node dist/server.js',
-        run: 'tsx src/run.ts',
       },
       dependencies: {
         cors: '^2.8.5',
@@ -40,6 +42,7 @@ export function generateLocalProject(context: LocalGeneratorContext): GeneratedF
         '@types/cors': '^2.8.17',
         '@types/express': '^4.17.21',
         '@types/node': '^22.5.0',
+        esbuild: '^0.28.2',
         tsx: '^4.19.0',
         typescript: '^5.5.4',
       },
@@ -67,22 +70,11 @@ export function generateLocalProject(context: LocalGeneratorContext): GeneratedF
     2
   );
 
-  const dockerfileContent = `FROM node:20-alpine AS builder
+  const dockerfileContent = `FROM node:20-alpine
 WORKDIR /app
-COPY package*.json tsconfig.json ./
-RUN npm ci
-COPY src ./src
-RUN npm run build
-
-FROM node:20-alpine AS runner
-WORKDIR /app
-ENV NODE_ENV=production
-COPY package*.json ./
-RUN npm ci --omit=dev
-COPY --from=builder /app/dist ./dist
-
+COPY dist ./dist
 EXPOSE ${port}
-CMD ["node", "dist/server.js"]
+CMD ["node", "dist/server.mjs"]
 `;
 
   const envExampleContent = `PORT=${port}
@@ -95,7 +87,6 @@ NODE_ENV=production
 
   nodeFiles.forEach((file, index) => {
     const importName = `nodeModule_${index}`;
-    // De src/server.ts ou src/run.ts para src/nodes/node-1.ts -> ./nodes/node-1.js
     const relativeModulePath = file.path.replace(/^src\//, './').replace(/\.ts$/, '.js');
     importsList.push(`import * as ${importName} from '${relativeModulePath}';`);
     executionsList.push(`
@@ -111,9 +102,6 @@ NODE_ENV=production
       } else {
         currentPayload = stepResult !== undefined ? stepResult : currentPayload;
       }
-    } else if (typeof ${importName}.execute === 'function') {
-      const stepResult = await ${importName}.execute({}, currentPayload);
-      currentPayload = stepResult !== undefined ? stepResult : currentPayload;
     }`);
   });
 
@@ -174,7 +162,11 @@ ${executionsList.join('\n')}
 }
 
 // Execução direta como script de linha de comando
-const isDirectRun = process.argv[1]?.endsWith('run.ts') || process.argv[1]?.endsWith('run.js');
+const isDirectRun =
+  process.argv[1]?.endsWith('run.ts') ||
+  process.argv[1]?.endsWith('run.js') ||
+  process.argv[1]?.endsWith('run.mjs');
+
 if (isDirectRun) {
   let input = {};
   if (process.argv[2]) {
