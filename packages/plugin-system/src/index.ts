@@ -8,6 +8,8 @@ export type {
   GeneratedArtifact,
   GeneratorFn,
   InfraFragment,
+  JsonRowFieldSchema,
+  JsonRowOption,
   ParameterSchema,
   PluginCategory,
   PluginExecutionContext,

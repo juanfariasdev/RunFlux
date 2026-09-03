@@ -1,6 +1,22 @@
 import { z } from 'zod';
 import type { PluginManifest } from './types';
 
+const jsonRowOptionSchema = z.object({
+  value: z.string(),
+  label: z.string(),
+});
+
+const jsonRowFieldSchema = z.object({
+  key: z.string().min(1),
+  label: z.string().min(1),
+  kind: z.enum(['text', 'select', 'typedValue']),
+  initialValue: z.unknown().optional(),
+  options: z.array(jsonRowOptionSchema).optional(),
+  allowCustomOptions: z.boolean().optional(),
+  typeKey: z.string().optional(),
+  hideWhen: z.object({ key: z.string(), equals: z.unknown() }).optional(),
+});
+
 const parameterSchema = z.object({
   name: z.string().min(1),
   label: z.string().min(1),
@@ -8,6 +24,7 @@ const parameterSchema = z.object({
   required: z.boolean(),
   default: z.unknown().optional(),
   sensitive: z.boolean().optional(),
+  rowSchema: z.array(jsonRowFieldSchema).optional(),
 });
 
 const manifestSchema = z.object({

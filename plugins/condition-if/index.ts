@@ -1,4 +1,5 @@
 import type { PluginModule } from '@runflux/plugin-system/types';
+import { CONDITION_ROW_SCHEMA } from '@runflux/plugin-system/condition-row-schema';
 
 /**
  * If (004-core-nodes-catalog, RF-01): routes execution to one of two named
@@ -12,7 +13,7 @@ export const manifest: PluginModule['manifest'] = {
   version: '1.0.0',
   parameters: [
     { name: 'combinator', label: 'Combinator (and/or)', type: 'string', required: false, default: 'and' },
-    { name: 'conditions', label: 'Conditions', type: 'json', required: true, default: [] },
+    { name: 'conditions', label: 'Conditions', type: 'json', required: true, default: [], rowSchema: CONDITION_ROW_SCHEMA },
   ],
   supportedPlatforms: ['local', 'aws'],
   outputs: ['true', 'false'],

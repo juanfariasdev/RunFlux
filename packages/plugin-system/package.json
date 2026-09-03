@@ -10,6 +10,8 @@
       "import": "./dist-node/index.mjs"
     },
     "./types": "./src/types.ts",
+    "./condition-row-schema": "./src/condition-row-schema.ts",
+    "./fields-row-schema": "./src/fields-row-schema.ts",
     "./manifest-validator": "./src/manifest-validator.ts",
     "./manifest-serializer": "./src/manifest-serializer.ts",
     "./plugin-registry": "./src/plugin-registry.ts",

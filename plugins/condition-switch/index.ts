@@ -1,4 +1,5 @@
 import type { PluginModule } from '@runflux/plugin-system/types';
+import { RULE_ROW_SCHEMA } from '@runflux/plugin-system/condition-row-schema';
 
 /**
  * Switch (004-core-nodes-catalog, RF-02): evaluates a list of rules in
@@ -21,7 +22,7 @@ export const manifest: PluginModule['manifest'] = {
   category: 'control-flow',
   version: '1.0.0',
   parameters: [
-    { name: 'rules', label: 'Rules (ordered, first match wins)', type: 'json', required: true, default: [] },
+    { name: 'rules', label: 'Rules (ordered, first match wins)', type: 'json', required: true, default: [], rowSchema: RULE_ROW_SCHEMA },
     { name: 'fallbackEnabled', label: 'Enable fallback output', type: 'boolean', required: false, default: false },
   ],
   supportedPlatforms: ['local', 'aws'],

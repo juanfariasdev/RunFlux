@@ -1,5 +1,6 @@
-import { useRef, useState } from 'react';
+import { Fragment, useRef, useState } from 'react';
 import { resolveExpressions } from '@runflux/expression-engine';
+import type { JsonRowFieldSchema } from '@runflux/plugin-system/types';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 
@@ -8,6 +9,8 @@ export interface JsonFieldEditorProps {
   value: unknown;
   onChange: (value: unknown) => void;
   sampleJson?: unknown;
+  /** Row shape for an array-of-objects value, authored on the plugin's own parameter (rowSchema). */
+  rowSchema?: JsonRowFieldSchema[];
 }
 
 type Shape = 'list' | 'map' | 'unknown';
@@ -44,32 +47,46 @@ const COMBINATOR_OPTIONS = [
   { value: 'or', label: 'OR' },
 ];
 
-interface KnownField {
-  key: string;
-  label: string;
-  initialValue: Primitive | unknown[];
-}
-
-const LIST_ROW_FIELDS: Record<string, KnownField[]> = {
+/**
+ * Fallback row shapes for the conventional `fields`/`conditions`/`rules`
+ * parameter names, used only when a plugin's own parameter doesn't declare
+ * a `rowSchema` (older manifests, ad-hoc test fixtures). Any plugin can get
+ * the same structured-row treatment for a parameter of any name by declaring
+ * `rowSchema` itself — see `JsonRowFieldSchema` in `@runflux/plugin-system/types`.
+ */
+const DEFAULT_ROW_SCHEMAS: Record<string, JsonRowFieldSchema[]> = {
   fields: [
-    { key: 'name', label: 'Name', initialValue: '' },
-    { key: 'value', label: 'Value', initialValue: '' },
-    { key: 'type', label: 'Type', initialValue: 'string' },
+    { key: 'name', label: 'Name', kind: 'text', initialValue: '' },
+    { key: 'value', label: 'Value', kind: 'typedValue', typeKey: 'type', initialValue: '' },
+    { key: 'type', label: 'Type', kind: 'text', initialValue: 'string' },
   ],
   conditions: [
-    { key: 'leftValue', label: 'Left value', initialValue: '' },
-    { key: 'operator', label: 'Operator', initialValue: 'equals' },
-    { key: 'rightValue', label: 'Right value', initialValue: '' },
+    { key: 'leftValue', label: 'Left value', kind: 'text', initialValue: '' },
+    { key: 'operator', label: 'Operator', kind: 'select', options: OPERATOR_OPTIONS, initialValue: 'equals' },
+    {
+      key: 'rightValue',
+      label: 'Right value',
+      kind: 'text',
+      initialValue: '',
+      hideWhen: { key: 'operator', equals: 'isEmpty' },
+    },
   ],
   rules: [
-    { key: 'combinator', label: 'Combinator', initialValue: 'and' },
+    { key: 'combinator', label: 'Combinator', kind: 'select', options: COMBINATOR_OPTIONS, initialValue: 'and' },
     {
       key: 'conditions',
       label: 'Conditions',
+      kind: 'text',
       initialValue: [{ leftValue: '', operator: 'equals', rightValue: '' }],
     },
   ],
 };
+
+/** Explicit rowSchema (from the plugin's own parameter) wins; otherwise fall back by conventional name. */
+function resolveRowSchema(listId: string | undefined, rowSchema: JsonRowFieldSchema[] | undefined): JsonRowFieldSchema[] | undefined {
+  if (rowSchema && rowSchema.length > 0) return rowSchema;
+  return listId ? DEFAULT_ROW_SCHEMAS[listId] : undefined;
+}
 
 function detectShape(value: unknown): Shape {
   if (Array.isArray(value)) {
@@ -88,7 +105,7 @@ function detectShape(value: unknown): Shape {
  * a key/value list. No per-plugin schema is involved: this stays generic
  * across `conditions`/`fields`/`rules`/`headers`/`body`.
  */
-export function JsonFieldEditor({ id, value, onChange, sampleJson }: JsonFieldEditorProps) {
+export function JsonFieldEditor({ id, value, onChange, sampleJson, rowSchema }: JsonFieldEditorProps) {
   const shape = detectShape(value);
   const [mode, setMode] = useState<Mode>(shape === 'unknown' ? 'json' : 'fields');
   const [jsonDraft, setJsonDraft] = useState<string | null>(null);
@@ -148,7 +165,7 @@ export function JsonFieldEditor({ id, value, onChange, sampleJson }: JsonFieldEd
           )}
         </>
       ) : shape === 'list' ? (
-        <ListEditor id={id} items={value as unknown[]} onChange={onChange} sampleJson={sampleJson} />
+        <ListEditor id={id} items={value as unknown[]} onChange={onChange} sampleJson={sampleJson} rowSchema={rowSchema} />
       ) : (
         <div id={id}>
           <ObjectEditor obj={value as Record<string, unknown>} onChange={onChange} sampleJson={sampleJson} />
@@ -163,12 +180,16 @@ function ListEditor({
   items,
   onChange,
   sampleJson,
+  rowSchema,
 }: {
   id: string;
   items: unknown[];
   onChange: (value: unknown) => void;
   sampleJson: unknown;
+  rowSchema: JsonRowFieldSchema[] | undefined;
 }) {
+  const effectiveRowSchema = resolveRowSchema(id, rowSchema);
+
   return (
     <div id={id} className="grid gap-2">
       {items.map((item, index) => (
@@ -188,6 +209,7 @@ function ListEditor({
           <ObjectEditor
             listId={id}
             rowIndex={index}
+            rowSchema={rowSchema}
             obj={item !== null && typeof item === 'object' && !Array.isArray(item) ? (item as Record<string, unknown>) : {}}
             onChange={(next) => {
               const copy = items.slice();
@@ -198,32 +220,32 @@ function ListEditor({
           />
         </div>
       ))}
-      <Button type="button" variant="outline" size="sm" onClick={() => onChange([...items, createListRow(id)])} className="justify-self-start">
+      <Button type="button" variant="outline" size="sm" onClick={() => onChange([...items, createListRow(effectiveRowSchema)])} className="justify-self-start">
         {id === 'fields' ? '+ Add field' : '+ Add row'}
       </Button>
     </div>
   );
 }
 
-function createListRow(id: string): Record<string, unknown> {
-  const fields = LIST_ROW_FIELDS[id];
-  if (!fields) return {};
-
-  return Object.fromEntries(fields.map(({ key, initialValue }) => [key, initialValue]));
+function createListRow(rowSchema: JsonRowFieldSchema[] | undefined): Record<string, unknown> {
+  if (!rowSchema) return {};
+  return Object.fromEntries(rowSchema.map(({ key, initialValue }) => [key, initialValue]));
 }
 
-function getKnownFields(listId: string | undefined, obj: Record<string, unknown>): KnownField[] | undefined {
-  const fields = listId ? LIST_ROW_FIELDS[listId] : undefined;
-  if (!fields) return undefined;
+/** Field keys another field's `typedValue` uses as its own type slot — rendered by that field, not on their own. */
+function typeKeysOf(schema: JsonRowFieldSchema[]): Set<string> {
+  return new Set(schema.filter((field) => field.kind === 'typedValue').map((field) => field.typeKey ?? 'type'));
+}
 
-  if (listId === 'fields') {
-    const allowedKeys = new Set(fields.map(({ key }) => key));
-    const keys = Object.keys(obj);
-    return Object.hasOwn(obj, 'name') && Object.hasOwn(obj, 'value') && keys.every((key) => allowedKeys.has(key)) ? fields : undefined;
+/** Value patch clearing every field whose `hideWhen` just became true, mirroring the render-time hide. */
+function clearedFieldsFor(schema: JsonRowFieldSchema[], changedKey: string, newValue: unknown): Record<string, unknown> {
+  const patch: Record<string, unknown> = {};
+  for (const field of schema) {
+    if (field.hideWhen && field.hideWhen.key === changedKey && field.hideWhen.equals === newValue) {
+      patch[field.key] = '';
+    }
   }
-
-  if (Object.keys(obj).length !== fields.length || !fields.every(({ key }) => Object.hasOwn(obj, key))) return undefined;
-  return fields;
+  return patch;
 }
 
 function ObjectEditor({
@@ -231,177 +253,199 @@ function ObjectEditor({
   onChange,
   listId,
   rowIndex,
+  rowSchema,
   sampleJson,
 }: {
   obj: Record<string, unknown>;
   onChange: (value: Record<string, unknown>) => void;
   listId?: string;
   rowIndex?: number;
+  rowSchema?: JsonRowFieldSchema[];
   sampleJson: unknown;
 }) {
+  // A row inside a list whose parameter declares (or defaults to) a row schema is ALWAYS
+  // edited through its structured fields below — even if this particular object's data
+  // doesn't fully match yet (missing keys just render blank). Falling back on shape-mismatch
+  // used to let a condition or rule row be silently "escaped" into free-form editing, where
+  // its structural keys (`operator`, `leftValue`, ...) could be renamed or deleted out from
+  // under it. `schema` is undefined for a map-shaped root value (headers/body — no row to
+  // speak of) or a list row whose parameter declares no schema at all; either way it's still
+  // the same single container below, just filled with one dynamic-key field per entry instead
+  // of the schema's fixed fields — never a second, differently-built layout.
+  const schema = rowIndex !== undefined ? resolveRowSchema(listId, rowSchema) : undefined;
+  const typeKeys = schema ? typeKeysOf(schema) : undefined;
+  const visibleFields = schema?.filter((field) => !typeKeys!.has(field.key));
+  const fieldByKey = schema ? new Map(schema.map((field) => [field.key, field])) : undefined;
   const entries = Object.entries(obj);
-  const knownFields = getKnownFields(listId, obj);
-
-  if (knownFields && rowIndex !== undefined) {
-    return (
-      <div className="grid min-w-0 gap-2">
-        {knownFields.map(({ key, label }) => {
-          const options = key === 'operator' ? OPERATOR_OPTIONS : key === 'combinator' ? COMBINATOR_OPTIONS : undefined;
-
-          if (listId === 'fields' && key === 'type') return null;
-          if (key === 'rightValue' && obj.operator === 'isEmpty') return null;
-
-          return listId === 'fields' && key === 'value' ? (
-            <SetFieldValueEditor
-              key={key}
-              value={obj[key]}
-              selectedType={isJsonValueType(obj.type) ? obj.type : getJsonValueType(obj[key])}
-              rowIndex={rowIndex}
-              sampleJson={sampleJson}
-              onChange={(newValue, type) => onChange({ ...obj, [key]: newValue, type })}
-            />
-          ) : options ? (
-            <label key={key} className="grid min-w-0 gap-0.5 text-[9px] font-semibold text-slate-500">
-              {label}
-              <SelectValueEditor
-                value={obj[key]}
-                ariaLabel={`Row ${rowIndex + 1} ${label}`}
-                options={options}
-                onChange={(newValue) => onChange({
-                  ...obj,
-                  [key]: newValue,
-                  ...(key === 'operator' && newValue === 'isEmpty' ? { rightValue: '' } : {}),
-                })}
-              />
-            </label>
-          ) : (
-            <label key={key} className="grid min-w-0 gap-0.5 text-[9px] font-semibold text-slate-500">
-              {label}
-              <FieldValueEditor
-                value={obj[key]}
-                ariaLabel={`Row ${rowIndex + 1} ${label}`}
-                sampleJson={sampleJson}
-                onChange={(newValue) => onChange({ ...obj, [key]: newValue })}
-              />
-            </label>
-          );
-        })}
-      </div>
-    );
-  }
 
   return (
-    <div className="grid gap-1.5">
-      {entries.map(([key, entryValue], index) => (
+    <div className="grid min-w-0 gap-2">
+      {/* No declared schema: one card per existing key, in the same bordered-card
+          language ListEditor uses for its rows — "FIELD N" + remove up top, Name/Value
+          fields below, both fed through the very same <label> pattern as schema fields. */}
+      {!schema && entries.map(([key, entryValue], index) => (
         // eslint-disable-next-line react/no-array-index-key -- same rationale as ListEditor.
-        <div key={index} className="flex items-center gap-1.5">
-          <Input
-            value={key}
-            placeholder="key"
-            aria-label={`Field ${index + 1} name`}
-            className="!h-8 w-[92px] shrink-0 text-[10px]"
-            onChange={(event) => {
-              const newKey = event.target.value;
-              const next: Record<string, unknown> = {};
-              entries.forEach(([existingKey, existingValue], i) => {
-                next[i === index ? newKey : existingKey] = existingValue;
-              });
-              onChange(next);
-            }}
-          />
-          <FieldValueEditor
-            value={entryValue}
-            ariaLabel={`Field ${index + 1} value`}
-            sampleJson={sampleJson}
-            onChange={(newValue) => {
-              const next: Record<string, unknown> = {};
-              entries.forEach(([existingKey, existingValue], i) => {
-                next[existingKey] = i === index ? newValue : existingValue;
-              });
-              onChange(next);
-            }}
-          />
-          <button
-            type="button"
-            onClick={() => {
-              const next: Record<string, unknown> = {};
-              entries.forEach(([existingKey, existingValue], i) => {
-                if (i !== index) next[existingKey] = existingValue;
-              });
-              onChange(next);
-            }}
-            aria-label={`Remove field ${index + 1}`}
-            className="shrink-0 text-[11px] text-red-500 hover:text-red-600"
-          >
-            ✕
-          </button>
+        <div key={index} className="min-w-0 rounded-lg border border-slate-200 bg-slate-50/60 p-2">
+          <div className="mb-1.5 flex items-center justify-between">
+            <span className="text-[8px] font-bold uppercase tracking-wide text-slate-400">Field {index + 1}</span>
+            <button
+              type="button"
+              onClick={() => {
+                const next: Record<string, unknown> = {};
+                entries.forEach(([existingKey, existingValue], i) => {
+                  if (i !== index) next[existingKey] = existingValue;
+                });
+                onChange(next);
+              }}
+              aria-label={`Remove field ${index + 1}`}
+              className="text-[11px] text-red-500 hover:text-red-600"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="grid min-w-0 gap-2">
+            <label className="grid min-w-0 gap-0.5 text-[9px] font-semibold text-slate-500">
+              Name
+              <Input
+                value={key}
+                placeholder="key"
+                aria-label={`Field ${index + 1} name`}
+                className="!h-8 text-[10px]"
+                onChange={(event) => {
+                  const newKey = event.target.value;
+                  const next: Record<string, unknown> = {};
+                  entries.forEach(([existingKey, existingValue], i) => {
+                    next[i === index ? newKey : existingKey] = existingValue;
+                  });
+                  onChange(next);
+                }}
+              />
+            </label>
+            <label className="grid min-w-0 gap-0.5 text-[9px] font-semibold text-slate-500">
+              Value
+              <FieldValueEditor
+                value={entryValue}
+                ariaLabel={`Field ${index + 1} value`}
+                sampleJson={sampleJson}
+                onChange={(newValue) => {
+                  const next: Record<string, unknown> = {};
+                  entries.forEach(([existingKey, existingValue], i) => {
+                    next[existingKey] = i === index ? newValue : existingValue;
+                  });
+                  onChange(next);
+                }}
+              />
+            </label>
+          </div>
         </div>
       ))}
-      <Button type="button" variant="outline" size="sm" onClick={() => onChange({ ...obj, '': '' })} className="justify-self-start">
-        + Add field
-      </Button>
+      {!schema && (
+        <Button type="button" variant="outline" size="sm" onClick={() => onChange({ ...obj, '': '' })} className="justify-self-start">
+          + Add field
+        </Button>
+      )}
+      {schema && visibleFields!.map((field) => {
+        const ri = rowIndex!;
+        const { key, label } = field;
+        const hidden = Boolean(field.hideWhen && obj[field.hideWhen.key] === field.hideWhen.equals);
+        const typeKey = field.typeKey ?? 'type';
+        const typeValue = obj[typeKey];
+        const selectedType = isJsonValueType(typeValue) ? typeValue : getJsonValueType(obj[key]);
+        const typeLabel = fieldByKey!.get(typeKey)?.label ?? 'Type';
+
+        return hidden ? null : field.kind === 'typedValue' ? (
+          <Fragment key={key}>
+            <label className="grid min-w-0 gap-0.5 text-[9px] font-semibold text-slate-500">
+              {typeLabel}
+              <SelectValueEditor
+                value={selectedType}
+                ariaLabel={`Row ${ri + 1} ${typeLabel}`}
+                options={JSON_VALUE_TYPES}
+                onChange={(nextType) => {
+                  if (!isJsonValueType(nextType)) return;
+                  onChange({ ...obj, [key]: convertToJsonType(obj[key], nextType), [typeKey]: nextType });
+                }}
+              />
+            </label>
+            <label className="grid min-w-0 gap-0.5 text-[9px] font-semibold text-slate-500">
+              {label}
+              <TypedValueInput
+                value={obj[key]}
+                selectedType={selectedType}
+                ariaLabel={`Row ${ri + 1} ${label}`}
+                sampleJson={sampleJson}
+                onChange={(newValue) => onChange({ ...obj, [key]: newValue, [typeKey]: selectedType })}
+              />
+            </label>
+          </Fragment>
+        ) : field.kind === 'select' ? (
+          <label key={key} className="grid min-w-0 gap-0.5 text-[9px] font-semibold text-slate-500">
+            {label}
+            <SelectValueEditor
+              value={obj[key]}
+              ariaLabel={`Row ${ri + 1} ${label}`}
+              options={field.options ?? []}
+              allowCustom={field.allowCustomOptions}
+              onChange={(newValue) => onChange({
+                ...obj,
+                [key]: newValue,
+                ...clearedFieldsFor(schema, key, newValue),
+              })}
+            />
+          </label>
+        ) : (
+          <label key={key} className="grid min-w-0 gap-0.5 text-[9px] font-semibold text-slate-500">
+            {label}
+            <FieldValueEditor
+              value={obj[key]}
+              ariaLabel={`Row ${ri + 1} ${label}`}
+              sampleJson={sampleJson}
+              onChange={(newValue) => onChange({ ...obj, [key]: newValue })}
+            />
+          </label>
+        );
+      })}
     </div>
   );
 }
 
-function SetFieldValueEditor({
+/** The bare value editor for a `typedValue` field — no wrapping label, no type selector; those are separate rows in ObjectEditor. */
+function TypedValueInput({
   value,
   selectedType,
   onChange,
-  rowIndex,
+  ariaLabel,
   sampleJson,
 }: {
   value: unknown;
   selectedType: JsonValueType;
-  onChange: (value: unknown, type: JsonValueType) => void;
-  rowIndex: number;
+  onChange: (value: unknown) => void;
+  ariaLabel: string;
   sampleJson: unknown;
 }) {
-  const valueLabel = `Row ${rowIndex + 1} Value`;
-
+  if (selectedType === 'null') {
+    return <Input type="text" value="null" aria-label={ariaLabel} className="!h-8 text-[10px]" disabled />;
+  }
+  if (selectedType === 'boolean') {
+    return (
+      <SelectValueEditor
+        value={value === true ? 'true' : 'false'}
+        ariaLabel={ariaLabel}
+        options={BOOLEAN_OPTIONS}
+        onChange={(newValue) => onChange(newValue === 'true')}
+      />
+    );
+  }
   return (
-    <div className="grid min-w-0 gap-2">
-      <label className="grid min-w-0 gap-0.5 text-[9px] font-semibold text-slate-500">
-        Type
-        <select
-          value={selectedType}
-          aria-label={`Row ${rowIndex + 1} Type`}
-          className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2 text-[10px] text-slate-700 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50"
-          onChange={(event) => {
-            const nextType = event.target.value;
-            if (!isJsonValueType(nextType)) return;
-            onChange(convertToJsonType(value, nextType), nextType);
-          }}
-        >
-          {JSON_VALUE_TYPES.map((option) => (
-            <option key={option.value} value={option.value}>{option.label}</option>
-          ))}
-        </select>
-      </label>
-      <label className="grid min-w-0 gap-0.5 text-[9px] font-semibold text-slate-500">
-        Value
-        {selectedType === 'null' ? (
-          <Input type="text" value="null" aria-label={valueLabel} className="!h-8 text-[10px]" disabled />
-        ) : selectedType === 'boolean' ? (
-          <SelectValueEditor
-            value={value === true ? 'true' : 'false'}
-            ariaLabel={valueLabel}
-            options={BOOLEAN_OPTIONS}
-            onChange={(newValue) => onChange(newValue === 'true', selectedType)}
-          />
-        ) : (
-          <FieldValueEditor
-            key={selectedType}
-            value={value}
-            ariaLabel={valueLabel}
-            sampleJson={sampleJson}
-            conversionType={isPrimitiveType(selectedType) ? selectedType : undefined}
-            containerType={isContainerType(selectedType) ? selectedType : undefined}
-            onChange={(newValue) => onChange(newValue, selectedType)}
-          />
-        )}
-      </label>
-    </div>
+    <FieldValueEditor
+      key={selectedType}
+      value={value}
+      ariaLabel={ariaLabel}
+      sampleJson={sampleJson}
+      conversionType={isPrimitiveType(selectedType) ? selectedType : undefined}
+      containerType={isContainerType(selectedType) ? selectedType : undefined}
+      onChange={onChange}
+    />
   );
 }
 
@@ -410,13 +454,39 @@ function SelectValueEditor({
   onChange,
   ariaLabel,
   options,
+  allowCustom,
 }: {
   value: unknown;
   onChange: (value: string) => void;
   ariaLabel: string;
   options: Array<{ value: string; label: string }>;
+  allowCustom?: boolean;
 }) {
-  const selectedValue = typeof value === 'string' && options.some((option) => option.value === value) ? value : options[0]?.value;
+  const currentValue = typeof value === 'string' ? value : '';
+
+  // A free-text input backed by a <datalist> — reuses the predefined options as suggestions
+  // while still letting the user type any other value (004: universal operator/type fields).
+  if (allowCustom) {
+    const datalistId = `options-${ariaLabel.toLowerCase().replaceAll(' ', '-')}`;
+    return (
+      <>
+        <Input
+          list={datalistId}
+          value={currentValue}
+          aria-label={ariaLabel}
+          className="!h-8 text-[10px]"
+          onChange={(event) => onChange(event.target.value)}
+        />
+        <datalist id={datalistId}>
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </datalist>
+      </>
+    );
+  }
+
+  const selectedValue = options.some((option) => option.value === currentValue) ? currentValue : options[0]?.value;
 
   return (
     <select

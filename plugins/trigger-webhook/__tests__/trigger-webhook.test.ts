@@ -36,6 +36,25 @@ describe('trigger-webhook plugin', () => {
     expect(result._headers).toBeDefined();
   });
 
+  it('composes an array-of-fields sampleBody (rowSchema shape) into the flat simulated body', async () => {
+    expect(execute).toBeDefined();
+    const result = (await execute!(
+      {
+        path: '/orders',
+        httpMethod: 'POST',
+        sampleBody: [
+          { name: 'id', value: 42, type: 'number' },
+          { name: 'customer', value: 'Alice', type: 'string' },
+        ],
+      },
+      {},
+      testContext
+    )) as any;
+    expect(result.id).toBe(42);
+    expect(result.customer).toBe('Alice');
+    expect(result._headers).toBeDefined();
+  });
+
   it('preserves real input data when passed from an actual HTTP caller', async () => {
     expect(execute).toBeDefined();
     const realInput = {

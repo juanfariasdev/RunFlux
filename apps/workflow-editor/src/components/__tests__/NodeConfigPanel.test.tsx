@@ -118,9 +118,14 @@ describe('NodeConfigPanel — json parameter type, JSON mode (004-core-nodes-cat
   });
 });
 
+const genericListManifest: PluginManifest = {
+  ...manifest,
+  parameters: [{ name: 'items', label: 'Items', type: 'json', required: true }],
+};
+
 describe('NodeConfigPanel — json parameter type, Fields mode (004-core-nodes-catalog, E002)', () => {
-  it('defaults to Fields mode for an array-of-objects value, one input per key', () => {
-    render(<NodeConfigPanel manifest={jsonManifest} values={{ conditions: [{ leftValue: 'a' }] }} onChange={vi.fn()} onClose={vi.fn()} />);
+  it('defaults to Fields mode for an array-of-objects value with no known row shape, one input per key', () => {
+    render(<NodeConfigPanel manifest={genericListManifest} values={{ items: [{ leftValue: 'a' }] }} onChange={vi.fn()} onClose={vi.fn()} />);
     expect(screen.getByRole('button', { name: 'Fields' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByLabelText('Field 1 name')).toHaveValue('leftValue');
     expect(screen.getByLabelText('Field 1 value')).toHaveValue('a');
@@ -128,11 +133,11 @@ describe('NodeConfigPanel — json parameter type, Fields mode (004-core-nodes-c
 
   it('editing a field value propagates to onChange with the array shape intact', async () => {
     const onChange = vi.fn();
-    render(<NodeConfigPanel manifest={jsonManifest} values={{ conditions: [{ leftValue: 'a' }] }} onChange={onChange} onClose={vi.fn()} />);
+    render(<NodeConfigPanel manifest={genericListManifest} values={{ items: [{ leftValue: 'a' }] }} onChange={onChange} onClose={vi.fn()} />);
     fireEvent.change(screen.getByLabelText('Field 1 value'), { target: { value: '{{ $json.x }}' } });
 
     await vi.waitFor(() => {
-      expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ conditions: [{ leftValue: '{{ $json.x }}' }] }));
+      expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ items: [{ leftValue: '{{ $json.x }}' }] }));
     });
   });
 
@@ -160,11 +165,11 @@ describe('NodeConfigPanel — json parameter type, Fields mode (004-core-nodes-c
     expect(screen.getByLabelText('Row 1 Value')).toBeInTheDocument();
   });
 
-  it('"+ Add field" adds an empty key to a row', () => {
+  it('"+ Add field" adds an empty key to a row with no known row shape', () => {
     const onChange = vi.fn();
-    render(<NodeConfigPanel manifest={jsonManifest} values={{ conditions: [{}] }} onChange={onChange} onClose={vi.fn()} />);
+    render(<NodeConfigPanel manifest={genericListManifest} values={{ items: [{}] }} onChange={onChange} onClose={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: '+ Add field' }));
-    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ conditions: [{ '': '' }] }));
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ items: [{ '': '' }] }));
   });
 
   it('"Remove row" removes that row from the array', () => {
@@ -179,6 +184,14 @@ describe('NodeConfigPanel — json parameter type, Fields mode (004-core-nodes-c
     render(<NodeConfigPanel manifest={mapManifest} values={{ headers: { Authorization: 'Bearer x' } }} onChange={vi.fn()} onClose={vi.fn()} />);
     expect(screen.getByLabelText('Field 1 name')).toHaveValue('Authorization');
     expect(screen.getByLabelText('Field 1 value')).toHaveValue('Bearer x');
+  });
+
+  it('keeps a condition row in the structured Left/Operator/Right form even when its data is incomplete, instead of leaking into free-form key/value editing', () => {
+    render(<NodeConfigPanel manifest={jsonManifest} values={{ conditions: [{ leftValue: 'a' }] }} onChange={vi.fn()} onClose={vi.fn()} />);
+    expect(screen.getByLabelText('Row 1 Left value')).toHaveValue('a');
+    expect(screen.getByLabelText('Row 1 Operator')).toBeInTheDocument();
+    expect(screen.getByLabelText('Row 1 Right value')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Field 1 name')).not.toBeInTheDocument();
   });
 });
 

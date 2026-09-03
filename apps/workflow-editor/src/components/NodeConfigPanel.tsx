@@ -3,6 +3,7 @@ import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { resolveExpressions } from '@runflux/expression-engine';
 import type { PluginManifest } from '@runflux/plugin-system/types';
+import { composeFields, type FieldConfig } from '@runflux/plugin-system/fields-row-schema';
 import type { NodeResult } from '@runflux/validation-runtime';
 import type { WorkflowNodeAppearance, WorkflowNodeShape } from '@runflux/workflow-model/types';
 import { buildZodSchema } from '../forms/build-zod-schema';
@@ -52,6 +53,12 @@ const COMBINATOR_OPTIONS = [
 /** Does this string contain at least one `{{ }}` marker (004-core-nodes-catalog, E003)? */
 function hasExpressionSyntax(text: string): boolean {
   return /\{\{[\s\S]*?\}\}/.test(text);
+}
+
+/** `sampleBody` is a `FIELDS_ROW_SCHEMA` array (see trigger-webhook's manifest) — compose it into the flat body a real request would carry. */
+function resolveSampleBodyForTest(sampleBody: unknown): unknown {
+  if (Array.isArray(sampleBody)) return composeFields(sampleBody as FieldConfig[]);
+  return sampleBody || { message: 'Sample test payload' };
 }
 
 type ExpressionPreview = { ok: true; value: unknown } | { ok: false; error: string };
@@ -287,7 +294,7 @@ export function NodeConfigPanel({
                     <Controller
                       name={param.name}
                       control={control}
-                      render={({ field }) => <JsonFieldEditor id={param.name} value={field.value} onChange={field.onChange} sampleJson={displayedTestInput} />}
+                      render={({ field }) => <JsonFieldEditor id={param.name} value={field.value} onChange={field.onChange} sampleJson={displayedTestInput} rowSchema={param.rowSchema} />}
                     />
                   ) : param.sensitive ? (
                     <div className="flex gap-1.5">
@@ -360,7 +367,7 @@ export function NodeConfigPanel({
                     fetch(testUrl, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify(values?.sampleBody || { message: 'Sample test payload' }),
+                      body: JSON.stringify(resolveSampleBodyForTest(values?.sampleBody)),
                     });
                   }}
                   className="text-[9px] font-semibold text-indigo-600 hover:text-indigo-800 hover:underline"

@@ -1,4 +1,5 @@
 import type { PluginModule, PluginExecutionContext } from '@runflux/plugin-system/types';
+import { FIELDS_ROW_SCHEMA, composeFields, type FieldConfig } from '@runflux/plugin-system/fields-row-schema';
 
 export const manifest: PluginModule['manifest'] = {
   id: 'trigger-webhook',
@@ -53,7 +54,8 @@ export const manifest: PluginModule['manifest'] = {
       label: 'Sample Simulation Body (Fallback)',
       type: 'json',
       required: false,
-      default: { message: 'Sample webhook payload' },
+      default: [{ name: 'message', value: 'Sample webhook payload', type: 'string' }],
+      rowSchema: FIELDS_ROW_SCHEMA,
     },
     {
       name: 'sampleHeaders',
@@ -186,6 +188,18 @@ function formatWebhookOutput(body: any, headers: any, query: any) {
   };
 }
 
+/**
+ * `sampleBody` is declared with `rowSchema: FIELDS_ROW_SCHEMA` (same shape as `set`'s
+ * `fields`), so it's authored as an array of named, typed rows — compose those into
+ * the flat object the simulated `$json` should actually look like. A plain object is
+ * still accepted as-is (a caller passing a literal sample body directly).
+ */
+function resolveSampleBody(sampleBody: unknown): unknown {
+  if (Array.isArray(sampleBody)) return composeFields(sampleBody as FieldConfig[]);
+  if (sampleBody !== null && typeof sampleBody === 'object') return sampleBody;
+  return { message: 'Sample webhook payload' };
+}
+
 export const execute: PluginModule['execute'] = async (params, input, _context?: PluginExecutionContext) => {
   const reqInput = input && typeof input === 'object' ? (input as Record<string, unknown>) : null;
 
@@ -196,7 +210,7 @@ export const execute: PluginModule['execute'] = async (params, input, _context?:
 
   // 2. If running under automated unit tests without explicit waiting mode, return sample body:
   if (process.env.NODE_ENV === 'test' && !process.env.RUNFLUX_WAIT_WEBHOOK_TEST) {
-    const body = params.sampleBody ?? { message: 'Sample webhook payload' };
+    const body = resolveSampleBody(params.sampleBody);
     return formatWebhookOutput(body, params.sampleHeaders ?? {}, params.sampleQuery ?? {});
   }
 

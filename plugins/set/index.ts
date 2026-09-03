@@ -1,4 +1,5 @@
 import type { PluginModule } from '@runflux/plugin-system/types';
+import { FIELDS_ROW_SCHEMA, composeFields, type FieldConfig } from '@runflux/plugin-system/fields-row-schema';
 
 /**
  * Set (004-core-nodes-catalog, RF-11): composes an output object from
@@ -13,56 +14,16 @@ export const manifest: PluginModule['manifest'] = {
   category: 'action',
   version: '1.0.0',
   parameters: [
-    { name: 'fields', label: 'Fields', type: 'json', required: true, default: [] },
+    { name: 'fields', label: 'Fields', type: 'json', required: true, default: [], rowSchema: FIELDS_ROW_SCHEMA },
     { name: 'includeOtherFields', label: 'Include other input fields', type: 'boolean', required: false, default: false },
   ],
   supportedPlatforms: ['local', 'aws'],
 };
 
-interface FieldConfig {
-  name: string;
-  value: unknown;
-  type?: 'string' | 'number' | 'boolean' | 'null' | 'array' | 'object';
-}
-
-function normalizeFieldValue(field: FieldConfig): unknown {
-  const { value, type } = field;
-  if (type === 'null') return null;
-  if (type === 'array') {
-    if (Array.isArray(value)) return value;
-    throw new Error(`Field "${field.name}" must be an array`);
-  }
-  if (type === 'object') {
-    if (value !== null && typeof value === 'object' && !Array.isArray(value)) return value;
-    throw new Error(`Field "${field.name}" must be an object`);
-  }
-  if (type === 'number') {
-    const numberValue = typeof value === 'number' ? value : typeof value === 'string' && value.trim() !== '' ? Number(value) : Number.NaN;
-    if (Number.isFinite(numberValue)) return numberValue;
-    throw new Error(`Field "${field.name}" must be a number`);
-  }
-  if (type === 'boolean') {
-    if (typeof value === 'boolean') return value;
-    if (value === 'true') return true;
-    if (value === 'false') return false;
-    throw new Error(`Field "${field.name}" must be a boolean`);
-  }
-  if (type === 'string' && typeof value !== 'string') {
-    if (value === null || value === undefined) return '';
-    return typeof value === 'object' ? JSON.stringify(value) : String(value);
-  }
-  return value;
-}
-
 function compose(fields: FieldConfig[], includeOtherFields: boolean, input: unknown): Record<string, unknown> {
   const base: Record<string, unknown> =
     includeOtherFields && input !== null && typeof input === 'object' ? { ...(input as Record<string, unknown>) } : {};
-  for (const field of fields) {
-    if (field && typeof field.name === 'string') {
-      base[field.name] = normalizeFieldValue(field);
-    }
-  }
-  return base;
+  return { ...base, ...composeFields(fields) };
 }
 
 export const generators: PluginModule['generators'] = {
