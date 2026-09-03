@@ -19,6 +19,31 @@ const SHAPES: { value: WorkflowNodeShape; label: string }[] = [
   { value: 'pill', label: 'Pill' },
   { value: 'diamond', label: 'Decision' },
 ];
+
+const HTTP_METHOD_OPTIONS = [
+  { value: 'POST', label: 'POST' },
+  { value: 'GET', label: 'GET' },
+  { value: 'PUT', label: 'PUT' },
+  { value: 'DELETE', label: 'DELETE' },
+  { value: 'PATCH', label: 'PATCH' },
+  { value: 'HEAD', label: 'HEAD' },
+  { value: 'OPTIONS', label: 'OPTIONS' },
+];
+
+const AUTHENTICATION_OPTIONS = [
+  { value: 'none', label: 'None' },
+  { value: 'headerAuth', label: 'Header Auth' },
+  { value: 'basicAuth', label: 'Basic Auth' },
+];
+
+const CRON_PRESET_OPTIONS = [
+  { value: 'every15Minutes', label: 'Every 15 Minutes (* /15 * * * *)' },
+  { value: 'every5Minutes', label: 'Every 5 Minutes (* /5 * * * *)' },
+  { value: 'everyHour', label: 'Every Hour (0 * * * *)' },
+  { value: 'everyDay', label: 'Every Day at Midnight (0 0 * * *)' },
+  { value: 'custom', label: 'Custom Expression' },
+];
+
 const COMBINATOR_OPTIONS = [
   { value: 'and', label: 'AND' },
   { value: 'or', label: 'OR' },
@@ -97,6 +122,7 @@ export interface NodeConfigPanelProps {
   isTesting?: boolean;
   /** RF-02/RF-05: the node's last validation result, if it has one this session. */
   testResult?: NodeResult;
+  onCancelTest?: () => void;
 }
 
 export function NodeConfigPanel({
@@ -110,6 +136,7 @@ export function NodeConfigPanel({
   onTest,
   isTesting = false,
   testResult,
+  onCancelTest,
 }: NodeConfigPanelProps) {
   const parameters = manifest?.parameters ?? [];
   const schema = buildZodSchema(parameters);
@@ -226,6 +253,10 @@ export function NodeConfigPanel({
           </div>
           <form className="grid gap-3.5" onSubmit={(event) => event.preventDefault()}>
             {parameters.map((param) => {
+              const currentAuth = watch('authentication') ?? watch('auth') ?? 'none';
+              if ((param.name === 'headerName' || param.name === 'secretEnvVar') && currentAuth !== 'headerAuth') {
+                return null;
+              }
               const liveValue = param.type === 'string' ? watch(param.name) : undefined;
               const preview =
                 typeof liveValue === 'string' && hasExpressionSyntax(liveValue) ? resolveExpressionPreview(liveValue, displayedTestInput) : undefined;
@@ -235,13 +266,20 @@ export function NodeConfigPanel({
                   <Label className="mb-1 block" htmlFor={param.name}>{param.label}{param.required && <span className="ml-0.5 text-red-500">*</span>}</Label>
                   {param.type === 'boolean' ? (
                     <Checkbox id={param.name} {...register(param.name)} />
-                  ) : param.type === 'string' && param.name === 'combinator' ? (
+                  ) : param.type === 'string' && (param.name === 'combinator' || param.name === 'httpMethod' || param.name === 'authentication' || param.name === 'auth' || param.name === 'preset') ? (
                     <select
                       id={param.name}
                       className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-700 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50"
                       {...register(param.name)}
                     >
-                      {COMBINATOR_OPTIONS.map((option) => (
+                      {(param.name === 'httpMethod'
+                        ? HTTP_METHOD_OPTIONS
+                        : param.name === 'authentication' || param.name === 'auth'
+                        ? AUTHENTICATION_OPTIONS
+                        : param.name === 'preset'
+                        ? CRON_PRESET_OPTIONS
+                        : COMBINATOR_OPTIONS
+                      ).map((option) => (
                         <option key={option.value} value={option.value}>{option.label}</option>
                       ))}
                     </select>
@@ -289,9 +327,16 @@ export function NodeConfigPanel({
             <h3 className="m-0 text-[11px] font-bold text-slate-800">Validation</h3>
             <span className="mt-0.5 text-[9px] text-slate-400">Run this node on its own with sandbox data (RF-04)</span>
           </div>
-          <Button variant="outline" size="sm" onClick={onTest} disabled={isTesting}>
-            {isTesting ? (manifest?.id === 'trigger-webhook' ? '⏳ Listening for event…' : 'Testing…') : '▶ Test this node'}
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={onTest} disabled={isTesting}>
+              {isTesting ? (manifest?.id === 'trigger-webhook' ? '⏳ Listening for event…' : 'Testing…') : '▶ Test this node'}
+            </Button>
+            {isTesting && onCancelTest && (
+              <Button variant="destructive" size="sm" onClick={onCancelTest} className="text-[10px]">
+                ⏹ Stop listening
+              </Button>
+            )}
+          </div>
           {isTesting && manifest?.id === 'trigger-webhook' && (
             <div className="mt-3 rounded-lg border border-indigo-200 bg-indigo-50/70 p-3 text-[10px] text-indigo-950" data-testid="webhook-waiting-banner">
               <div className="flex items-center gap-2 font-bold text-indigo-700">

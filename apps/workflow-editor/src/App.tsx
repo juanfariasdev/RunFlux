@@ -51,6 +51,14 @@ function WorkflowEditorContent() {
   const selectedConnection = connections.find((connection) => connectionId(connection) === selectedEdgeId);
 
   // RF-04: test a single node in isolation, reusing cached upstream results
+  const handleCancelTest = useCallback(async () => {
+    try {
+      await fetch('/runflux-webhook-cancel', { method: 'POST' }).catch(() => {});
+    } finally {
+      setTestingNodeId(undefined);
+    }
+  }, []);
+
   const handleTestNode = useCallback(async (nodeId: string) => {
     setTestingNodeId(nodeId);
     try {
@@ -93,6 +101,7 @@ function WorkflowEditorContent() {
             }}
             onClose={() => setSelectedNodeId(undefined)}
             onTest={() => handleTestNode(selectedNode.id)}
+            onCancelTest={handleCancelTest}
             isTesting={testingNodeId === selectedNode.id}
             testResult={nodeResults[selectedNode.id]}
           />

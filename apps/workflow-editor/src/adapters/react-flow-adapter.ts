@@ -20,6 +20,7 @@ export interface WorkflowNodeData extends Record<string, unknown> {
   referenceStatus: PluginReferenceStatus;
   appearance: WorkflowNodeAppearance;
   result: NodeResult | undefined;
+  isTesting?: boolean;
 }
 
 export type FlowNode = ReactFlowNode<WorkflowNodeData>;
@@ -30,6 +31,7 @@ export function toReactFlowNode(
   manifest: PluginManifest | undefined,
   referenceStatus: PluginReferenceStatus,
   result?: NodeResult,
+  isTesting?: boolean,
 ): FlowNode {
   const appearance = node.appearance ?? {};
   const isSubflow = appearance.shape === 'subflow';
@@ -61,6 +63,7 @@ export function toReactFlowNode(
       referenceStatus,
       appearance,
       result,
+      isTesting: Boolean(isTesting),
     },
   };
 }

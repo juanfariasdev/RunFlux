@@ -22,6 +22,20 @@ export function runfluxValidationPlugin(pluginDirectories: string[]): Plugin {
   return {
     name: 'runflux-validation-runtime',
     configureServer(server) {
+      // Cancel active waiting webhooks
+      server.middlewares.use('/runflux-webhook-cancel', (_req, res) => {
+        const list = (globalThis as any).__RUNFLUX_PENDING_WEBHOOKS__ || [];
+        while (list.length > 0) {
+          const p = list.pop();
+          if (p) {
+            clearTimeout(p.timer);
+            p.reject(new Error('Webhook listening cancelled by user'));
+          }
+        }
+        res.statusCode = 200;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ success: true, message: 'Listening cancelled' }));
+      });
       // 1. Interactive test webhook receiver (E001: waiting for webhook payload)
       server.middlewares.use((req, res, next) => {
         const rawUrl = req.url || '';

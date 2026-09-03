@@ -44,7 +44,20 @@ export function WorkflowNodeView({ data, selected, dragging }: NodeProps<FlowNod
         {status === 'missing' && <div className="absolute -bottom-2 right-2 rounded-md bg-red-100 px-1.5 py-0.5 text-[8px] font-bold text-red-700 shadow" role="alert">Plugin not found</div>}
         {status === 'outdated' && <div className="absolute -bottom-2 right-2 rounded-md bg-amber-100 px-1.5 py-0.5 text-[8px] font-bold text-amber-800 shadow">Update available · v{data.referenceStatus.status === 'outdated' ? data.referenceStatus.installedVersion : ''}</div>}
         {category !== 'output' && <OutputHandles outputs={data?.manifest?.outputs} />}
-        {status !== 'missing' && data?.result && (
+        {data?.isTesting && (
+          <div
+            className="absolute -top-2.5 right-2 grid h-5 w-5 place-items-center rounded-full bg-indigo-600 text-white shadow-md ring-2 ring-indigo-200"
+            data-testid="node-testing-badge"
+            data-result-status="testing"
+            title="Listening for webhook event…"
+          >
+            <svg className="h-3 w-3 animate-spin text-white" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+            </svg>
+          </div>
+        )}
+        {!data?.isTesting && status !== 'missing' && data?.result && (
           <div
             className={`absolute -top-2 right-2 grid h-4 w-4 place-items-center rounded-full text-[9px] font-bold text-white shadow ${data.result.error ? 'bg-red-500' : 'bg-emerald-500'}`}
             data-testid="node-result-badge"

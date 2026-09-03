@@ -21,11 +21,18 @@ export const manifest: PluginModule['manifest'] = {
       default: 'POST',
     },
     {
-      name: 'auth',
+      name: 'authentication',
       label: 'Authentication Mode',
       type: 'string',
       required: false,
       default: 'none',
+    },
+    {
+      name: 'headerName',
+      label: 'Header Name',
+      type: 'string',
+      required: false,
+      default: 'X-Webhook-Secret',
     },
     {
       name: 'secretEnvVar',
@@ -33,6 +40,13 @@ export const manifest: PluginModule['manifest'] = {
       type: 'string',
       required: false,
       default: 'WEBHOOK_SECRET',
+    },
+    {
+      name: 'rawBody',
+      label: 'Accept Any / Raw Body',
+      type: 'boolean',
+      required: false,
+      default: false,
     },
     {
       name: 'sampleBody',
@@ -64,8 +78,10 @@ export const generators: PluginModule['generators'] = {
   local: (nodeConfig) => {
     const path = (nodeConfig.path as string) || '/webhook';
     const method = ((nodeConfig.httpMethod as string) || 'POST').toUpperCase();
-    const auth = (nodeConfig.auth as string) || 'none';
+    const auth = (nodeConfig.authentication as string) || (nodeConfig.auth as string) || 'none';
+    const headerName = (nodeConfig.headerName as string) || 'X-Webhook-Secret';
     const secretEnvVar = (nodeConfig.secretEnvVar as string) || 'WEBHOOK_SECRET';
+    const rawBody = Boolean(nodeConfig.rawBody);
 
     return {
       files: [
@@ -75,20 +91,23 @@ export const generators: PluginModule['generators'] = {
 export const WEBHOOK_PATH = ${JSON.stringify(path)};
 export const WEBHOOK_METHOD = ${JSON.stringify(method)};
 export const WEBHOOK_AUTH = ${JSON.stringify(auth)};
+export const WEBHOOK_HEADER_NAME = ${JSON.stringify(headerName)};
 export const WEBHOOK_SECRET_ENV = ${JSON.stringify(secretEnvVar)};
+export const WEBHOOK_RAW_BODY = ${JSON.stringify(rawBody)};
 
 export function run(input: any) {
-  if (input && typeof input === 'object' && ('body' in input || 'headers' in input || 'query' in input)) {
-    return input;
+  if (input && typeof input === 'object') {
+    const body = input.body !== undefined ? input.body : input;
+    if (typeof body === 'object' && body !== null && !Array.isArray(body)) {
+      return {
+        ...body,
+        _headers: input.headers ?? {},
+        _query: input.query ?? {},
+      };
+    }
+    return { data: body, _headers: input.headers ?? {}, _query: input.query ?? {} };
   }
-  return {
-    body: input ?? {},
-    headers: {},
-    query: {},
-    path: WEBHOOK_PATH,
-    method: WEBHOOK_METHOD,
-    receivedAt: new Date().toISOString(),
-  };
+  return { data: input };
 }
 `,
         },
@@ -114,10 +133,6 @@ function getGlobalPendingWebhooks(): PendingWebhook[] {
   return g.__RUNFLUX_PENDING_WEBHOOKS__;
 }
 
-/**
- * Pushes an incoming test webhook event from the dev server or project server
- * to any node currently awaiting an event in the canvas editor.
- */
 export function pushTestWebhook(targetPath: string, payload: any): boolean {
   const list = getGlobalPendingWebhooks();
   if (list.length === 0) {
@@ -126,13 +141,11 @@ export function pushTestWebhook(targetPath: string, payload: any): boolean {
 
   const cleanTarget = targetPath.replace(/^\/+/, '').toLowerCase();
 
-  // 1. Find best matching path
   let idx = list.findIndex((p) => {
     const cleanP = (p.path || '').replace(/^\/+/, '').toLowerCase();
     return cleanP === cleanTarget || cleanP === '*' || cleanTarget.endsWith(cleanP) || cleanP.endsWith(cleanTarget);
   });
 
-  // 2. If no exact match, fallback to the single waiting node
   if (idx === -1 && list.length > 0) {
     idx = 0;
   }
@@ -147,9 +160,6 @@ export function pushTestWebhook(targetPath: string, payload: any): boolean {
   return false;
 }
 
-/**
- * Clears any pending webhook listeners.
- */
 export function clearPendingWebhooks(): void {
   const list = getGlobalPendingWebhooks();
   while (list.length > 0) {
@@ -161,41 +171,39 @@ export function clearPendingWebhooks(): void {
   }
 }
 
+function formatWebhookOutput(body: any, headers: any, query: any) {
+  if (typeof body === 'object' && body !== null && !Array.isArray(body)) {
+    return {
+      ...body,
+      _headers: headers ?? {},
+      _query: query ?? {},
+    };
+  }
+  return {
+    data: body,
+    _headers: headers ?? {},
+    _query: query ?? {},
+  };
+}
+
 export const execute: PluginModule['execute'] = async (params, input, _context?: PluginExecutionContext) => {
   const reqInput = input && typeof input === 'object' ? (input as Record<string, unknown>) : null;
 
-  // 1. If payload was already provided (e.g. from upstream caller or direct invocation):
+  // 1. If payload was already provided from upstream caller:
   if (reqInput && ('body' in reqInput || 'headers' in reqInput || 'query' in reqInput)) {
-    return {
-      body: reqInput.body ?? {},
-      headers: reqInput.headers ?? {},
-      query: reqInput.query ?? {},
-      method: (params.httpMethod as string) || 'POST',
-      path: (params.path as string) || '/webhook',
-      receivedAt: new Date().toISOString(),
-    };
+    return formatWebhookOutput(reqInput.body, reqInput.headers, reqInput.query);
   }
 
-  // 2. If running under automated unit tests without explicit waiting mode, return sample simulation body:
+  // 2. If running under automated unit tests without explicit waiting mode, return sample body:
   if (process.env.NODE_ENV === 'test' && !process.env.RUNFLUX_WAIT_WEBHOOK_TEST) {
     const body = params.sampleBody ?? { message: 'Sample webhook payload' };
-    const headers = params.sampleHeaders ?? { 'content-type': 'application/json' };
-    const query = params.sampleQuery ?? {};
-
-    return {
-      body,
-      headers,
-      query,
-      method: (params.httpMethod as string) || 'POST',
-      path: (params.path as string) || '/webhook',
-      receivedAt: new Date().toISOString(),
-    };
+    return formatWebhookOutput(body, params.sampleHeaders ?? {}, params.sampleQuery ?? {});
   }
 
   // 3. User interactive test in canvas: wait for an actual HTTP request to arrive!
   const path = ((params.path as string) || '/webhook').trim();
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  const timeoutMs = 120000; // 120s timeout
+  const timeoutMs = 120000;
 
   const list = getGlobalPendingWebhooks();
 
@@ -214,14 +222,7 @@ export const execute: PluginModule['execute'] = async (params, input, _context?:
       path: normalizedPath,
       timer,
       resolve: (incoming) => {
-        resolve({
-          body: incoming?.body ?? {},
-          headers: incoming?.headers ?? {},
-          query: incoming?.query ?? {},
-          method: incoming?.method ?? (params.httpMethod as string) ?? 'POST',
-          path: normalizedPath,
-          receivedAt: new Date().toISOString(),
-        });
+        resolve(formatWebhookOutput(incoming?.body, incoming?.headers, incoming?.query));
       },
       reject,
     });

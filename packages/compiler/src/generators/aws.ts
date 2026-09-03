@@ -30,7 +30,8 @@ export function generateAwsProject(context: AwsGeneratorContext): GeneratedFile[
 
   const cronExpression = (cronNode?.parameters?.expression as string) || '*/15 * * * *';
   const webhookSecretEnvVar = (webhookNode?.parameters?.secretEnvVar as string) || 'WEBHOOK_SECRET';
-  const webhookAuth = (webhookNode?.parameters?.auth as string) || 'none';
+  const webhookAuth = (webhookNode?.parameters?.authentication as string) || (webhookNode?.parameters?.auth as string) || "none";
+  const webhookHeaderName = (webhookNode?.parameters?.headerName as string) || "X-Webhook-Secret";
 
   const packageJsonContent = JSON.stringify(
     {
@@ -227,7 +228,7 @@ ${cronCdkBlock}
   });
 
   let webhookAuthCheck = '';
-  if (hasWebhook && webhookAuth === 'secret') {
+  if (hasWebhook && (webhookAuth === "secret" || webhookAuth === "headerAuth")) {
     webhookAuthCheck = `
     const expectedSecret = process.env.${webhookSecretEnvVar};
     if (expectedSecret) {
