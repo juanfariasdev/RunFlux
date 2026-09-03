@@ -1,4 +1,18 @@
+# Dependencies
 node_modules/
+
+# Production and transpile builds
 dist/
 dist-node/
 *.tsbuildinfo
+
+# RunFlux Compiler Build Outputs & Artifacts
+output-backends/
+compiled/
+*.zip
+
+# Environment & OS files
+.env
+.env.local
+.DS_Store
+*.log

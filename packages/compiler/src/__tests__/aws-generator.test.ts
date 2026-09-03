@@ -6,7 +6,7 @@ import type { GeneratedFile } from '../types.js';
 describe('AWS Target Generator', () => {
   const sampleWorkflow: WorkflowDefinition = {
     id: 'wf-aws-test',
-    name: 'Backend AWS Lambda',
+    name: 'AWS Lambda Backend',
     nodes: [
       {
         id: 'node-trigger',
@@ -36,12 +36,12 @@ describe('AWS Target Generator', () => {
   const nodeFiles: GeneratedFile[] = [
     {
       path: 'src/nodes/node-trigger.ts',
-      content: 'export async function executeTrigger() { return { ok: true }; }',
+      content: 'export async function run() { return { ok: true }; }',
       type: 'source',
     },
     {
       path: 'src/nodes/node-set.ts',
-      content: 'export async function executeSet(input: any) { return { ...input, msg: "hello aws" }; }',
+      content: 'export async function run(input: any) { return { ...input, msg: "hello aws" }; }',
       type: 'source',
     },
   ];
@@ -49,7 +49,7 @@ describe('AWS Target Generator', () => {
   it('generates an AWS Lambda + CDK project scaffold', () => {
     const files = generateAwsProject({
       workflow: sampleWorkflow,
-      projectName: 'Backend AWS Lambda',
+      projectName: 'AWS Lambda Backend',
       nodeFiles,
       options: {},
     });

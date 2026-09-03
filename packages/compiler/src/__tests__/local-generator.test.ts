@@ -6,7 +6,7 @@ import type { GeneratedFile } from '../types.js';
 describe('Local Target Generator', () => {
   const sampleWorkflow: WorkflowDefinition = {
     id: 'wf-local-test',
-    name: 'Backend de Teste Local',
+    name: 'Local Test Backend',
     nodes: [
       {
         id: 'node-trigger',
@@ -19,7 +19,7 @@ describe('Local Target Generator', () => {
         id: 'node-log',
         pluginId: 'log-output',
         pluginVersion: '1.0.0',
-        parameters: { message: 'Executado com sucesso' },
+        parameters: { message: 'Executed successfully' },
         position: { x: 100, y: 0 },
       },
     ],
@@ -49,7 +49,7 @@ describe('Local Target Generator', () => {
   it('generates a full runnable local project scaffold', () => {
     const files = generateLocalProject({
       workflow: sampleWorkflow,
-      projectName: 'Backend de Teste Local',
+      projectName: 'Local Test Backend',
       nodeFiles,
       options: { port: 3000 },
     });
@@ -66,7 +66,7 @@ describe('Local Target Generator', () => {
 
     const pkgFile = files.find((f) => f.path === 'package.json')!;
     const pkgJson = JSON.parse(pkgFile.content);
-    expect(pkgJson.name).toBe('backend-de-teste-local');
+    expect(pkgJson.name).toBe('local-test-backend');
     expect(pkgJson.scripts.build).toContain('esbuild');
     expect(pkgJson.scripts.package).toContain('zip -j compiled/function.zip dist/*');
     expect(pkgJson.scripts.start).toBe('node dist/server.mjs');

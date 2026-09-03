@@ -12,10 +12,10 @@ describe('ProjectService', () => {
 
   it('creates project with definition and sets version to v1', async () => {
     const project = await service.createProject({
-      name: 'Fluxo 1',
+      name: 'Workflow 1',
       definition: {
         id: '',
-        name: 'Fluxo 1',
+        name: 'Workflow 1',
         nodes: [
           {
             id: 'n1',
@@ -30,7 +30,7 @@ describe('ProjectService', () => {
     });
 
     expect(project.id).toBeDefined();
-    expect(project.name).toBe('Fluxo 1');
+    expect(project.name).toBe('Workflow 1');
     expect(project.currentWorkflowVersion).toBe('v1');
     expect(project.workflow.nodes.length).toBe(1);
     expect(project.workflow.nodes[0].id).toBe('n1');
@@ -43,23 +43,23 @@ describe('ProjectService', () => {
   });
 
   it('throws ProjectConflictError for duplicate active name', async () => {
-    await service.createProject({ name: 'Duplicado' });
+    await service.createProject({ name: 'Duplicate' });
     await expect(
-      service.createProject({ name: 'Duplicado' })
+      service.createProject({ name: 'Duplicate' })
     ).rejects.toThrow(ProjectConflictError);
   });
 
   it('updates project definition and increments version to v2', async () => {
     const p = await service.createProject({
-      name: 'Versionado',
-      definition: { id: '', name: 'Versionado', nodes: [], connections: [] },
+      name: 'Versioned Workflow',
+      definition: { id: '', name: 'Versioned Workflow', nodes: [], connections: [] },
     });
     expect(p.currentWorkflowVersion).toBe('v1');
 
     const updated = await service.updateProject(p.id, {
       definition: {
         id: p.id,
-        name: 'Versionado',
+        name: 'Versioned Workflow',
         nodes: [
           {
             id: 'n2',
@@ -80,10 +80,10 @@ describe('ProjectService', () => {
 
   it('exports and imports project with automatic name collision handling', async () => {
     const original = await service.createProject({
-      name: 'Importavel',
+      name: 'Importable Workflow',
       definition: {
         id: '',
-        name: 'Importavel',
+        name: 'Importable Workflow',
         nodes: [
           {
             id: 'node-10',
@@ -99,18 +99,18 @@ describe('ProjectService', () => {
 
     const exported = await service.exportProject(original.id);
     expect(exported.schemaVersion).toBe(1);
-    expect(exported.project.name).toBe('Importavel');
+    expect(exported.project.name).toBe('Importable Workflow');
     expect(exported.workflow.nodes.length).toBe(1);
 
-    // Importa enquanto o original ainda está ativo -> deve renomear para "Importavel (1)"
+    // Import while original is still active -> should rename to "Importable Workflow (1)"
     const imported = await service.importProject(exported);
     expect(imported.id).not.toBe(original.id);
-    expect(imported.name).toBe('Importavel (1)');
+    expect(imported.name).toBe('Importable Workflow (1)');
     expect(imported.workflow.nodes[0].id).toBe('node-10');
 
-    // Importa de novo -> deve virar "Importavel (2)"
+    // Import again -> should become "Importable Workflow (2)"
     const imported2 = await service.importProject(exported);
-    expect(imported2.name).toBe('Importavel (2)');
+    expect(imported2.name).toBe('Importable Workflow (2)');
   });
 
   it('rejects corrupted import payload', async () => {
@@ -118,7 +118,7 @@ describe('ProjectService', () => {
   });
 
   it('archives and restores projects properly', async () => {
-    const p = await service.createProject({ name: 'Arquivavel' });
+    const p = await service.createProject({ name: 'Archivable Workflow' });
     await service.archiveProject(p.id);
 
     const active = await service.listProjects({ archived: false });
