@@ -30,6 +30,32 @@ export function createServer(service?: ProjectService, compilerService?: Compile
   app.use('/api/projects', createProjectsRouter(service));
   app.use('/api/compiler', createCompilerRouter(compilerService));
 
+  // Interactive webhook testing receiver (E001)
+  app.all(['/api/webhooks/test', '/api/webhooks/test/*'], async (req, res) => {
+    try {
+      const pluginPath = (await import('node:path')).resolve(process.cwd(), 'plugins/trigger-webhook/index.js');
+      const { pathToFileURL } = await import('node:url');
+      const { pushTestWebhook } = await import(pathToFileURL(pluginPath).href);
+      const subPath = req.path.replace(/^\/api\/webhooks\/test/, '') || '/webhook';
+      const captured = pushTestWebhook(subPath, {
+        body: req.body,
+        headers: req.headers,
+        query: req.query,
+        method: req.method,
+      });
+      return res.status(200).json({
+        success: true,
+        captured,
+        message: captured
+          ? 'Webhook captured! The waiting test in RunFlux has completed.'
+          : 'Webhook payload received, but no node was actively waiting for it.',
+        data: req.body,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     if (err instanceof ValidationError) {
       return res.status(400).json({

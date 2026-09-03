@@ -36,7 +36,7 @@ export const manifest: PluginModule['manifest'] = {
     },
     {
       name: 'sampleBody',
-      label: 'Sample Simulation Body (Canvas Testing)',
+      label: 'Sample Simulation Body (Fallback)',
       type: 'json',
       required: false,
       default: { message: 'Sample webhook payload' },
@@ -99,19 +99,117 @@ export function run(input: any) {
   aws: (nodeConfig, ctx) => generators.local(nodeConfig, ctx),
 };
 
-export const execute: PluginModule['execute'] = (params, input, _context?: PluginExecutionContext) => {
+interface PendingWebhook {
+  path: string;
+  resolve: (data: any) => void;
+  reject: (err: any) => void;
+  timer: any;
+}
+
+const pendingWebhooks: PendingWebhook[] = [];
+
+/**
+ * Pushes an incoming test webhook event from the dev server or project server
+ * to any node currently awaiting an event in the canvas editor.
+ */
+export function pushTestWebhook(targetPath: string, payload: any): boolean {
+  const normalizedPath = targetPath.startsWith('/') ? targetPath : `/${targetPath}`;
+  const idx = pendingWebhooks.findIndex(
+    (p) => p.path === normalizedPath || p.path === '*' || p.path.endsWith(normalizedPath) || normalizedPath.endsWith(p.path)
+  );
+
+  if (idx !== -1) {
+    const pending = pendingWebhooks.splice(idx, 1)[0];
+    clearTimeout(pending.timer);
+    pending.resolve(payload);
+    return true;
+  }
+
+  // If only one node is waiting on any path, resolve it
+  if (pendingWebhooks.length === 1) {
+    const pending = pendingWebhooks.splice(0, 1)[0];
+    clearTimeout(pending.timer);
+    pending.resolve(payload);
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Clears any pending webhook listeners.
+ */
+export function clearPendingWebhooks(): void {
+  while (pendingWebhooks.length > 0) {
+    const p = pendingWebhooks.pop();
+    if (p) {
+      clearTimeout(p.timer);
+      p.reject(new Error('Webhook listener cancelled'));
+    }
+  }
+}
+
+export const execute: PluginModule['execute'] = async (params, input, _context?: PluginExecutionContext) => {
   const reqInput = input && typeof input === 'object' ? (input as Record<string, unknown>) : null;
 
-  const body = reqInput?.body ?? params.sampleBody ?? { message: 'Sample webhook payload' };
-  const headers = reqInput?.headers ?? params.sampleHeaders ?? { 'content-type': 'application/json' };
-  const query = reqInput?.query ?? params.sampleQuery ?? {};
+  // 1. If payload was already provided (e.g. from upstream caller or direct invocation):
+  if (reqInput && ('body' in reqInput || 'headers' in reqInput || 'query' in reqInput)) {
+    return {
+      body: reqInput.body ?? {},
+      headers: reqInput.headers ?? {},
+      query: reqInput.query ?? {},
+      method: (params.httpMethod as string) || 'POST',
+      path: (params.path as string) || '/webhook',
+      receivedAt: new Date().toISOString(),
+    };
+  }
 
-  return {
-    body,
-    headers,
-    query,
-    method: (params.httpMethod as string) || 'POST',
-    path: (params.path as string) || '/webhook',
-    receivedAt: new Date().toISOString(),
-  };
+  // 2. If running under automated unit tests without explicit waiting mode, return sample simulation body:
+  if (process.env.NODE_ENV === 'test' && !process.env.RUNFLUX_WAIT_WEBHOOK_TEST) {
+    const body = params.sampleBody ?? { message: 'Sample webhook payload' };
+    const headers = params.sampleHeaders ?? { 'content-type': 'application/json' };
+    const query = params.sampleQuery ?? {};
+
+    return {
+      body,
+      headers,
+      query,
+      method: (params.httpMethod as string) || 'POST',
+      path: (params.path as string) || '/webhook',
+      receivedAt: new Date().toISOString(),
+    };
+  }
+
+  // 3. User interactive test in canvas: wait for an actual HTTP request to arrive!
+  const path = ((params.path as string) || '/webhook').trim();
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  const timeoutMs = 60000; // 60s timeout
+
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      const idx = pendingWebhooks.findIndex((p) => p.timer === timer);
+      if (idx !== -1) pendingWebhooks.splice(idx, 1);
+      reject(
+        new Error(
+          `Timeout waiting for incoming webhook request on "${normalizedPath}" after ${timeoutMs / 1000}s. Send an HTTP request to the test URL and click Test again.`
+        )
+      );
+    }, timeoutMs);
+
+    pendingWebhooks.push({
+      path: normalizedPath,
+      timer,
+      resolve: (incoming) => {
+        resolve({
+          body: incoming?.body ?? {},
+          headers: incoming?.headers ?? {},
+          query: incoming?.query ?? {},
+          method: incoming?.method ?? (params.httpMethod as string) ?? 'POST',
+          path: normalizedPath,
+          receivedAt: new Date().toISOString(),
+        });
+      },
+      reject,
+    });
+  });
 };

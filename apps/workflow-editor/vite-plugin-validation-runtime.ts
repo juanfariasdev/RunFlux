@@ -1,7 +1,4 @@
 import type { Plugin } from 'vite';
-// Same "./node" pre-bundled entry point pattern as
-// vite-plugin-plugin-catalog.ts, for the same reason: this file is loaded by
-// plain Node when Vite reads vite.config.ts, before any bundler exists.
 import { PluginRegistry } from '@runflux/plugin-system/node';
 import { runNode, runWorkflow, type PluginExecutionMode, type WorkflowDefinition } from '@runflux/validation-runtime/node';
 
@@ -10,14 +7,8 @@ import { runNode, runWorkflow, type PluginExecutionMode, type WorkflowDefinition
  * it) for real, in Vite's own Node process — the only place a plugin's
  * `execute` function (real JS, not JSON) can actually run (003-validation-runtime).
  *
- * Unlike `vite-plugin-plugin-catalog.ts`'s plugin catalog, there is no
- * production/build-time equivalent here: a plugin catalog is static data
- * that can be precomputed once at build time, but a validation run depends
- * on whatever workflow the developer has drawn *at that moment* — it cannot
- * be precomputed. A production build of the editor does not serve this
- * endpoint; a genuinely deployed instance of the editor would need a real
- * backend process for this, which is out of scope for this feature (see
- * roadmap.md, Premissas).
+ * It also provides `/runflux-webhook-test/*` to receive real HTTP events
+ * from curl or third-party webhooks during interactive node testing.
  */
 export function runfluxValidationPlugin(pluginDirectories: string[]): Plugin {
   const urlPath = '/runflux-validate';
@@ -31,6 +22,68 @@ export function runfluxValidationPlugin(pluginDirectories: string[]): Plugin {
   return {
     name: 'runflux-validation-runtime',
     configureServer(server) {
+      // 1. Interactive test webhook receiver (E001: waiting for webhook payload)
+      server.middlewares.use((req, res, next) => {
+        const parsedUrl = req.url || '';
+        if (!parsedUrl.startsWith('/runflux-webhook-test') && !parsedUrl.startsWith('/api/webhooks/test')) {
+          return next();
+        }
+
+        let body = '';
+        req.on('data', (chunk: Buffer) => {
+          body += chunk;
+        });
+        req.on('end', () => {
+          void (async () => {
+            let parsedBody: any = {};
+            if (body) {
+              try {
+                parsedBody = JSON.parse(body);
+              } catch {
+                parsedBody = body;
+              }
+            }
+
+            const urlObj = new URL(parsedUrl, 'http://localhost');
+            const query: Record<string, string> = {};
+            urlObj.searchParams.forEach((val, key) => {
+              query[key] = val;
+            });
+
+            // Deliver payload to the active waiting trigger-webhook node in memory
+            const { pushTestWebhook } = await import('../../plugins/trigger-webhook/index.js');
+            const subPath =
+              urlObj.pathname.replace(/^\/runflux-webhook-test/, '').replace(/^\/api\/webhooks\/test/, '') ||
+              '/webhook';
+
+            const delivered = pushTestWebhook(subPath, {
+              body: parsedBody,
+              headers: req.headers,
+              query,
+              method: req.method || 'POST',
+            });
+
+            res.statusCode = 200;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(
+              JSON.stringify({
+                success: true,
+                captured: delivered,
+                message: delivered
+                  ? 'Webhook captured! The waiting test in RunFlux has completed.'
+                  : 'Webhook payload received, but no node was actively waiting for it. Click "Test this node" in the editor first.',
+                data: parsedBody,
+              })
+            );
+          })().catch((err: Error) => {
+            res.statusCode = 500;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ error: err.message }));
+          });
+        });
+      });
+
+      // 2. Node & workflow validation runner
       server.middlewares.use(urlPath, (req, res) => {
         if (req.method !== 'POST') {
           res.statusCode = 405;

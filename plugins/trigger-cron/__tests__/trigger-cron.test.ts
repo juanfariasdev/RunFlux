@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { manifest, execute } from '../index';
+import { manifest, execute } from '../index.js';
 
 const testContext = {
   workflowId: 'wf-test',

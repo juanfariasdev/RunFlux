@@ -290,8 +290,25 @@ export function NodeConfigPanel({
             <span className="mt-0.5 text-[9px] text-slate-400">Run this node on its own with sandbox data (RF-04)</span>
           </div>
           <Button variant="outline" size="sm" onClick={onTest} disabled={isTesting}>
-            {isTesting ? 'Testing…' : '▶ Test this node'}
+            {isTesting ? (manifest?.id === 'trigger-webhook' ? '⏳ Listening for event…' : 'Testing…') : '▶ Test this node'}
           </Button>
+          {isTesting && manifest?.id === 'trigger-webhook' && (
+            <div className="mt-3 rounded-lg border border-indigo-200 bg-indigo-50/70 p-3 text-[10px] text-indigo-950" data-testid="webhook-waiting-banner">
+              <div className="flex items-center gap-2 font-bold text-indigo-700">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-600"></span>
+                </span>
+                Waiting for incoming webhook request…
+              </div>
+              <p className="mt-1 text-[9px] text-indigo-700">
+                Send an HTTP request to this test URL to capture the payload:
+              </p>
+              <code className="mt-1 block overflow-x-auto rounded bg-white px-2 py-1 font-mono text-[9px] text-indigo-900 border border-indigo-200 select-all">
+                {typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173'}/runflux-webhook-test{(values?.path as string) || '/webhook'}
+              </code>
+            </div>
+          )}
           {hasDisplayedTestInput && (
             <div className="mt-3 space-y-2 text-[10px]" data-testid="node-test-result">
               <ResultField label={testResult ? 'Input' : 'Previous input'} value={displayedTestInput} />
