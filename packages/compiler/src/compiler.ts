@@ -17,14 +17,14 @@ export async function compileWorkflow(
 ): Promise<CompilationResult> {
   const { workflow, targetPlatform, projectName, projectVersion, options } = request;
 
-  // 1. Verificação rápida de compatibilidade (Fast-Fail)
+  // 1. Fast-fail compatibility validation
   const validation = validateWorkflowCompatibility(workflow, targetPlatform, resolver);
   if (!validation.compatible) {
     return {
       status: 'failed',
       error: {
         code: 'INCOMPATIBLE_NODES',
-        message: `O workflow contém ${validation.incompatibleNodes.length} nó(s) sem suporte à plataforma '${targetPlatform}'.`,
+        message: `Workflow contains ${validation.incompatibleNodes.length} node(s) without support for target platform '${targetPlatform}'.`,
         details: {
           incompatibleNodes: validation.incompatibleNodes,
         },
@@ -32,10 +32,10 @@ export async function compileWorkflow(
     };
   }
 
-  // 2. Ordenação topológica do DAG
+  // 2. DAG topological node ordering
   const orderedNodes = getTopologicalNodeOrder(workflow);
 
-  // 3. Resolução e invocação dos geradores de nós
+  // 3. Resolve plugins and invoke node generators
   const nodeFiles: GeneratedFile[] = [];
   const pluginVersions: Record<string, string> = {};
 
@@ -72,12 +72,12 @@ export async function compileWorkflow(
           status: 'failed',
           error: {
             code: 'GENERATOR_ERROR',
-            message: `Erro no gerador do plugin '${node.pluginId}': ${err?.message || err}`,
+            message: `Generator error in plugin '${node.pluginId}': ${err?.message || err}`,
           },
         };
       }
     } else {
-      // Fallback seguro de geração caso não emita arquivo
+      // Safe fallback generator
       nodeFiles.push({
         path: `src/nodes/node-${i + 1}-${node.pluginId}.ts`,
         content: `export async function run(input: any) { return input; }`,
@@ -86,7 +86,7 @@ export async function compileWorkflow(
     }
   }
 
-  // 4. Montagem da árvore do projeto pelo gerador da plataforma
+  // 4. Assemble project tree via target platform generator
   let projectFiles: GeneratedFile[];
 
   if (targetPlatform === 'local') {
@@ -108,12 +108,12 @@ export async function compileWorkflow(
       status: 'failed',
       error: {
         code: 'INCOMPATIBLE_NODES',
-        message: `Plataforma '${targetPlatform}' não suportada.`,
+        message: `Target platform '${targetPlatform}' is not supported.`,
       },
     };
   }
 
-  // 5. Geração do manifesto de build (runflux-build.json)
+  // 5. Build manifest generation (runflux-build.json)
   const buildManifest: BuildManifest = {
     runfluxVersion: '0.1.0',
     targetPlatform,
@@ -136,7 +136,7 @@ export async function compileWorkflow(
     ...projectFiles,
   ];
 
-  // 6. Empacotamento zip em memória
+  // 6. In-memory ZIP package creation
   const zipBuffer = await createZipPackage(allFiles);
 
   return {

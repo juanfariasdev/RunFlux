@@ -90,7 +90,7 @@ import { WorkflowStack } from '../lib/workflow-stack.js';
 
 const app = new cdk.App();
 new WorkflowStack(app, '${stackName}', {
-  description: 'Stack compilado pelo RunFlux para o projeto ${projectName}',
+  description: 'Compiled stack by RunFlux for project ${projectName}',
 });
 `;
 
@@ -122,7 +122,7 @@ export class WorkflowStack extends Stack {
 
     new cdk.CfnOutput(this, 'FunctionUrl', {
       value: functionUrl.url,
-      description: 'Endpoint público para invocar o workflow compilado',
+      description: 'Public endpoint to invoke the compiled workflow',
     });
   }
 }
@@ -136,7 +136,7 @@ export class WorkflowStack extends Stack {
     const relativeModulePath = file.path.replace(/^src\//, './').replace(/\.ts$/, '.js');
     importsList.push(`import * as ${importName} from '${relativeModulePath}';`);
     executionsList.push(`
-    // Executa etapa: ${file.path}
+    // Execute step: ${file.path}
     if (typeof ${importName}.run === 'function') {
       const stepResult = await ${importName}.run(currentPayload);
       if (stepResult && typeof stepResult === 'object' && 'activeOutput' in stepResult) {
@@ -184,7 +184,7 @@ ${executionsList.join('\n')}
       },
       body: JSON.stringify({
         success: false,
-        error: error.message || 'Erro durante a execução do workflow na AWS',
+        error: error.message || 'Error during workflow execution on AWS',
       }),
     };
   }

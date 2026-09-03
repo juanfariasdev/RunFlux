@@ -18,16 +18,16 @@ describe('CompilerModal', () => {
           isOpen={true}
           onClose={handleClose}
           onCompile={handleCompile}
-          projectName="Meu Projeto Teste"
+          projectName="My Test Project"
         />
       </ProjectProvider>
     );
 
-    expect(screen.getByText(/Compilar Backend/i)).toBeInTheDocument();
+    expect(screen.getByText(/Compile Backend/i)).toBeInTheDocument();
     expect(screen.getByText(/Local \/ Docker/i)).toBeInTheDocument();
     expect(screen.getByText(/AWS/i)).toBeInTheDocument();
 
-    const compileBtn = screen.getByRole('button', { name: /Compilar e Baixar/i });
+    const compileBtn = screen.getByRole('button', { name: /Compile and Download/i });
     fireEvent.click(compileBtn);
 
     expect(handleCompile).toHaveBeenCalledWith('local');
@@ -46,7 +46,7 @@ describe('CompilerModal', () => {
           isOpen={true}
           onClose={() => {}}
           onCompile={handleCompile}
-          projectName="Meu Projeto AWS"
+          projectName="My AWS Project"
         />
       </ProjectProvider>
     );
@@ -54,7 +54,7 @@ describe('CompilerModal', () => {
     const awsOption = screen.getByLabelText(/AWS/i);
     fireEvent.click(awsOption);
 
-    const compileBtn = screen.getByRole('button', { name: /Compilar e Baixar/i });
+    const compileBtn = screen.getByRole('button', { name: /Compile and Download/i });
     fireEvent.click(compileBtn);
 
     expect(handleCompile).toHaveBeenCalledWith('aws');

@@ -174,7 +174,7 @@ export function Toolbar({ catalog, persistence, validation }: ToolbarProps) {
             className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs shadow-sm shadow-indigo-200"
             data-testid="open-compiler-modal-btn"
           >
-            ⚡ Compilar
+            ⚡ Compile
           </Button>
         </div>
       </header>

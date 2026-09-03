@@ -150,7 +150,7 @@ export class CompilerService {
 
   async compile(request: CompileWorkflowRequest): Promise<CompileWorkflowResponse> {
     if (!request.workflow || !Array.isArray(request.workflow.nodes)) {
-      throw new CompilerValidationError('Workflow inválido: deve conter nós definidos.');
+      throw new CompilerValidationError('Invalid workflow: nodes must be defined.');
     }
 
     await this.loadPlugins();
@@ -241,9 +241,9 @@ export class CompilerService {
           outdir: distDir,
         });
       }
-      console.log(`[compiler] esbuild bundle criado com sucesso em ${distDir}`);
+      console.log(`[compiler] esbuild bundle created successfully in ${distDir}`);
     } catch (bundleErr) {
-      console.warn(`[compiler] Aviso durante esbuild bundling:`, bundleErr);
+      console.warn(`[compiler] Warning during esbuild bundling:`, bundleErr);
     }
 
     // 5. Coleta dos arquivos em dist/ para criar o pacote leve (function.zip e <projeto>.zip)

@@ -81,7 +81,7 @@ CMD ["node", "dist/server.mjs"]
 NODE_ENV=production
 `;
 
-  // Montagem das importações e pipeline de execução
+  // Assembly of imports and execution pipeline
   const importsList: string[] = [];
   const executionsList: string[] = [];
 
@@ -90,12 +90,12 @@ NODE_ENV=production
     const relativeModulePath = file.path.replace(/^src\//, './').replace(/\.ts$/, '.js');
     importsList.push(`import * as ${importName} from '${relativeModulePath}';`);
     executionsList.push(`
-    // Executa etapa: ${file.path}
+    // Execute step: ${file.path}
     if (typeof ${importName}.run === 'function') {
       const stepResult = await ${importName}.run(currentPayload);
       if (stepResult && typeof stepResult === 'object' && 'activeOutput' in stepResult) {
         if (stepResult.activeOutput === null) {
-          console.log('[RunFlux Execution] Fluxo finalizado/filtrado no nó: ${file.path}');
+          console.log('[RunFlux Execution] Flow halted/filtered at node: ${file.path}');
           return { success: true, result: null, haltedAt: '${file.path}' };
         }
         currentPayload = stepResult.value !== undefined ? stepResult.value : stepResult;
@@ -140,13 +140,13 @@ ${executionsList.join('\n')}
     console.error('[RunFlux Server Error]', error);
     res.status(500).json({
       success: false,
-      error: error.message || 'Erro durante a execução do workflow'
+      error: error.message || 'Error during workflow execution'
     });
   }
 });
 
 app.listen(port, () => {
-  console.log(\`[RunFlux Server] Servidor compilado rodando na porta \${port}\`);
+  console.log(\`[RunFlux Server] Compiled server running on port \${port}\`);
 });
 `;
 
@@ -161,7 +161,7 @@ ${executionsList.join('\n')}
   return { success: true, result: currentPayload };
 }
 
-// Execução direta como script de linha de comando
+// Direct CLI execution
 const isDirectRun =
   process.argv[1]?.endsWith('run.ts') ||
   process.argv[1]?.endsWith('run.js') ||
@@ -176,15 +176,15 @@ if (isDirectRun) {
       input = { raw: process.argv[2] };
     }
   }
-  console.log('[RunFlux CLI] Executando workflow "${projectName}" com entrada:', JSON.stringify(input));
+  console.log('[RunFlux CLI] Executing workflow "${projectName}" with input:', JSON.stringify(input));
   runWorkflow(input)
     .then((out) => {
-      console.log('[RunFlux CLI] Execução finalizada com sucesso:');
+      console.log('[RunFlux CLI] Execution completed successfully:');
       console.log(JSON.stringify(out, null, 2));
       process.exit(0);
     })
     .catch((err) => {
-      console.error('[RunFlux CLI] Erro na execução:', err);
+      console.error('[RunFlux CLI] Execution error:', err);
       process.exit(1);
     });
 }

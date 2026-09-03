@@ -6,7 +6,7 @@ import { CompilerService } from '../apps/project-server/src/services/compiler-se
 
 async function main() {
   console.log('================================================================');
-  console.log('🚀 TESTE END-TO-END DE COMPILAÇÃO E EXECUÇÃO DE FLUXOS RUNFLUX');
+  console.log('🚀 END-TO-END COMPILATION & EXECUTION TEST (RUNFLUX COMPILER)');
   console.log('================================================================\n');
 
   const pluginsDir = path.resolve(process.cwd(), 'plugins');
@@ -15,19 +15,19 @@ async function main() {
   await compilerService.loadPlugins();
 
   // -------------------------------------------------------------
-  // DEFINIÇÃO DOS DIVERSOS FLUXOS EXPLORANDO TODOS OS RECURSOS
+  // DEFINITION OF DIVERSE WORKFLOWS COVERING ALL SYSTEM FEATURES
   // -------------------------------------------------------------
 
-  // FLUXO 1: Linear Data Processing (Trigger -> Set -> Log)
+  // WORKFLOW 1: Linear Data Processing (Trigger -> Set -> Log)
   const workflowLinear: WorkflowDefinition = {
     id: 'wf-01-linear',
-    name: 'Fluxo 1 - Processamento Linear',
+    name: 'Workflow 1 - Linear Processing',
     nodes: [
       {
         id: 'node-trig',
         pluginId: 'trigger-manual-example',
         pluginVersion: '1.0.0',
-        parameters: { label: 'Disparo Manual Linear' },
+        parameters: { label: 'Manual Trigger Linear' },
         position: { x: 0, y: 0 },
       },
       {
@@ -48,7 +48,7 @@ async function main() {
         id: 'node-log',
         pluginId: 'log-output',
         pluginVersion: '1.0.0',
-        parameters: { label: 'Log Linear' },
+        parameters: { label: 'Linear Log' },
         position: { x: 300, y: 0 },
       },
     ],
@@ -58,16 +58,16 @@ async function main() {
     ],
   };
 
-  // FLUXO 2: Branching Condicional com If (Trigger -> Set -> If -> Set -> Log)
+  // WORKFLOW 2: Conditional Decision with If (Trigger -> Set -> If -> Set -> Log)
   const workflowIf: WorkflowDefinition = {
     id: 'wf-02-if',
-    name: 'Fluxo 2 - Decisao Condicional If',
+    name: 'Workflow 2 - Conditional Decision If',
     nodes: [
       {
         id: 'node-trig',
         pluginId: 'trigger-manual-example',
         pluginVersion: '1.0.0',
-        parameters: { label: 'Disparo Inicial' },
+        parameters: { label: 'Initial Trigger' },
         position: { x: 0, y: 0 },
       },
       {
@@ -101,7 +101,7 @@ async function main() {
         pluginVersion: '1.0.0',
         parameters: {
           fields: [
-            { name: 'decision', value: 'APROVADO_PREMIUM', type: 'string' },
+            { name: 'decision', value: 'APPROVED_PREMIUM', type: 'string' },
             { name: 'discountRate', value: 0.15, type: 'number' },
           ],
           includeOtherFields: true,
@@ -112,7 +112,7 @@ async function main() {
         id: 'node-log-if',
         pluginId: 'log-output',
         pluginVersion: '1.0.0',
-        parameters: { label: 'Resultado If' },
+        parameters: { label: 'Result If' },
         position: { x: 500, y: 0 },
       },
     ],
@@ -124,16 +124,16 @@ async function main() {
     ],
   };
 
-  // FLUXO 3: Multi-branch Switch (Trigger -> Set -> Switch -> Set -> Log)
+  // WORKFLOW 3: Multi-branch Switch (Trigger -> Set -> Switch -> Set -> Log)
   const workflowSwitch: WorkflowDefinition = {
     id: 'wf-03-switch',
-    name: 'Fluxo 3 - Roteamento Multi-Regra Switch',
+    name: 'Workflow 3 - Multi-Rule Switch Routing',
     nodes: [
       {
         id: 'trig',
         pluginId: 'trigger-manual-example',
         pluginVersion: '1.0.0',
-        parameters: { label: 'Inicio Switch' },
+        parameters: { label: 'Start Switch' },
         position: { x: 0, y: 0 },
       },
       {
@@ -189,7 +189,7 @@ async function main() {
         id: 'log-switch',
         pluginId: 'log-output',
         pluginVersion: '1.0.0',
-        parameters: { label: 'Resultado Switch' },
+        parameters: { label: 'Result Switch' },
         position: { x: 600, y: 0 },
       },
     ],
@@ -201,10 +201,10 @@ async function main() {
     ],
   };
 
-  // FLUXO 4: Filtro de Validação (Trigger -> Set -> Filter -> Set -> Log)
+  // WORKFLOW 4: Filter Validation (Trigger -> Set -> Filter -> Set -> Log)
   const workflowFilter: WorkflowDefinition = {
     id: 'wf-04-filter',
-    name: 'Fluxo 4 - Validacao com Filtro',
+    name: 'Workflow 4 - Filter Validation',
     nodes: [
       {
         id: 'trig',
@@ -253,7 +253,7 @@ async function main() {
         id: 'log-filter',
         pluginId: 'log-output',
         pluginVersion: '1.0.0',
-        parameters: { label: 'Qualificado' },
+        parameters: { label: 'Qualified' },
         position: { x: 600, y: 0 },
       },
     ],
@@ -265,16 +265,16 @@ async function main() {
     ],
   };
 
-  // FLUXO 5: Full Stack com Todos os Nós (Trigger -> Set -> If -> Switch -> Filter -> Set -> Log)
+  // WORKFLOW 5: Full Integrated Workflow (Trigger -> Set -> If -> Switch -> Filter -> Set -> Log)
   const workflowFullStack: WorkflowDefinition = {
     id: 'wf-05-full',
-    name: 'Fluxo 5 - Integrado Completo RunFlux',
+    name: 'Workflow 5 - Full Integrated Stack',
     nodes: [
       {
         id: 'n1-trig',
         pluginId: 'trigger-manual-example',
         pluginVersion: '1.0.0',
-        parameters: { label: 'Disparo Geral' },
+        parameters: { label: 'General Trigger' },
         position: { x: 0, y: 0 },
       },
       {
@@ -340,7 +340,7 @@ async function main() {
         id: 'n7-log',
         pluginId: 'log-output',
         pluginVersion: '1.0.0',
-        parameters: { label: 'Conclusao Full Stack' },
+        parameters: { label: 'Full Stack Output' },
         position: { x: 600, y: 0 },
       },
     ],
@@ -355,57 +355,57 @@ async function main() {
   };
 
   const testSuites = [
-    { wf: workflowLinear, name: 'Fluxo 1 (Linear)' },
-    { wf: workflowIf, name: 'Fluxo 2 (If Condicional)' },
-    { wf: workflowSwitch, name: 'Fluxo 3 (Switch Multi-Branch)' },
-    { wf: workflowFilter, name: 'Fluxo 4 (Filtro)' },
-    { wf: workflowFullStack, name: 'Fluxo 5 (Full Stack Completo)' },
+    { wf: workflowLinear, name: 'Workflow 1 (Linear)' },
+    { wf: workflowIf, name: 'Workflow 2 (Conditional If)' },
+    { wf: workflowSwitch, name: 'Workflow 3 (Multi-Branch Switch)' },
+    { wf: workflowFilter, name: 'Workflow 4 (Filter)' },
+    { wf: workflowFullStack, name: 'Workflow 5 (Full Stack Complete)' },
   ];
 
-  console.log(`📋 Total de fluxos a compilar e testar: ${testSuites.length}\n`);
+  console.log(`📋 Total workflows to compile and test: ${testSuites.length}\n`);
 
   for (const { wf, name } of testSuites) {
     console.log(`----------------------------------------------------------------`);
-    console.log(`🔹 COMPILANDO E TESTANDO: ${name}`);
+    console.log(`🔹 COMPILING & TESTING: ${name}`);
     console.log(`----------------------------------------------------------------`);
 
-    // 1. Compilação Local
-    console.log(`⚙️  [1/4] Compilando para target: LOCAL...`);
+    // 1. Local Compilation
+    console.log(`⚙️  [1/4] Compiling for target: LOCAL...`);
     const localRes = await compilerService.compile({
       workflow: wf,
       targetPlatform: 'local',
       projectName: wf.name,
       skipTests: true,
     });
-    console.log(`    ✓ Compilado com sucesso!`);
+    console.log(`    ✓ Compiled successfully!`);
     console.log(`    - Output Dir: ${localRes.outputDirectory}`);
     console.log(`    - Zip File: ${localRes.zipFilename}`);
-    console.log(`    - Arquivos gerados: ${localRes.filesCount}`);
+    console.log(`    - Generated files: ${localRes.filesCount}`);
 
-    // Validação da existência do zip dentro da pasta
+    // Validate ZIP existence inside directory
     const expectedZipPath = path.join(localRes.outputDirectory, localRes.zipFilename);
     if (!fs.existsSync(expectedZipPath)) {
-      throw new Error(`Arquivo ZIP não encontrado no destino físico esperado: ${expectedZipPath}`);
+      throw new Error(`ZIP archive not found at expected physical path: ${expectedZipPath}`);
     }
-    console.log(`    ✓ Arquivo ZIP validado no disco (${fs.statSync(expectedZipPath).size} bytes)`);
+    console.log(`    ✓ Physical ZIP file validated on disk (${fs.statSync(expectedZipPath).size} bytes)`);
 
-    // 2. Compilação AWS
-    console.log(`⚙️  [2/4] Compilando para target: AWS...`);
+    // 2. AWS Compilation
+    console.log(`⚙️  [2/4] Compiling for target: AWS...`);
     const awsRes = await compilerService.compile({
       workflow: wf,
       targetPlatform: 'aws',
       projectName: wf.name,
       skipTests: true,
     });
-    console.log(`    ✓ Compilado para AWS com sucesso!`);
+    console.log(`    ✓ Compiled for AWS successfully!`);
     console.log(`    - Output Dir: ${awsRes.outputDirectory}`);
     console.log(`    - Zip File: ${awsRes.zipFilename}`);
 
-    // 3. Execução e Teste Real do Script Final (src/run.ts)
-    console.log(`🧪 [3/4] TESTANDO O SCRIPT FINAL EXECUTÁVEL (src/run.ts)...`);
+    // 3. Execution & Real Testing of Executable Script (src/run.ts)
+    console.log(`🧪 [3/4] TESTING EXECUTABLE SCRIPT (src/run.ts)...`);
     const runScriptPath = path.join(localRes.outputDirectory, 'src', 'run.ts');
     if (!fs.existsSync(runScriptPath)) {
-      throw new Error(`Script executável src/run.ts não foi gerado em ${localRes.outputDirectory}`);
+      throw new Error(`Executable script src/run.ts was not generated in ${localRes.outputDirectory}`);
     }
 
     const testPayload = {
@@ -415,7 +415,7 @@ async function main() {
     };
 
     const cmd = `npx tsx "${runScriptPath}" '${JSON.stringify(testPayload)}'`;
-    console.log(`    Executando comando: ${cmd.slice(0, 100)}...`);
+    console.log(`    Executing command: ${cmd.slice(0, 100)}...`);
 
     const executionOutput = execSync(cmd, {
       cwd: localRes.outputDirectory,
@@ -423,13 +423,13 @@ async function main() {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
-    console.log(`    ✓ Script executou perfeitamente com código de saída 0!`);
-    console.log(`    Saída do script:`);
+    console.log(`    ✓ Script executed cleanly with exit code 0!`);
+    console.log(`    Script output:`);
     const lines = executionOutput.trim().split('\n');
     lines.forEach((l) => console.log(`      | ${l}`));
 
-    // 4. Verificação de integridade dos arquivos estruturais
-    console.log(`🔍 [4/4] Validando integridade dos artefatos...`);
+    // 4. Artifacts integrity check
+    console.log(`🔍 [4/4] Validating artifact structural integrity...`);
     const expectedFiles = [
       'package.json',
       'tsconfig.json',
@@ -442,19 +442,19 @@ async function main() {
     for (const exp of expectedFiles) {
       const full = path.join(localRes.outputDirectory, exp);
       if (!fs.existsSync(full)) {
-        throw new Error(`Arquivo obrigatório ${exp} não encontrado em ${localRes.outputDirectory}`);
+        throw new Error(`Mandatory file ${exp} not found in ${localRes.outputDirectory}`);
       }
     }
-    console.log(`    ✓ Todos os ${expectedFiles.length} arquivos estruturais confirmados no disco!\n`);
+    console.log(`    ✓ All ${expectedFiles.length} structural files confirmed on disk!\n`);
   }
 
   console.log('================================================================');
-  console.log('🎉 SUCESSO TOTAL: TODOS OS 5 FLUXOS FORAM COMPILADOS E EXECUTADOS COM ÊXITO!');
+  console.log('🎉 TOTAL SUCCESS: ALL 5 WORKFLOWS COMPILED AND EXECUTED SUCCESSFULLY!');
   console.log('================================================================');
 }
 
 main().catch((err) => {
-  console.error('\n❌ ERRO DURANTE A EXECUÇÃO DOS TESTES DE COMPILAÇÃO:');
+  console.error('\n❌ ERROR DURING COMPILATION TESTS:');
   console.error(err);
   process.exit(1);
 });

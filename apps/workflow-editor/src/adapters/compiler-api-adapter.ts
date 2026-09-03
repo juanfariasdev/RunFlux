@@ -47,7 +47,7 @@ export class HttpCompilerApiAdapter implements CompilerApi {
 
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
-      const message = errData.error?.message || `Erro na compilação: HTTP ${res.status}`;
+      const message = errData.error?.message || `Compilation error: HTTP ${res.status}`;
       const error = new Error(message) as Error & { code?: string; details?: unknown };
       error.code = errData.error?.code;
       error.details = errData.error?.details;

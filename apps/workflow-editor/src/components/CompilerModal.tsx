@@ -59,7 +59,7 @@ export function CompilerModal({ isOpen, onClose, onCompile, projectName }: Compi
       }
     } catch (err: any) {
       setStatus('error');
-      setErrorMessage(err.message || 'Falha na compilação do projeto.');
+      setErrorMessage(err.message || 'Project compilation failed.');
       if (Array.isArray(err.details)) {
         setErrorDetails(err.details);
       }
@@ -73,17 +73,17 @@ export function CompilerModal({ isOpen, onClose, onCompile, projectName }: Compi
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/50">
           <div>
             <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-              <span>⚡</span> Compilar Backend
+              <span>⚡</span> Compile Backend
             </h2>
             <p className="text-xs text-slate-400 mt-0.5">
-              Transforme seu fluxo visual em um backend executável com código fonte e infraestrutura.
+              Turn your visual workflow into a runnable backend with source code and infrastructure.
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
             className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
-            aria-label="Fechar"
+            aria-label="Close"
           >
             ✕
           </button>
@@ -94,7 +94,7 @@ export function CompilerModal({ isOpen, onClose, onCompile, projectName }: Compi
           {/* Target Platform Selector */}
           <div>
             <label className="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-2">
-              Plataforma de Destino
+              Target Platform
             </label>
             <div className="grid grid-cols-2 gap-3">
               {/* Local / Docker */}
@@ -121,7 +121,7 @@ export function CompilerModal({ isOpen, onClose, onCompile, projectName }: Compi
                   />
                 </div>
                 <p className="text-xs text-slate-400">
-                  Express + TypeScript + Dockerfile pronto para rodar em containers ou localmente.
+                  Express + TypeScript + Dockerfile ready to run in containers or locally.
                 </p>
               </label>
 
@@ -149,7 +149,7 @@ export function CompilerModal({ isOpen, onClose, onCompile, projectName }: Compi
                   />
                 </div>
                 <p className="text-xs text-slate-400">
-                  Lambda Handler + Cloud CDK / Serverless pronto para nuvem.
+                  Lambda Handler + Cloud CDK / Serverless ready for cloud deployment.
                 </p>
               </label>
             </div>
@@ -158,12 +158,12 @@ export function CompilerModal({ isOpen, onClose, onCompile, projectName }: Compi
           {/* Compilation Options */}
           <div className="bg-slate-950/40 border border-slate-800/80 rounded-lg p-3.5 space-y-2">
             <div className="text-xs text-slate-300 flex items-center justify-between">
-              <span className="text-slate-400">Projeto ativo:</span>
+              <span className="text-slate-400">Active project:</span>
               <span className="font-semibold text-white">{effectiveProjectName}</span>
             </div>
             <div className="text-xs text-slate-300 flex items-center justify-between">
-              <span className="text-slate-400">Nós no workflow:</span>
-              <span className="font-semibold text-white">{workflow.nodes.length} nós</span>
+              <span className="text-slate-400">Workflow nodes:</span>
+              <span className="font-semibold text-white">{workflow.nodes.length} nodes</span>
             </div>
             <div className="pt-2 border-t border-slate-800/60 flex items-center gap-2">
               <input
@@ -174,7 +174,7 @@ export function CompilerModal({ isOpen, onClose, onCompile, projectName }: Compi
                 className="h-3.5 w-3.5 rounded border-slate-700 text-indigo-600 focus:ring-indigo-500"
               />
               <label htmlFor="skip-tests-checkbox" className="text-xs text-slate-300 cursor-pointer">
-                Compilar mesmo sem rodar testes prévios
+                Compile even without running prior tests
               </label>
             </div>
           </div>
@@ -183,24 +183,24 @@ export function CompilerModal({ isOpen, onClose, onCompile, projectName }: Compi
           {status === 'compiling' && (
             <div className="bg-indigo-950/40 border border-indigo-800/60 rounded-lg p-3 text-xs text-indigo-300 flex items-center gap-3">
               <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin flex-shrink-0" />
-              <span>Compilando workflow para <strong>{targetPlatform.toUpperCase()}</strong> e gerando pacote .zip...</span>
+              <span>Compiling workflow for <strong>{targetPlatform.toUpperCase()}</strong> and generating .zip package...</span>
             </div>
           )}
 
           {status === 'success' && resultData && (
             <div className="bg-emerald-950/40 border border-emerald-800/60 rounded-lg p-3.5 text-xs text-emerald-300 space-y-2">
               <div className="flex items-center gap-2 font-semibold text-emerald-200">
-                <span>✓</span> Compilação concluída com sucesso!
+                <span>✓</span> Compilation completed successfully!
               </div>
               <p className="text-slate-300 text-[11px]">
-                A pasta do backend foi criada em:
+                The backend folder was created at:
                 <br />
                 <code className="text-emerald-300 bg-emerald-950/80 px-1 py-0.5 rounded text-[10px] break-all">
                   {resultData.outputDirectory}
                 </code>
               </p>
               <div className="flex items-center justify-between pt-1">
-                <span className="text-slate-400 text-[11px]">Arquivo: {resultData.zipFilename}</span>
+                <span className="text-slate-400 text-[11px]">File: {resultData.zipFilename}</span>
                 {resultData.downloadUrl && (
                   <a
                     href={
@@ -211,7 +211,7 @@ export function CompilerModal({ isOpen, onClose, onCompile, projectName }: Compi
                     download={resultData.zipFilename}
                     className="text-indigo-400 hover:text-indigo-300 underline font-medium"
                   >
-                    Baixar novamente (.zip)
+                    Download again (.zip)
                   </a>
                 )}
               </div>
@@ -222,15 +222,15 @@ export function CompilerModal({ isOpen, onClose, onCompile, projectName }: Compi
             <div className="bg-rose-950/40 border border-rose-800/60 rounded-lg p-3 text-xs text-rose-300 flex items-start gap-2">
               <span className="text-sm">⚠️</span>
               <div>
-                <p className="font-semibold text-rose-200">Falha ao compilar:</p>
+                <p className="font-semibold text-rose-200">Compilation failed:</p>
                 <p className="mt-0.5 text-rose-300 text-[11px]">{errorMessage}</p>
                 {errorDetails && errorDetails.length > 0 && (
                   <div className="mt-2 space-y-1">
-                    <p className="text-[10px] font-semibold text-rose-200">Nós sem suporte à plataforma {targetPlatform}:</p>
+                    <p className="text-[10px] font-semibold text-rose-200">Nodes without support for target platform {targetPlatform}:</p>
                     <ul className="list-disc list-inside text-[10px] text-rose-300">
                       {errorDetails.map((node: any, idx: number) => (
                         <li key={idx}>
-                          Plugin <strong className="text-white">{node.pluginId}</strong> (Nó ID: {node.nodeId})
+                          Plugin <strong className="text-white">{node.pluginId}</strong> (Node ID: {node.nodeId})
                         </li>
                       ))}
                     </ul>
@@ -244,7 +244,7 @@ export function CompilerModal({ isOpen, onClose, onCompile, projectName }: Compi
         {/* Footer */}
         <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-slate-800 bg-slate-900/50">
           <Button variant="ghost" onClick={onClose} disabled={status === 'compiling'}>
-            Fechar
+            Close
           </Button>
           <Button
             variant="default"
@@ -252,7 +252,7 @@ export function CompilerModal({ isOpen, onClose, onCompile, projectName }: Compi
             disabled={status === 'compiling'}
             className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium"
           >
-            {status === 'compiling' ? 'Compilando...' : 'Compilar e Baixar'}
+            {status === 'compiling' ? 'Compiling...' : 'Compile and Download'}
           </Button>
         </div>
       </div>

@@ -74,7 +74,7 @@ describe('compileWorkflow Engine', () => {
 
   const workflow: WorkflowDefinition = {
     id: 'wf-compile-test',
-    name: 'Fluxo Compilação Teste',
+    name: 'Compilation Test Workflow',
     nodes: [
       {
         id: 'n1',
@@ -106,7 +106,7 @@ describe('compileWorkflow Engine', () => {
       {
         workflow,
         targetPlatform: 'local',
-        projectName: 'Fluxo Compilação Teste',
+        projectName: 'Compilation Test Workflow',
         projectVersion: 'v1',
       },
       resolver
@@ -128,7 +128,7 @@ describe('compileWorkflow Engine', () => {
       {
         workflow,
         targetPlatform: 'aws',
-        projectName: 'Fluxo AWS Teste',
+        projectName: 'AWS Test Workflow',
         projectVersion: 'v1',
       },
       resolver

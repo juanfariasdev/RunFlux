@@ -139,3 +139,19 @@ describe('Toolbar — Test (RF-06, RF-12, RN-04)', () => {
     await waitFor(() => expect(run).toHaveBeenCalledWith(expect.anything(), { mode: 'production' }));
   });
 });
+
+describe("Toolbar — Compiler Button", () => {
+  it("renders the compile button in English and opens the compiler modal", () => {
+    render(
+      <Toolbar
+        catalog={fakeCatalog()}
+        persistence={{ save: vi.fn(), load: vi.fn() }}
+        validation={{ run: vi.fn(), runNode: vi.fn() }}
+      />
+    );
+    const compileBtn = screen.getByTestId("open-compiler-modal-btn");
+    expect(compileBtn).toHaveTextContent("Compile");
+    fireEvent.click(compileBtn);
+    expect(screen.getByText(/Compile Backend/i)).toBeInTheDocument();
+  });
+});
