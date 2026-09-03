@@ -307,6 +307,22 @@ export function NodeConfigPanel({
               <code className="mt-1 block overflow-x-auto rounded bg-white px-2 py-1 font-mono text-[9px] text-indigo-900 border border-indigo-200 select-all">
                 {typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173'}/runflux-webhook-test{(values?.path as string) || '/webhook'}
               </code>
+              <div className="mt-2 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const testUrl = `${typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173'}/runflux-webhook-test${(values?.path as string) || '/webhook'}`;
+                    fetch(testUrl, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify(values?.sampleBody || { message: 'Sample test payload' }),
+                    });
+                  }}
+                  className="text-[9px] font-semibold text-indigo-600 hover:text-indigo-800 hover:underline"
+                >
+                  ⚡ Send test payload now
+                </button>
+              </div>
             </div>
           )}
           {hasDisplayedTestInput && (

@@ -99,35 +99,46 @@ export function run(input: any) {
   aws: (nodeConfig, ctx) => generators.local(nodeConfig, ctx),
 };
 
-interface PendingWebhook {
+export interface PendingWebhook {
   path: string;
   resolve: (data: any) => void;
   reject: (err: any) => void;
   timer: any;
 }
 
-const pendingWebhooks: PendingWebhook[] = [];
+function getGlobalPendingWebhooks(): PendingWebhook[] {
+  const g = globalThis as any;
+  if (!g.__RUNFLUX_PENDING_WEBHOOKS__) {
+    g.__RUNFLUX_PENDING_WEBHOOKS__ = [];
+  }
+  return g.__RUNFLUX_PENDING_WEBHOOKS__;
+}
 
 /**
  * Pushes an incoming test webhook event from the dev server or project server
  * to any node currently awaiting an event in the canvas editor.
  */
 export function pushTestWebhook(targetPath: string, payload: any): boolean {
-  const normalizedPath = targetPath.startsWith('/') ? targetPath : `/${targetPath}`;
-  const idx = pendingWebhooks.findIndex(
-    (p) => p.path === normalizedPath || p.path === '*' || p.path.endsWith(normalizedPath) || normalizedPath.endsWith(p.path)
-  );
-
-  if (idx !== -1) {
-    const pending = pendingWebhooks.splice(idx, 1)[0];
-    clearTimeout(pending.timer);
-    pending.resolve(payload);
-    return true;
+  const list = getGlobalPendingWebhooks();
+  if (list.length === 0) {
+    return false;
   }
 
-  // If only one node is waiting on any path, resolve it
-  if (pendingWebhooks.length === 1) {
-    const pending = pendingWebhooks.splice(0, 1)[0];
+  const cleanTarget = targetPath.replace(/^\/+/, '').toLowerCase();
+
+  // 1. Find best matching path
+  let idx = list.findIndex((p) => {
+    const cleanP = (p.path || '').replace(/^\/+/, '').toLowerCase();
+    return cleanP === cleanTarget || cleanP === '*' || cleanTarget.endsWith(cleanP) || cleanP.endsWith(cleanTarget);
+  });
+
+  // 2. If no exact match, fallback to the single waiting node
+  if (idx === -1 && list.length > 0) {
+    idx = 0;
+  }
+
+  if (idx !== -1) {
+    const pending = list.splice(idx, 1)[0];
     clearTimeout(pending.timer);
     pending.resolve(payload);
     return true;
@@ -140,8 +151,9 @@ export function pushTestWebhook(targetPath: string, payload: any): boolean {
  * Clears any pending webhook listeners.
  */
 export function clearPendingWebhooks(): void {
-  while (pendingWebhooks.length > 0) {
-    const p = pendingWebhooks.pop();
+  const list = getGlobalPendingWebhooks();
+  while (list.length > 0) {
+    const p = list.pop();
     if (p) {
       clearTimeout(p.timer);
       p.reject(new Error('Webhook listener cancelled'));
@@ -183,12 +195,14 @@ export const execute: PluginModule['execute'] = async (params, input, _context?:
   // 3. User interactive test in canvas: wait for an actual HTTP request to arrive!
   const path = ((params.path as string) || '/webhook').trim();
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  const timeoutMs = 60000; // 60s timeout
+  const timeoutMs = 120000; // 120s timeout
+
+  const list = getGlobalPendingWebhooks();
 
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
-      const idx = pendingWebhooks.findIndex((p) => p.timer === timer);
-      if (idx !== -1) pendingWebhooks.splice(idx, 1);
+      const idx = list.findIndex((p) => p.timer === timer);
+      if (idx !== -1) list.splice(idx, 1);
       reject(
         new Error(
           `Timeout waiting for incoming webhook request on "${normalizedPath}" after ${timeoutMs / 1000}s. Send an HTTP request to the test URL and click Test again.`
@@ -196,7 +210,7 @@ export const execute: PluginModule['execute'] = async (params, input, _context?:
       );
     }, timeoutMs);
 
-    pendingWebhooks.push({
+    list.push({
       path: normalizedPath,
       timer,
       resolve: (incoming) => {
