@@ -117,12 +117,19 @@ export class CompilerService {
         const fileUrl = pathToFileURL(entryFile).href;
         const mod = await import(fileUrl);
         if (mod.manifest && mod.manifest.id) {
-          const generators = mod.generators || {};
+          const generators = { ...(mod.generators || {}) };
+          const supportedPlatforms = [...(mod.manifest.supportedPlatforms || ['local'])];
           if (generators.local && !generators.aws) {
             generators.aws = generators.local;
+            if (!supportedPlatforms.includes('aws')) {
+              supportedPlatforms.push('aws');
+            }
           }
           this.pluginsCache.set(mod.manifest.id, {
-            manifest: mod.manifest,
+            manifest: {
+              ...mod.manifest,
+              supportedPlatforms,
+            },
             generators,
           });
         }

@@ -135,9 +135,22 @@ export class WorkflowStack extends Stack {
     executionsList.push(`
     // Executa etapa: ${file.path}
     if (typeof ${importName}.run === 'function') {
-      currentPayload = await ${importName}.run(currentPayload);
+      const stepResult = await ${importName}.run(currentPayload);
+      if (stepResult && typeof stepResult === 'object' && 'activeOutput' in stepResult) {
+        if (stepResult.activeOutput === null) {
+          return {
+            statusCode: 200,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ success: true, result: null, haltedAt: '${file.path}' }),
+          };
+        }
+        currentPayload = stepResult.value !== undefined ? stepResult.value : stepResult;
+      } else {
+        currentPayload = stepResult !== undefined ? stepResult : currentPayload;
+      }
     } else if (typeof ${importName}.execute === 'function') {
-      currentPayload = await ${importName}.execute(currentPayload);
+      const stepResult = await ${importName}.execute({}, currentPayload);
+      currentPayload = stepResult !== undefined ? stepResult : currentPayload;
     }`);
   });
 

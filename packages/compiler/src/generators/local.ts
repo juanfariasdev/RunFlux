@@ -29,6 +29,7 @@ export function generateLocalProject(context: LocalGeneratorContext): GeneratedF
         dev: 'tsx watch src/server.ts',
         build: 'tsc',
         start: 'node dist/server.js',
+        run: 'tsx src/run.ts',
       },
       dependencies: {
         cors: '^2.8.5',
@@ -55,7 +56,7 @@ export function generateLocalProject(context: LocalGeneratorContext): GeneratedF
         moduleResolution: 'NodeNext',
         rootDir: 'src',
         outDir: 'dist',
-        "strict": true,
+        strict: true,
         esModuleInterop: true,
         skipLibCheck: true,
         forceConsistentCasingInFileNames: true,
@@ -88,20 +89,31 @@ CMD ["node", "dist/server.js"]
 NODE_ENV=production
 `;
 
-  // Montagem do server.ts
+  // Montagem das importações e pipeline de execução
   const importsList: string[] = [];
   const executionsList: string[] = [];
 
   nodeFiles.forEach((file, index) => {
     const importName = `nodeModule_${index}`;
+    // De src/server.ts ou src/run.ts para src/nodes/node-1.ts -> ./nodes/node-1.js
     const relativeModulePath = file.path.replace(/^src\//, './').replace(/\.ts$/, '.js');
     importsList.push(`import * as ${importName} from '${relativeModulePath}';`);
     executionsList.push(`
     // Executa etapa: ${file.path}
     if (typeof ${importName}.run === 'function') {
-      currentPayload = await ${importName}.run(currentPayload);
+      const stepResult = await ${importName}.run(currentPayload);
+      if (stepResult && typeof stepResult === 'object' && 'activeOutput' in stepResult) {
+        if (stepResult.activeOutput === null) {
+          console.log('[RunFlux Execution] Fluxo finalizado/filtrado no nó: ${file.path}');
+          return { success: true, result: null, haltedAt: '${file.path}' };
+        }
+        currentPayload = stepResult.value !== undefined ? stepResult.value : stepResult;
+      } else {
+        currentPayload = stepResult !== undefined ? stepResult : currentPayload;
+      }
     } else if (typeof ${importName}.execute === 'function') {
-      currentPayload = await ${importName}.execute(currentPayload);
+      const stepResult = await ${importName}.execute({}, currentPayload);
+      currentPayload = stepResult !== undefined ? stepResult : currentPayload;
     }`);
   });
 
@@ -150,12 +162,49 @@ app.listen(port, () => {
 });
 `;
 
+  const runTsContent = `import dotenv from 'dotenv';
+${importsList.join('\n')}
+
+dotenv.config();
+
+export async function runWorkflow(initialPayload: any = {}) {
+  let currentPayload: any = initialPayload;
+${executionsList.join('\n')}
+  return { success: true, result: currentPayload };
+}
+
+// Execução direta como script de linha de comando
+const isDirectRun = process.argv[1]?.endsWith('run.ts') || process.argv[1]?.endsWith('run.js');
+if (isDirectRun) {
+  let input = {};
+  if (process.argv[2]) {
+    try {
+      input = JSON.parse(process.argv[2]);
+    } catch {
+      input = { raw: process.argv[2] };
+    }
+  }
+  console.log('[RunFlux CLI] Executando workflow "${projectName}" com entrada:', JSON.stringify(input));
+  runWorkflow(input)
+    .then((out) => {
+      console.log('[RunFlux CLI] Execução finalizada com sucesso:');
+      console.log(JSON.stringify(out, null, 2));
+      process.exit(0);
+    })
+    .catch((err) => {
+      console.error('[RunFlux CLI] Erro na execução:', err);
+      process.exit(1);
+    });
+}
+`;
+
   const files: GeneratedFile[] = [
     { path: 'package.json', content: packageJsonContent, type: 'config' },
     { path: 'tsconfig.json', content: tsconfigContent, type: 'config' },
     { path: 'Dockerfile', content: dockerfileContent, type: 'infrastructure' },
     { path: '.env.example', content: envExampleContent, type: 'config' },
     { path: 'src/server.ts', content: serverTsContent, type: 'source' },
+    { path: 'src/run.ts', content: runTsContent, type: 'source' },
     ...nodeFiles,
   ];
 
