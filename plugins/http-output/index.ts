@@ -17,7 +17,7 @@ export const manifest: PluginModule['manifest'] = {
     { name: 'headers', label: 'Headers', type: 'json', required: false, default: {} },
     { name: 'body', label: 'Body', type: 'json', required: false, default: {} },
   ],
-  supportedPlatforms: ['local'],
+  supportedPlatforms: ['local', 'aws'],
 };
 
 async function callHttp(
@@ -62,6 +62,7 @@ async function callHttp(
 }
 
 export const generators: PluginModule['generators'] = {
+  aws: (nodeConfig, ctx) => generators.local(nodeConfig, ctx),
   local: (nodeConfig) => {
     const method = JSON.stringify((nodeConfig.method as string | undefined) ?? 'GET');
     const url = JSON.stringify(nodeConfig.url ?? '');

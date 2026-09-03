@@ -7,6 +7,7 @@ import { useWorkflowStore } from '../store/workflow-store';
 import { Button } from './ui/button';
 import { useProject } from '../context/ProjectContext';
 import { ProjectManagerModal } from './ProjectManagerModal';
+import { CompilerModal } from './CompilerModal';
 
 export interface ToolbarProps {
   catalog: PluginCatalogAdapter;
@@ -20,7 +21,7 @@ type ToolbarStatus = { kind: 'idle' } | { kind: 'saved' } | { kind: 'blocked'; n
  * RF-07 (Save) and RF-06/RF-12 (Test). Saving never validates required
  * parameters (RN-04) — testing does, via the same buildZodSchema used by
  * NodeConfigPanel, before ever calling into ValidationRuntimeAdapter.
- * Integrates ProjectContext (005-workflow-project-management, RF-02, RF-10, RF-11).
+ * Integrates ProjectContext (005-workflow-project-management) and CompilerModal (006-compiler).
  */
 export function Toolbar({ catalog, persistence, validation }: ToolbarProps) {
   const workflow = useWorkflowStore((s) => s.workflow);
@@ -28,6 +29,7 @@ export function Toolbar({ catalog, persistence, validation }: ToolbarProps) {
   const [status, setStatus] = useState<ToolbarStatus>({ kind: 'idle' });
   const [mode, setMode] = useState<PluginExecutionMode>('sandbox');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isCompilerOpen, setIsCompilerOpen] = useState(false);
 
   let projectCtx: ReturnType<typeof useProject> | null = null;
   try {
@@ -67,7 +69,7 @@ export function Toolbar({ catalog, persistence, validation }: ToolbarProps) {
 
     for (const node of workflow.nodes) {
       const manifest = manifestsById.get(node.pluginId);
-      if (!manifest) continue; // a missing plugin is reported by the node itself (RF-11), not here
+      if (!manifest) continue;
       const schema = buildZodSchema(manifest.parameters);
       const result = schema.safeParse(node.parameters);
       if (!result.success) {
@@ -166,12 +168,25 @@ export function Toolbar({ catalog, persistence, validation }: ToolbarProps) {
           >
             📁 Projetos
           </Button>
+          <Button
+            size="sm"
+            onClick={() => setIsCompilerOpen(true)}
+            className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs shadow-sm shadow-indigo-200"
+            data-testid="open-compiler-modal-btn"
+          >
+            ⚡ Compilar
+          </Button>
         </div>
       </header>
 
       <ProjectManagerModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
+      />
+
+      <CompilerModal
+        isOpen={isCompilerOpen}
+        onClose={() => setIsCompilerOpen(false)}
       />
     </>
   );

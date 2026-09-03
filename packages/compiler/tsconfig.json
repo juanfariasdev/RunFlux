@@ -12,12 +12,12 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "verbatimModuleSyntax": true
   },
   "include": ["src/**/*.ts"],
   "references": [
-    { "path": "../../packages/workflow-model" },
-    { "path": "../../packages/plugin-system" },
-    { "path": "../../packages/compiler" }
+    { "path": "../plugin-system" },
+    { "path": "../workflow-model" }
   ]
 }

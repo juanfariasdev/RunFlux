@@ -5,6 +5,7 @@
     { "path": "packages/workflow-model" },
     { "path": "packages/validation-runtime" },
     { "path": "packages/expression-engine" },
+    { "path": "packages/compiler" },
     { "path": "apps/project-server" }
   ]
 }

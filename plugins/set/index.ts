@@ -16,7 +16,7 @@ export const manifest: PluginModule['manifest'] = {
     { name: 'fields', label: 'Fields', type: 'json', required: true, default: [] },
     { name: 'includeOtherFields', label: 'Include other input fields', type: 'boolean', required: false, default: false },
   ],
-  supportedPlatforms: ['local'],
+  supportedPlatforms: ['local', 'aws'],
 };
 
 interface FieldConfig {
@@ -66,6 +66,7 @@ function compose(fields: FieldConfig[], includeOtherFields: boolean, input: unkn
 }
 
 export const generators: PluginModule['generators'] = {
+  aws: (nodeConfig, ctx) => generators.local(nodeConfig, ctx),
   local: (nodeConfig) => {
     const fields = JSON.stringify(Array.isArray(nodeConfig.fields) ? nodeConfig.fields : []);
     const includeOtherFields = JSON.stringify(Boolean(nodeConfig.includeOtherFields));

@@ -16,7 +16,7 @@ export const manifest: PluginModule['manifest'] = {
     { name: 'combinator', label: 'Combinator (and/or)', type: 'string', required: false, default: 'and' },
     { name: 'conditions', label: 'Conditions', type: 'json', required: true, default: [] },
   ],
-  supportedPlatforms: ['local'],
+  supportedPlatforms: ['local', 'aws'],
   outputs: ['main'],
 };
 
@@ -51,6 +51,7 @@ function combine(results: boolean[], combinator: string): boolean {
 }
 
 export const generators: PluginModule['generators'] = {
+  aws: (nodeConfig, ctx) => generators.local(nodeConfig, ctx),
   local: (nodeConfig) => {
     const conditions = JSON.stringify(Array.isArray(nodeConfig.conditions) ? nodeConfig.conditions : []);
     const combinator = JSON.stringify((nodeConfig.combinator as string | undefined) ?? 'and');

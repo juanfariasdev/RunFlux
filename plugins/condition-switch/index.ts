@@ -24,7 +24,7 @@ export const manifest: PluginModule['manifest'] = {
     { name: 'rules', label: 'Rules (ordered, first match wins)', type: 'json', required: true, default: [] },
     { name: 'fallbackEnabled', label: 'Enable fallback output', type: 'boolean', required: false, default: false },
   ],
-  supportedPlatforms: ['local'],
+  supportedPlatforms: ['local', 'aws'],
   outputs: [...RULE_OUTPUTS, 'fallback'],
 };
 
@@ -70,6 +70,7 @@ function matchRule(rule: SwitchRule): boolean {
 }
 
 export const generators: PluginModule['generators'] = {
+  aws: (nodeConfig, ctx) => generators.local(nodeConfig, ctx),
   local: (nodeConfig) => {
     const rules = JSON.stringify(Array.isArray(nodeConfig.rules) ? nodeConfig.rules : []);
     const fallbackEnabled = JSON.stringify(Boolean(nodeConfig.fallbackEnabled));

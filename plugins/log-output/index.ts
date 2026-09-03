@@ -12,10 +12,11 @@ export const manifest: PluginModule['manifest'] = {
   category: 'output',
   version: '1.0.0',
   parameters: [{ name: 'label', label: 'Label', type: 'string', required: false, default: 'Log' }],
-  supportedPlatforms: ['local'],
+  supportedPlatforms: ['local', 'aws'],
 };
 
 export const generators: PluginModule['generators'] = {
+  aws: (nodeConfig, ctx) => generators.local(nodeConfig, ctx),
   local: (nodeConfig) => {
     const label = JSON.stringify((nodeConfig.label as string | undefined) ?? 'Log');
     return {

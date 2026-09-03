@@ -12,7 +12,8 @@
     "test": "vitest run",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev --name init_project_management",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "clean:output": "node -e \"const fs = require('fs'); const p = require('path').resolve(process.cwd(), 'output-backends'); if (fs.existsSync(p)) { fs.rmSync(p, { recursive: true, force: true }); console.log('[clean:output] output-backends cleaned.'); }\""
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
@@ -20,7 +21,10 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.0",
-    "zod": "^3.23.8"
+    "zod": "^3.23.8",
+    "jszip": "^3.10.1",
+    "@runflux/compiler": "*",
+    "@runflux/plugin-system": "*"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

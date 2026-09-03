@@ -1,18 +1,20 @@
 import express, { type Express, type Request, type Response, type NextFunction } from 'express';
 import cors from 'cors';
 import { createProjectsRouter } from './routes/projects.js';
+import { createCompilerRouter } from './routes/compiler.js';
 import {
   ProjectService,
   ProjectConflictError,
   ProjectNotFoundError,
   ValidationError,
 } from './services/project-service.js';
+import { CompilerService } from './services/compiler-service.js';
 
-export function createServer(service?: ProjectService): Express {
+export function createServer(service?: ProjectService, compilerService?: CompilerService): Express {
   const app = express();
 
   app.use(cors());
-  app.use(express.json({ limit: '10mb' }));
+  app.use(express.json({ limit: '50mb' }));
 
   app.use((req, res, next) => {
     const start = Date.now();
@@ -26,6 +28,7 @@ export function createServer(service?: ProjectService): Express {
   });
 
   app.use('/api/projects', createProjectsRouter(service));
+  app.use('/api/compiler', createCompilerRouter(compilerService));
 
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     if (err instanceof ValidationError) {

@@ -22,9 +22,13 @@
     "db:migrate": "npm run db:migrate --workspace=@runflux/project-server"
   },
   "devDependencies": {
+    "@types/jszip": "^3.4.0",
     "@types/node": "^22.5.0",
     "concurrently": "^9.1.2",
     "typescript": "^5.5.4",
     "vitest": "^4.1.9"
+  },
+  "dependencies": {
+    "jszip": "^3.10.1"
   }
 }
