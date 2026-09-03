@@ -29,6 +29,8 @@
     "vitest": "^4.1.9"
   },
   "dependencies": {
-    "jszip": "^3.10.1"
+    "@types/node-cron": "^3.0.11",
+    "jszip": "^3.10.1",
+    "node-cron": "^4.6.0"
   }
 }

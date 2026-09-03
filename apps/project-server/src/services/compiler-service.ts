@@ -209,14 +209,20 @@ export class CompilerService {
 
     try {
       if (targetPlatform === 'local') {
+        const entryPoints = [
+          path.join(outputDir, 'src', 'server.ts'),
+          path.join(outputDir, 'src', 'run.ts'),
+        ];
+        const runCronPath = path.join(outputDir, 'src', 'run-cron.ts');
+        if (fs.existsSync(runCronPath)) {
+          entryPoints.push(runCronPath);
+        }
         await esbuild.build({
-          entryPoints: [
-            path.join(outputDir, 'src', 'server.ts'),
-            path.join(outputDir, 'src', 'run.ts'),
-          ],
+          entryPoints,
           bundle: true,
           format: 'esm',
           splitting: true,
+          packages: 'external',
           outExtension: { '.js': '.mjs' },
           platform: 'node',
           target: 'node24',

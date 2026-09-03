@@ -10,15 +10,27 @@ export interface AwsGeneratorContext {
 
 export function generateAwsProject(context: AwsGeneratorContext): GeneratedFile[] {
   const { workflow, projectName, nodeFiles } = context;
-  const sanitizedPkgName = projectName
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9-]/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '') || 'runflux-aws-app';
+  const sanitizedPkgName =
+    projectName
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9-]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '') || 'runflux-aws-app';
 
   const stackName = projectName.replace(/[^a-zA-Z0-9]/g, '') + 'Stack' || 'WorkflowStack';
+
+  // Detect triggers
+  const cronNode = workflow.nodes.find((n) => n.pluginId === 'trigger-cron');
+  const webhookNode = workflow.nodes.find((n) => n.pluginId === 'trigger-webhook');
+
+  const hasCron = Boolean(cronNode);
+  const hasWebhook = Boolean(webhookNode);
+
+  const cronExpression = (cronNode?.parameters?.expression as string) || '*/15 * * * *';
+  const webhookSecretEnvVar = (webhookNode?.parameters?.secretEnvVar as string) || 'WEBHOOK_SECRET';
+  const webhookAuth = (webhookNode?.parameters?.auth as string) || 'none';
 
   const packageJsonContent = JSON.stringify(
     {
@@ -83,7 +95,7 @@ export function generateAwsProject(context: AwsGeneratorContext): GeneratedFile[
     2
   );
 
-  const readmeContent = `# ${projectName} (AWS Serverless Backend)
+  let readmeContent = `# ${projectName} (AWS Serverless Backend)
 
 Compiled serverless backend for AWS Lambda and AWS CDK generated with [RunFlux](https://runflux.io).
 
@@ -92,8 +104,16 @@ Compiled serverless backend for AWS Lambda and AWS CDK generated with [RunFlux](
 - **Zero Runtime Dependencies:** No \`node_modules\` required inside the deployment zip
 - **Infrastructure as Code:** AWS CDK Stack in \`lib/workflow-stack.ts\`
 - **Endpoint:** AWS Lambda Function URL (Public HTTP endpoint with CORS support)
+`;
 
-## Commands
+  if (hasCron) {
+    readmeContent += `\n- **Scheduled Cron:** AWS EventBridge Rule triggering Lambda on schedule: \`${cronExpression}\`\n`;
+  }
+  if (hasWebhook) {
+    readmeContent += `\n- **Webhook Security:** Protected via \`${webhookSecretEnvVar}\` environment variable (Auth: ${webhookAuth})\n`;
+  }
+
+  readmeContent += `\n## Commands
 \`\`\`bash
 npm run build    # Compile TypeScript & bundle with esbuild
 npm run package  # Package dist/* into compiled/function.zip
@@ -112,11 +132,33 @@ new WorkflowStack(app, '${stackName}', {
 });
 `;
 
-  const libStackContent = `import * as cdk from 'aws-cdk-lib';
-import { Stack, StackProps } from 'aws-cdk-lib';
-import * as lambda from 'aws-cdk-lib/aws-lambda';
-import { Construct } from 'constructs';
-import * as path from 'node:path';
+  // CDK lib/workflow-stack.ts
+  const cdkImports = [
+    "import * as cdk from 'aws-cdk-lib';",
+    "import { Stack, StackProps } from 'aws-cdk-lib';",
+    "import * as lambda from 'aws-cdk-lib/aws-lambda';",
+    "import { Construct } from 'constructs';",
+    "import * as path from 'node:path';",
+  ];
+
+  if (hasCron) {
+    cdkImports.push("import * as events from 'aws-cdk-lib/aws-events';");
+    cdkImports.push("import * as targets from 'aws-cdk-lib/aws-events-targets';");
+  }
+
+  let cronCdkBlock = '';
+  if (hasCron) {
+    cronCdkBlock = `
+    // Scheduled EventBridge Rule
+    const cronRule = new events.Rule(this, 'WorkflowCronRule', {
+      schedule: events.Schedule.expression('cron(${cronExpression})'),
+      description: 'Scheduled trigger for workflow ${projectName}',
+    });
+    cronRule.addTarget(new targets.LambdaFunction(workflowFunction));
+`;
+  }
+
+  const libStackContent = `${cdkImports.join('\n')}
 
 export class WorkflowStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
@@ -131,6 +173,7 @@ export class WorkflowStack extends Stack {
       environment: {
         WORKFLOW_NAME: '${projectName}',
         NODE_ENV: 'production',
+        ${hasWebhook ? `${webhookSecretEnvVar}: process.env.${webhookSecretEnvVar} || '',` : ''}
       },
     });
 
@@ -147,6 +190,7 @@ export class WorkflowStack extends Stack {
       value: functionUrl.url,
       description: 'Public endpoint to invoke the compiled workflow',
     });
+${cronCdkBlock}
   }
 }
 `;
@@ -182,11 +226,34 @@ export class WorkflowStack extends Stack {
     }`);
   });
 
+  let webhookAuthCheck = '';
+  if (hasWebhook && webhookAuth === 'secret') {
+    webhookAuthCheck = `
+    const expectedSecret = process.env.${webhookSecretEnvVar};
+    if (expectedSecret) {
+      const clientSecret = event?.headers?.['x-webhook-secret'] || event?.headers?.['X-Webhook-Secret'];
+      if (!clientSecret || clientSecret !== expectedSecret) {
+        return {
+          statusCode: 401,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Headers': '*',
+            'Access-Control-Allow-Methods': 'OPTIONS,POST,GET',
+          },
+          body: JSON.stringify({ error: 'Unauthorized: invalid or missing X-Webhook-Secret header' }),
+        };
+      }
+    }
+`;
+  }
+
   const handlerContent = `import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
 ${importsList.join('\n')}
 
 export const handler = async (event: APIGatewayProxyEventV2 | any): Promise<APIGatewayProxyResultV2> => {
   try {
+${webhookAuthCheck}
     let currentPayload: any = {};
     if (event && event.body !== undefined) {
       currentPayload = typeof event.body === 'string' ? JSON.parse(event.body || '{}') : event.body;

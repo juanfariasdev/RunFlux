@@ -11,13 +11,63 @@ export interface LocalGeneratorContext {
 export function generateLocalProject(context: LocalGeneratorContext): GeneratedFile[] {
   const { workflow, projectName, nodeFiles, options } = context;
   const port = options?.port || 3000;
-  const sanitizedPkgName = projectName
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9-]/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '') || 'runflux-app';
+  const sanitizedPkgName =
+    projectName
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9-]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '') || 'runflux-app';
+
+  // Detect special trigger nodes in workflow
+  const cronNode = workflow.nodes.find((n) => n.pluginId === 'trigger-cron');
+  const webhookNodes = workflow.nodes.filter((n) => n.pluginId === 'trigger-webhook');
+
+  const hasCron = Boolean(cronNode);
+  const hasWebhook = webhookNodes.length > 0;
+
+  const cronExpression = (cronNode?.parameters?.expression as string) || '*/15 * * * *';
+  const cronTimezone = (cronNode?.parameters?.timezone as string) || 'UTC';
+
+  // Scripts and dependencies
+  const buildEntrypoints = ['src/server.ts', 'src/run.ts'];
+  if (hasCron) {
+    buildEntrypoints.push('src/run-cron.ts');
+  }
+
+  const scripts: Record<string, string> = {
+    clean: 'rm -rf dist compiled',
+    build: `NODE_ENV=production npm run clean && esbuild ${buildEntrypoints.join(' ')} --bundle --format=esm --splitting --packages=external --out-extension:.js=.mjs --platform=node --target=node24 --banner:js="import { createRequire } from 'module'; const require = createRequire(import.meta.url);" --outdir=dist`,
+    package: 'npm run build && rm -rf compiled && mkdir -p compiled && zip -j compiled/function.zip dist/*',
+    start: 'node dist/server.mjs',
+    run: 'node dist/run.mjs',
+    dev: 'tsx watch src/server.ts',
+  };
+
+  if (hasCron) {
+    scripts.cron = 'node dist/run-cron.mjs';
+  }
+
+  const dependencies: Record<string, string> = {
+    cors: '^2.8.5',
+    dotenv: '^16.4.5',
+    express: '^4.21.0',
+  };
+
+  const devDependencies: Record<string, string> = {
+    '@types/cors': '^2.8.17',
+    '@types/express': '^4.17.21',
+    '@types/node': '^22.5.0',
+    esbuild: '^0.28.2',
+    tsx: '^4.19.0',
+    typescript: '^5.5.4',
+  };
+
+  if (hasCron) {
+    dependencies['node-cron'] = '^3.0.3';
+    devDependencies['@types/node-cron'] = '^3.0.11';
+  }
 
   const packageJsonContent = JSON.stringify(
     {
@@ -25,27 +75,9 @@ export function generateLocalProject(context: LocalGeneratorContext): GeneratedF
       version: '1.0.0',
       private: true,
       type: 'module',
-      scripts: {
-        clean: 'rm -rf dist compiled',
-        build: 'NODE_ENV=production npm run clean && esbuild src/server.ts src/run.ts --bundle --format=esm --splitting --out-extension:.js=.mjs --platform=node --target=node24 --banner:js="import { createRequire } from \'module\'; const require = createRequire(import.meta.url);" --outdir=dist',
-        package: 'npm run build && rm -rf compiled && mkdir -p compiled && zip -j compiled/function.zip dist/*',
-        start: 'node dist/server.mjs',
-        run: 'node dist/run.mjs',
-        dev: 'tsx watch src/server.ts',
-      },
-      dependencies: {
-        cors: '^2.8.5',
-        dotenv: '^16.4.5',
-        express: '^4.21.0',
-      },
-      devDependencies: {
-        '@types/cors': '^2.8.17',
-        '@types/express': '^4.17.21',
-        '@types/node': '^22.5.0',
-        esbuild: '^0.28.2',
-        tsx: '^4.19.0',
-        typescript: '^5.5.4',
-      },
+      scripts,
+      dependencies,
+      devDependencies,
     },
     null,
     2
@@ -77,11 +109,17 @@ EXPOSE ${port}
 CMD ["node", "dist/server.mjs"]
 `;
 
-  const envExampleContent = `PORT=${port}
+  let envExampleContent = `PORT=${port}
 NODE_ENV=production
 `;
+  if (hasWebhook) {
+    envExampleContent += `WEBHOOK_SECRET=your-webhook-secret-token\n`;
+  }
+  if (hasCron) {
+    envExampleContent += `ENABLE_INLINE_CRON=false\nCRON_TIMEZONE=${cronTimezone}\n`;
+  }
 
-  const readmeContent = `# ${projectName}
+  let readmeContent = `# ${projectName}
 
 Standalone backend compiled with [RunFlux](https://runflux.io).
 
@@ -103,18 +141,33 @@ npm run run '{"example": "payload"}'
 npm run start
 \`\`\`
 - Health Check: \`GET http://localhost:${port}/health\`
-- Execute Workflow: \`POST http://localhost:${port}/api/execute\` with JSON body
+- Execute Default Workflow: \`POST http://localhost:${port}/api/execute\`
+`;
 
-### 3. Build & Package
+  if (hasWebhook) {
+    readmeContent += `\n### 3. Configured Webhook Endpoints\n`;
+    webhookNodes.forEach((node) => {
+      const p = (node.parameters?.path as string) || '/webhook';
+      const m = ((node.parameters?.httpMethod as string) || 'POST').toUpperCase();
+      const auth = (node.parameters?.auth as string) || 'none';
+      readmeContent += `- \`${m} http://localhost:${port}${p}\` (Auth: ${auth})\n`;
+    });
+  }
+
+  if (hasCron) {
+    readmeContent += `\n### 4. Scheduled Cron Worker
+Run the dedicated background cron scheduler:
+\`\`\`bash
+npm run cron
+\`\`\`
+Schedule: \`${cronExpression}\` (Timezone: ${cronTimezone})
+`;
+  }
+
+  readmeContent += `\n### Build & Package
 \`\`\`bash
 npm run build    # Produces optimized dist/*.mjs bundles
 npm run package  # Creates compiled/function.zip
-\`\`\`
-
-### 4. Container Deployment
-\`\`\`bash
-docker build -t ${sanitizedPkgName} .
-docker run -p ${port}:${port} ${sanitizedPkgName}
 \`\`\`
 `;
 
@@ -132,7 +185,6 @@ docker run -p ${port}:${port} ${sanitizedPkgName}
       const stepResult = await ${importName}.run(currentPayload);
       if (stepResult && typeof stepResult === 'object' && 'activeOutput' in stepResult) {
         if (stepResult.activeOutput === null) {
-          console.log('[RunFlux Execution] Flow halted/filtered at node: ${file.path}');
           return { success: true, result: null, haltedAt: '${file.path}' };
         }
         currentPayload = stepResult.value !== undefined ? stepResult.value : stepResult;
@@ -142,10 +194,80 @@ docker run -p ${port}:${port} ${sanitizedPkgName}
     }`);
   });
 
+  // Webhook express routes
+  let webhookRoutesCode = '';
+  if (hasWebhook) {
+    webhookNodes.forEach((wn) => {
+      const p = (wn.parameters?.path as string) || '/webhook';
+      const m = ((wn.parameters?.httpMethod as string) || 'POST').toLowerCase();
+      const method = m === 'any' ? 'all' : m;
+      const auth = (wn.parameters?.auth as string) || 'none';
+      const secretEnvVar = (wn.parameters?.secretEnvVar as string) || 'WEBHOOK_SECRET';
+
+      webhookRoutesCode += `
+app.${method}('${p}', async (req: Request, res: Response) => {
+  ${
+    auth === 'secret'
+      ? `const expectedSecret = process.env.${secretEnvVar};
+  const clientSecret = req.headers['x-webhook-secret'];
+  if (!expectedSecret || clientSecret !== expectedSecret) {
+    return res.status(401).json({ error: 'Unauthorized: invalid or missing X-Webhook-Secret header' });
+  }`
+      : ''
+  }
+
+  try {
+    const webhookPayload = {
+      body: req.body,
+      headers: req.headers,
+      query: req.query,
+      path: '${p}',
+      method: req.method,
+      receivedAt: new Date().toISOString(),
+    };
+    const execution = await runWorkflow(webhookPayload);
+    if (!execution.success) {
+      return res.status(500).json(execution);
+    }
+    return res.status(200).json(execution);
+  } catch (err: any) {
+    console.error('[RunFlux Webhook Error]', err);
+    return res.status(500).json({ success: false, error: err.message || 'Error processing webhook' });
+  }
+});
+`;
+    });
+  }
+
+  let cronInlineCode = '';
+  if (hasCron) {
+    cronInlineCode = `
+if (process.env.ENABLE_INLINE_CRON === 'true') {
+  cron.schedule('${cronExpression}', async () => {
+    console.log('[RunFlux Inline Cron] Triggering scheduled execution...');
+    try {
+      const payload = {
+        triggeredAt: new Date().toISOString(),
+        cronExpression: '${cronExpression}',
+        timezone: '${cronTimezone}',
+      };
+      await runWorkflow(payload);
+    } catch (err) {
+      console.error('[RunFlux Inline Cron Error]', err);
+    }
+  }, {
+    timezone: '${cronTimezone}'
+  });
+  console.log('[RunFlux Server] Inline cron enabled: "${cronExpression}"');
+}
+`;
+  }
+
   const serverTsContent = `import express, { Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-${importsList.join('\n')}
+${hasCron ? "import cron from 'node-cron';" : ''}
+import { runWorkflow } from './run.js';
 
 dotenv.config();
 
@@ -167,13 +289,9 @@ app.get('/health', (_req: Request, res: Response) => {
 
 app.post('/api/execute', async (req: Request, res: Response) => {
   try {
-    let currentPayload: any = req.body || {};
-${executionsList.join('\n')}
-
-    res.json({
-      success: true,
-      result: currentPayload
-    });
+    const payload = req.body || {};
+    const execution = await runWorkflow(payload);
+    res.json(execution);
   } catch (error: any) {
     console.error('[RunFlux Server Error]', error);
     res.status(500).json({
@@ -182,7 +300,8 @@ ${executionsList.join('\n')}
     });
   }
 });
-
+${webhookRoutesCode}
+${cronInlineCode}
 app.listen(port, () => {
   console.log(\`[RunFlux Server] Compiled server running on port \${port}\`);
 });
@@ -238,6 +357,44 @@ if (isDirectRun) {
     { path: 'src/run.ts', content: runTsContent, type: 'source' },
     ...nodeFiles,
   ];
+
+  if (hasCron) {
+    const runCronTsContent = `import dotenv from 'dotenv';
+import cron from 'node-cron';
+import { runWorkflow } from './run.js';
+
+dotenv.config();
+
+const CRON_EXPRESSION = ${JSON.stringify(cronExpression)};
+const CRON_TIMEZONE = process.env.CRON_TIMEZONE || ${JSON.stringify(cronTimezone)};
+
+console.log(\`[RunFlux Cron Worker] Starting cron worker for workflow "${projectName}"\`);
+console.log(\`[RunFlux Cron Worker] Schedule: "\${CRON_EXPRESSION}" (Timezone: \${CRON_TIMEZONE})\`);
+
+cron.schedule(
+  CRON_EXPRESSION,
+  async () => {
+    const timestamp = new Date().toISOString();
+    console.log(\`[RunFlux Cron Worker] [\${timestamp}] Triggering scheduled execution...\`);
+    try {
+      const payload = {
+        triggeredAt: timestamp,
+        cronExpression: CRON_EXPRESSION,
+        timezone: CRON_TIMEZONE,
+      };
+      const result = await runWorkflow(payload);
+      console.log(\`[RunFlux Cron Worker] [\${timestamp}] Execution result:\`, JSON.stringify(result));
+    } catch (err) {
+      console.error(\`[RunFlux Cron Worker] [\${timestamp}] Execution error:\`, err);
+    }
+  },
+  {
+    timezone: CRON_TIMEZONE,
+  }
+);
+`;
+    files.push({ path: 'src/run-cron.ts', content: runCronTsContent, type: 'source' });
+  }
 
   return files;
 }
