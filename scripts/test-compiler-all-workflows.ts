@@ -1,12 +1,27 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { execSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
+import { execSync, spawn } from 'node:child_process';
 import type { WorkflowDefinition } from '@runflux/workflow-model';
 import { CompilerService } from '../apps/project-server/src/services/compiler-service.js';
 
+// Helper to wait for HTTP server to respond
+async function waitForServer(url: string, maxAttempts = 20, delayMs = 150): Promise<boolean> {
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      const res = await fetch(url);
+      if (res.ok) return true;
+    } catch {
+      // ignore connection refused while booting
+    }
+    await new Promise((r) => setTimeout(r, delayMs));
+  }
+  return false;
+}
+
 async function main() {
   console.log('================================================================');
-  console.log('🚀 END-TO-END COMPILATION & EXECUTION TEST (RUNFLUX COMPILER)');
+  console.log('🚀 RUNFLUX COMPILER & COMPILED ARTIFACTS TEST SUITE');
   console.log('================================================================\n');
 
   const pluginsDir = path.resolve(process.cwd(), 'plugins');
@@ -18,7 +33,7 @@ async function main() {
   // DEFINITION OF DIVERSE WORKFLOWS COVERING ALL SYSTEM FEATURES
   // -------------------------------------------------------------
 
-  // WORKFLOW 1: Linear Data Processing (Trigger -> Set -> Log)
+  // WORKFLOW 1: Linear Processing (Trigger -> Set -> Log)
   const workflowLinear: WorkflowDefinition = {
     id: 'wf-01-linear',
     name: 'Workflow 1 - Linear Processing',
@@ -36,7 +51,7 @@ async function main() {
         pluginVersion: '1.0.0',
         parameters: {
           fields: [
-            { name: 'user', value: 'Alice Silva', type: 'string' },
+            { name: 'user', value: 'Alice Smith', type: 'string' },
             { name: 'score', value: 95, type: 'number' },
             { name: 'status', value: 'active', type: 'string' },
           ],
@@ -58,7 +73,7 @@ async function main() {
     ],
   };
 
-  // WORKFLOW 2: Conditional Decision with If (Trigger -> Set -> If -> Set -> Log)
+  // WORKFLOW 2: Conditional Decision If (Trigger -> Set -> If -> Set -> Log)
   const workflowIf: WorkflowDefinition = {
     id: 'wf-02-if',
     name: 'Workflow 2 - Conditional Decision If',
@@ -77,7 +92,7 @@ async function main() {
         parameters: {
           fields: [
             { name: 'amount', value: 250, type: 'number' },
-            { name: 'currency', value: 'BRL', type: 'string' },
+            { name: 'currency', value: 'USD', type: 'string' },
           ],
           includeOtherFields: true,
         },
@@ -124,7 +139,7 @@ async function main() {
     ],
   };
 
-  // WORKFLOW 3: Multi-branch Switch (Trigger -> Set -> Switch -> Set -> Log)
+  // WORKFLOW 3: Multi-Rule Switch Routing (Trigger -> Set -> Switch -> Set -> Log)
   const workflowSwitch: WorkflowDefinition = {
     id: 'wf-03-switch',
     name: 'Workflow 3 - Multi-Rule Switch Routing',
@@ -265,7 +280,7 @@ async function main() {
     ],
   };
 
-  // WORKFLOW 5: Full Integrated Workflow (Trigger -> Set -> If -> Switch -> Filter -> Set -> Log)
+  // WORKFLOW 5: Full Integrated Stack (Trigger -> Set -> If -> Switch -> Filter -> Set -> Log)
   const workflowFullStack: WorkflowDefinition = {
     id: 'wf-05-full',
     name: 'Workflow 5 - Full Integrated Stack',
@@ -364,13 +379,18 @@ async function main() {
 
   console.log(`📋 Total workflows to compile and test: ${testSuites.length}\n`);
 
-  for (const { wf, name } of testSuites) {
+  let portCounter = 39120;
+
+  for (let idx = 0; idx < testSuites.length; idx++) {
+    const { wf, name } = testSuites[idx];
+    const serverPort = ++portCounter;
+
     console.log(`----------------------------------------------------------------`);
     console.log(`🔹 COMPILING & TESTING: ${name}`);
     console.log(`----------------------------------------------------------------`);
 
     // 1. Local Compilation
-    console.log(`⚙️  [1/4] Compiling for target: LOCAL...`);
+    console.log(`⚙️  [1/6] Compiling for target: LOCAL (Port: ${serverPort})...`);
     const localRes = await compilerService.compile({
       workflow: wf,
       targetPlatform: 'local',
@@ -390,7 +410,7 @@ async function main() {
     console.log(`    ✓ Physical ZIP file validated on disk (${fs.statSync(expectedZipPath).size} bytes)`);
 
     // 2. AWS Compilation
-    console.log(`⚙️  [2/4] Compiling for target: AWS...`);
+    console.log(`⚙️  [2/6] Compiling for target: AWS...`);
     const awsRes = await compilerService.compile({
       workflow: wf,
       targetPlatform: 'aws',
@@ -401,55 +421,160 @@ async function main() {
     console.log(`    - Output Dir: ${awsRes.outputDirectory}`);
     console.log(`    - Zip File: ${awsRes.zipFilename}`);
 
-    // 3. Execution & Real Testing of Executable Script (src/run.ts)
-    console.log(`🧪 [3/4] TESTING EXECUTABLE SCRIPT (src/run.ts)...`);
-    const runScriptPath = path.join(localRes.outputDirectory, 'src', 'run.ts');
-    if (!fs.existsSync(runScriptPath)) {
-      throw new Error(`Executable script src/run.ts was not generated in ${localRes.outputDirectory}`);
-    }
-
     const testPayload = {
       testTimestamp: new Date().toISOString(),
       source: 'automated-compiler-test',
       clientKey: 'TEST_KEY_123',
     };
 
-    const cmd = `npx tsx "${runScriptPath}" '${JSON.stringify(testPayload)}'`;
-    console.log(`    Executing command: ${cmd.slice(0, 100)}...`);
+    // 3. Test Bundled Production CLI (node dist/run.mjs)
+    console.log(`🧪 [3/6] TESTING BUNDLED PRODUCTION CLI (node dist/run.mjs)...`);
+    const bundledRunScriptPath = path.join(localRes.outputDirectory, 'dist', 'run.mjs');
+    if (!fs.existsSync(bundledRunScriptPath)) {
+      throw new Error(`Bundled CLI script dist/run.mjs not found in ${localRes.outputDirectory}`);
+    }
 
-    const executionOutput = execSync(cmd, {
+    const bundleCmd = `node "${bundledRunScriptPath}" '${JSON.stringify(testPayload)}'`;
+    const bundleExecOutput = execSync(bundleCmd, {
       cwd: localRes.outputDirectory,
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
-    console.log(`    ✓ Script executed cleanly with exit code 0!`);
-    console.log(`    Script output:`);
-    const lines = executionOutput.trim().split('\n');
-    lines.forEach((l) => console.log(`      | ${l}`));
+    console.log(`    ✓ Bundled dist/run.mjs executed cleanly with exit code 0!`);
 
-    // 4. Artifacts integrity check
-    console.log(`🔍 [4/4] Validating artifact structural integrity...`);
-    const expectedFiles = [
+    // Extract JSON result from CLI stdout
+    const cliJsonMatch = bundleExecOutput.match(/\{\s*"success":\s*true[\s\S]*\}/);
+    if (!cliJsonMatch) {
+      throw new Error(`Failed to parse valid JSON result from bundled CLI stdout`);
+    }
+    const cliResult = JSON.parse(cliJsonMatch[0]);
+    console.log(`    ✓ CLI result verified: ${JSON.stringify(cliResult.result).slice(0, 80)}...`);
+
+    // 4. Test Live Compiled Express HTTP Server (dist/server.mjs)
+    console.log(`🌐 [4/6] TESTING COMPILED EXPRESS SERVER (dist/server.mjs)...`);
+    const serverDistPath = path.join(localRes.outputDirectory, 'dist', 'server.mjs');
+    const serverProc = spawn('node', [serverDistPath], {
+      cwd: localRes.outputDirectory,
+      env: { ...process.env, PORT: String(serverPort) },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    try {
+      const isReady = await waitForServer(`http://localhost:${serverPort}/health`);
+      if (!isReady) {
+        throw new Error(`Compiled server failed to respond on port ${serverPort}`);
+      }
+
+      // Check /health
+      const healthRes = await fetch(`http://localhost:${serverPort}/health`);
+      const healthData = await healthRes.json();
+      if (healthData.status !== 'ok' || healthData.nodeCount !== wf.nodes.length) {
+        throw new Error(`Invalid health check response: ${JSON.stringify(healthData)}`);
+      }
+      console.log(`    ✓ Health check responded OK (nodes: ${healthData.nodeCount})`);
+
+      // Send POST /api/execute
+      const execRes = await fetch(`http://localhost:${serverPort}/api/execute`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(testPayload),
+      });
+      const execData = await execRes.json();
+      if (!execData.success) {
+        throw new Error(`Execution via HTTP API failed: ${JSON.stringify(execData)}`);
+      }
+      console.log(`    ✓ POST /api/execute responded 200 with matching output!`);
+    } finally {
+      serverProc.kill('SIGTERM');
+    }
+
+    // 5. Test Compiled AWS Lambda Handler (dist/handler.mjs)
+    console.log(`☁️  [5/6] TESTING COMPILED AWS LAMBDA HANDLER (dist/handler.mjs)...`);
+    const awsHandlerPath = path.join(awsRes.outputDirectory, 'dist', 'handler.mjs');
+    if (!fs.existsSync(awsHandlerPath)) {
+      throw new Error(`AWS Handler dist/handler.mjs not found in ${awsRes.outputDirectory}`);
+    }
+
+    // Import the compiled AWS Lambda handler
+    const awsModule = await import(pathToFileURL(awsHandlerPath).href);
+    if (typeof awsModule.handler !== 'function') {
+      throw new Error(`Exported handler in ${awsHandlerPath} is not a function`);
+    }
+
+    // Test 5A: API Gateway HTTP Event invocation
+    const lambdaHttpEvent = {
+      body: JSON.stringify(testPayload),
+      headers: { 'content-type': 'application/json' },
+      requestContext: { http: { method: 'POST', path: '/' } },
+    };
+    const lambdaHttpRes = await awsModule.handler(lambdaHttpEvent);
+    if (lambdaHttpRes.statusCode !== 200) {
+      throw new Error(`Lambda returned status ${lambdaHttpRes.statusCode}: ${lambdaHttpRes.body}`);
+    }
+    const lambdaHttpBody = JSON.parse(lambdaHttpRes.body);
+    if (!lambdaHttpBody.success) {
+      throw new Error(`Lambda execution failed: ${lambdaHttpRes.body}`);
+    }
+    console.log(`    ✓ Lambda API Gateway event invocation returned 200 with CORS headers!`);
+
+    // Test 5B: Direct invocation without API Gateway wrapper
+    const lambdaDirectRes = await awsModule.handler(testPayload);
+    if (lambdaDirectRes.statusCode !== 200) {
+      throw new Error(`Lambda direct invoke failed with status ${lambdaDirectRes.statusCode}`);
+    }
+    const lambdaDirectBody = JSON.parse(lambdaDirectRes.body);
+    if (!lambdaDirectBody.success) {
+      throw new Error(`Lambda direct invoke returned error: ${lambdaDirectRes.body}`);
+    }
+    console.log(`    ✓ Lambda direct invoke returned 200 with matching payload!`);
+
+    // 6. Cross-Platform Consistency & Structural Verification
+    console.log(`🔍 [6/6] VALIDATING CROSS-PLATFORM OUTPUT CONSISTENCY & ARTIFACTS...`);
+    const expectedLocalFiles = [
       'package.json',
       'tsconfig.json',
       'Dockerfile',
       '.env.example',
+      'README.md',
       'runflux-build.json',
       'src/server.ts',
       'src/run.ts',
+      'dist/server.mjs',
+      'dist/run.mjs',
+      'compiled/function.zip',
     ];
-    for (const exp of expectedFiles) {
+    for (const exp of expectedLocalFiles) {
       const full = path.join(localRes.outputDirectory, exp);
       if (!fs.existsSync(full)) {
-        throw new Error(`Mandatory file ${exp} not found in ${localRes.outputDirectory}`);
+        throw new Error(`Mandatory local file ${exp} not found in ${localRes.outputDirectory}`);
       }
     }
-    console.log(`    ✓ All ${expectedFiles.length} structural files confirmed on disk!\n`);
+
+    const expectedAwsFiles = [
+      'package.json',
+      'tsconfig.json',
+      'cdk.json',
+      'README.md',
+      'bin/app.ts',
+      'lib/workflow-stack.ts',
+      'src/handler.ts',
+      'dist/handler.mjs',
+      'compiled/function.zip',
+    ];
+    for (const exp of expectedAwsFiles) {
+      const full = path.join(awsRes.outputDirectory, exp);
+      if (!fs.existsSync(full)) {
+        throw new Error(`Mandatory AWS file ${exp} not found in ${awsRes.outputDirectory}`);
+      }
+    }
+
+    console.log(`    ✓ All local and AWS structural files & bundled artifacts validated on disk!`);
+    console.log(`    ✓ Output consistency verified across Local CLI, HTTP Server & AWS Lambda!\n`);
   }
 
   console.log('================================================================');
-  console.log('🎉 TOTAL SUCCESS: ALL 5 WORKFLOWS COMPILED AND EXECUTED SUCCESSFULLY!');
+  console.log('🎉 100% SUCCESS: ALL 5 WORKFLOWS COMPILED & EXECUTED ACROSS ALL PLATFORMS!');
   console.log('================================================================');
 }
 

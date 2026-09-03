@@ -83,6 +83,24 @@ export function generateAwsProject(context: AwsGeneratorContext): GeneratedFile[
     2
   );
 
+  const readmeContent = `# ${projectName} (AWS Serverless Backend)
+
+Compiled serverless backend for AWS Lambda and AWS CDK generated with [RunFlux](https://runflux.io).
+
+## Architecture
+- **Lambda Function:** Bundled via \`esbuild\` into ultra-lightweight \`dist/handler.mjs\` (~2.5 KB)
+- **Zero Runtime Dependencies:** No \`node_modules\` required inside the deployment zip
+- **Infrastructure as Code:** AWS CDK Stack in \`lib/workflow-stack.ts\`
+- **Endpoint:** AWS Lambda Function URL (Public HTTP endpoint with CORS support)
+
+## Commands
+\`\`\`bash
+npm run build    # Compile TypeScript & bundle with esbuild
+npm run package  # Package dist/* into compiled/function.zip
+npm run deploy   # Deploy the CloudFormation stack to AWS
+\`\`\`
+`;
+
   const binAppContent = `#!/usr/bin/env node
 import 'source-map-support/register';
 import * as cdk from 'aws-cdk-lib';
@@ -118,6 +136,11 @@ export class WorkflowStack extends Stack {
 
     const functionUrl = workflowFunction.addFunctionUrl({
       authType: lambda.FunctionUrlAuthType.NONE,
+      cors: {
+        allowedOrigins: ['*'],
+        allowedMethods: [lambda.HttpMethod.ALL],
+        allowedHeaders: ['*'],
+      },
     });
 
     new cdk.CfnOutput(this, 'FunctionUrl', {
@@ -143,7 +166,12 @@ export class WorkflowStack extends Stack {
         if (stepResult.activeOutput === null) {
           return {
             statusCode: 200,
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*',
+              'Access-Control-Allow-Headers': '*',
+              'Access-Control-Allow-Methods': 'OPTIONS,POST,GET',
+            },
             body: JSON.stringify({ success: true, result: null, haltedAt: '${file.path}' }),
           };
         }
@@ -157,11 +185,13 @@ export class WorkflowStack extends Stack {
   const handlerContent = `import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
 ${importsList.join('\n')}
 
-export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> => {
+export const handler = async (event: APIGatewayProxyEventV2 | any): Promise<APIGatewayProxyResultV2> => {
   try {
     let currentPayload: any = {};
-    if (event.body) {
-      currentPayload = typeof event.body === 'string' ? JSON.parse(event.body) : event.body;
+    if (event && event.body !== undefined) {
+      currentPayload = typeof event.body === 'string' ? JSON.parse(event.body || '{}') : event.body;
+    } else if (event && typeof event === 'object' && Object.keys(event).length > 0) {
+      currentPayload = event;
     }
 ${executionsList.join('\n')}
 
@@ -169,6 +199,9 @@ ${executionsList.join('\n')}
       statusCode: 200,
       headers: {
         'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': '*',
+        'Access-Control-Allow-Methods': 'OPTIONS,POST,GET',
       },
       body: JSON.stringify({
         success: true,
@@ -181,6 +214,9 @@ ${executionsList.join('\n')}
       statusCode: 500,
       headers: {
         'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': '*',
+        'Access-Control-Allow-Methods': 'OPTIONS,POST,GET',
       },
       body: JSON.stringify({
         success: false,
@@ -195,6 +231,7 @@ ${executionsList.join('\n')}
     { path: 'package.json', content: packageJsonContent, type: 'config' },
     { path: 'tsconfig.json', content: tsconfigContent, type: 'config' },
     { path: 'cdk.json', content: cdkJsonContent, type: 'config' },
+    { path: 'README.md', content: readmeContent, type: 'asset' },
     { path: 'bin/app.ts', content: binAppContent, type: 'infrastructure' },
     { path: 'lib/workflow-stack.ts', content: libStackContent, type: 'infrastructure' },
     { path: 'src/handler.ts', content: handlerContent, type: 'source' },

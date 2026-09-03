@@ -81,6 +81,43 @@ CMD ["node", "dist/server.mjs"]
 NODE_ENV=production
 `;
 
+  const readmeContent = `# ${projectName}
+
+Standalone backend compiled with [RunFlux](https://runflux.io).
+
+## Project Overview
+- **Workflow ID:** \`${workflow.id}\`
+- **Total Nodes:** ${workflow.nodes.length}
+- **Architecture:** Express + TypeScript, bundled with \`esbuild\`
+
+## Running the Application
+
+### 1. Run as Standalone CLI
+Execute the workflow directly with JSON arguments:
+\`\`\`bash
+npm run run '{"example": "payload"}'
+\`\`\`
+
+### 2. Run as HTTP API Server
+\`\`\`bash
+npm run start
+\`\`\`
+- Health Check: \`GET http://localhost:${port}/health\`
+- Execute Workflow: \`POST http://localhost:${port}/api/execute\` with JSON body
+
+### 3. Build & Package
+\`\`\`bash
+npm run build    # Produces optimized dist/*.mjs bundles
+npm run package  # Creates compiled/function.zip
+\`\`\`
+
+### 4. Container Deployment
+\`\`\`bash
+docker build -t ${sanitizedPkgName} .
+docker run -p ${port}:${port} ${sanitizedPkgName}
+\`\`\`
+`;
+
   // Assembly of imports and execution pipeline
   const importsList: string[] = [];
   const executionsList: string[] = [];
@@ -123,7 +160,8 @@ app.get('/health', (_req: Request, res: Response) => {
     status: 'ok',
     project: '${projectName}',
     workflowId: '${workflow.id}',
-    nodeCount: ${workflow.nodes.length}
+    nodeCount: ${workflow.nodes.length},
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -195,6 +233,7 @@ if (isDirectRun) {
     { path: 'tsconfig.json', content: tsconfigContent, type: 'config' },
     { path: 'Dockerfile', content: dockerfileContent, type: 'infrastructure' },
     { path: '.env.example', content: envExampleContent, type: 'config' },
+    { path: 'README.md', content: readmeContent, type: 'asset' },
     { path: 'src/server.ts', content: serverTsContent, type: 'source' },
     { path: 'src/run.ts', content: runTsContent, type: 'source' },
     ...nodeFiles,
