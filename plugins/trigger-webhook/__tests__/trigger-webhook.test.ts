@@ -24,6 +24,12 @@ describe('trigger-webhook plugin', () => {
     expect(manifest.parameters.some((p) => p.name === 'rawBody')).toBe(true);
   });
 
+  // manifest.outputs is declared (['main']), so validation-runtime's engine (executeNode,
+  // packages/validation-runtime/src/engine.ts) reads `raw.value`/`raw.activeOutput` off
+  // whatever execute() returns — a plugin that forgets this wrapper silently collapses to
+  // `output: null` for every real run, even though execute() itself "succeeded" (a bug this
+  // plugin actually shipped with). Every case below asserts the wrapper, not just the payload.
+
   it('passes incoming body fields directly forward in output', async () => {
     expect(execute).toBeDefined();
     const result = (await execute!(
@@ -31,9 +37,10 @@ describe('trigger-webhook plugin', () => {
       {},
       testContext
     )) as any;
-    expect(result.id).toBe(42);
-    expect(result.customer).toBe('Alice');
-    expect(result._headers).toBeDefined();
+    expect(result.activeOutput).toBe('main');
+    expect(result.value.id).toBe(42);
+    expect(result.value.customer).toBe('Alice');
+    expect(result.value._headers).toBeDefined();
   });
 
   it('composes an array-of-fields sampleBody (rowSchema shape) into the flat simulated body', async () => {
@@ -50,9 +57,10 @@ describe('trigger-webhook plugin', () => {
       {},
       testContext
     )) as any;
-    expect(result.id).toBe(42);
-    expect(result.customer).toBe('Alice');
-    expect(result._headers).toBeDefined();
+    expect(result.activeOutput).toBe('main');
+    expect(result.value.id).toBe(42);
+    expect(result.value.customer).toBe('Alice');
+    expect(result.value._headers).toBeDefined();
   });
 
   it('preserves real input data when passed from an actual HTTP caller', async () => {
@@ -63,10 +71,11 @@ describe('trigger-webhook plugin', () => {
       query: { filter: 'active' },
     };
     const result = (await execute!({ path: '/hook' }, realInput, testContext)) as any;
-    expect(result.customer).toBe('Alice');
-    expect(result.total).toBe(99);
-    expect(result._headers.authorization).toBe('Bearer 123');
-    expect(result._query.filter).toBe('active');
+    expect(result.activeOutput).toBe('main');
+    expect(result.value.customer).toBe('Alice');
+    expect(result.value.total).toBe(99);
+    expect(result.value._headers.authorization).toBe('Bearer 123');
+    expect(result.value._query.filter).toBe('active');
   });
 
   it('waits for incoming webhook when active and resolves body directly', async () => {
@@ -85,9 +94,10 @@ describe('trigger-webhook plugin', () => {
     }, 50);
 
     const result = (await testPromise) as any;
-    expect(result.paymentId).toBe('pay-999');
-    expect(result.amount).toBe(150);
-    expect(result._headers['x-event']).toBe('payment.succeeded');
-    expect(result._query.live).toBe('false');
+    expect(result.activeOutput).toBe('main');
+    expect(result.value.paymentId).toBe('pay-999');
+    expect(result.value.amount).toBe(150);
+    expect(result.value._headers['x-event']).toBe('payment.succeeded');
+    expect(result.value._query.live).toBe('false');
   });
 });

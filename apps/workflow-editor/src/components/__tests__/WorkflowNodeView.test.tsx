@@ -16,6 +16,7 @@ function makeProps(
   selected = false,
   parameters: Record<string, unknown> = {},
   result?: NodeResult,
+  isTesting = false,
 ): NodeProps<FlowNode> {
   return {
     id: 'node-1',
@@ -28,14 +29,15 @@ function makeProps(
       manifest: manifestOrUndefined,
       referenceStatus: manifestOrUndefined ? { status: 'ok' as const } : { status: 'missing' as const },
       result,
+      isTesting,
     },
   } as NodeProps<FlowNode>;
 }
 
-function renderNode(manifestOrUndefined: PluginManifest | undefined, parameters: Record<string, unknown> = {}, result?: NodeResult) {
+function renderNode(manifestOrUndefined: PluginManifest | undefined, parameters: Record<string, unknown> = {}, result?: NodeResult, isTesting = false) {
   return render(
     <ReactFlowProvider>
-      <WorkflowNodeView {...makeProps(manifestOrUndefined, false, parameters, result)} />
+      <WorkflowNodeView {...makeProps(manifestOrUndefined, false, parameters, result, isTesting)} />
     </ReactFlowProvider>,
   );
 }
@@ -135,6 +137,30 @@ describe('WorkflowNodeView — validation result badge (003-validation-runtime, 
 
   it('does not show a result badge for a node whose plugin is missing, even if it has a stale result', () => {
     const { queryByTestId } = renderNode(undefined, {}, nodeResult());
+    expect(queryByTestId('node-result-badge')).toBeNull();
+  });
+});
+
+describe('WorkflowNodeView — testing badge (waiting for a webhook)', () => {
+  it('shows no testing badge when the node is not being tested', () => {
+    const { queryByTestId } = renderNode(manifest('trigger'));
+    expect(queryByTestId('node-testing-badge')).toBeNull();
+  });
+
+  it('shows a spinning testing badge while the node is being tested', () => {
+    const { getByTestId } = renderNode(manifest('trigger'), {}, undefined, true);
+    expect(getByTestId('node-testing-badge')).toHaveAttribute('data-result-status', 'testing');
+  });
+
+  it('hides the testing badge in favor of the result badge once a stale result exists but isTesting is false', () => {
+    const { queryByTestId, getByTestId } = renderNode(manifest('trigger'), {}, nodeResult(), false);
+    expect(queryByTestId('node-testing-badge')).toBeNull();
+    expect(getByTestId('node-result-badge')).toBeInTheDocument();
+  });
+
+  it('prefers the testing badge over a stale result badge while a new test is in flight', () => {
+    const { getByTestId, queryByTestId } = renderNode(manifest('trigger'), {}, nodeResult(), true);
+    expect(getByTestId('node-testing-badge')).toBeInTheDocument();
     expect(queryByTestId('node-result-badge')).toBeNull();
   });
 });

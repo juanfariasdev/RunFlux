@@ -272,11 +272,12 @@ export function NodeConfigPanel({
                 <div key={param.name}>
                   <Label className="mb-1 block" htmlFor={param.name}>{param.label}{param.required && <span className="ml-0.5 text-red-500">*</span>}</Label>
                   {param.type === 'boolean' ? (
-                    <Checkbox id={param.name} {...register(param.name)} />
+                    <Checkbox id={param.name} disabled={isTesting} {...register(param.name)} />
                   ) : param.type === 'string' && (param.name === 'combinator' || param.name === 'httpMethod' || param.name === 'authentication' || param.name === 'auth' || param.name === 'preset') ? (
                     <select
                       id={param.name}
-                      className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-700 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50"
+                      disabled={isTesting}
+                      className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-700 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 disabled:cursor-not-allowed disabled:opacity-50"
                       {...register(param.name)}
                     >
                       {(param.name === 'httpMethod'
@@ -294,11 +295,11 @@ export function NodeConfigPanel({
                     <Controller
                       name={param.name}
                       control={control}
-                      render={({ field }) => <JsonFieldEditor id={param.name} value={field.value} onChange={field.onChange} sampleJson={displayedTestInput} rowSchema={param.rowSchema} />}
+                      render={({ field }) => <JsonFieldEditor id={param.name} value={field.value} onChange={field.onChange} sampleJson={displayedTestInput} rowSchema={param.rowSchema} disabled={isTesting} />}
                     />
                   ) : param.sensitive ? (
                     <div className="flex gap-1.5">
-                      <Input id={param.name} type={revealed[param.name] ? 'text' : 'password'} autoComplete="off" {...register(param.name)} />
+                      <Input id={param.name} type={revealed[param.name] ? 'text' : 'password'} autoComplete="off" disabled={isTesting} {...register(param.name)} />
                       <button className="grid w-9 shrink-0 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500" type="button" onClick={() => setRevealed((previous) => ({ ...previous, [param.name]: !previous[param.name] }))} aria-label={revealed[param.name] ? 'Hide value' : 'Show value'} aria-pressed={!!revealed[param.name]}>
                         {revealed[param.name] ? <UnlockIcon /> : <LockIcon />}
                       </button>
@@ -307,6 +308,7 @@ export function NodeConfigPanel({
                     <Input
                       id={param.name}
                       type={param.type === 'number' ? 'number' : 'text'}
+                      disabled={isTesting}
                       {...register(param.name, { valueAsNumber: param.type === 'number' })}
                       className={preview ? (preview.ok ? '!border-emerald-400 focus:!border-emerald-400 focus:!ring-emerald-50' : '!border-red-400 focus:!border-red-400 focus:!ring-red-50') : ''}
                     />

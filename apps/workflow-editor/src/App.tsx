@@ -85,7 +85,7 @@ function WorkflowEditorContent() {
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <Palette catalog={catalog} />
         <ReactFlowProvider>
-          <Canvas catalog={catalog} onSelectNode={setSelectedNodeId} onSelectEdge={setSelectedEdgeId} />
+          <Canvas catalog={catalog} onSelectNode={setSelectedNodeId} onSelectEdge={setSelectedEdgeId} testingNodeId={testingNodeId} />
         </ReactFlowProvider>
         {selectedNode && (
           <NodeConfigPanel

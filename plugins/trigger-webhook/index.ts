@@ -205,13 +205,13 @@ export const execute: PluginModule['execute'] = async (params, input, _context?:
 
   // 1. If payload was already provided from upstream caller:
   if (reqInput && ('body' in reqInput || 'headers' in reqInput || 'query' in reqInput)) {
-    return formatWebhookOutput(reqInput.body, reqInput.headers, reqInput.query);
+    return { value: formatWebhookOutput(reqInput.body, reqInput.headers, reqInput.query), activeOutput: 'main' };
   }
 
   // 2. If running under automated unit tests without explicit waiting mode, return sample body:
   if (process.env.NODE_ENV === 'test' && !process.env.RUNFLUX_WAIT_WEBHOOK_TEST) {
     const body = resolveSampleBody(params.sampleBody);
-    return formatWebhookOutput(body, params.sampleHeaders ?? {}, params.sampleQuery ?? {});
+    return { value: formatWebhookOutput(body, params.sampleHeaders ?? {}, params.sampleQuery ?? {}), activeOutput: 'main' };
   }
 
   // 3. User interactive test in canvas: wait for an actual HTTP request to arrive!
@@ -236,7 +236,7 @@ export const execute: PluginModule['execute'] = async (params, input, _context?:
       path: normalizedPath,
       timer,
       resolve: (incoming) => {
-        resolve(formatWebhookOutput(incoming?.body, incoming?.headers, incoming?.query));
+        resolve({ value: formatWebhookOutput(incoming?.body, incoming?.headers, incoming?.query), activeOutput: 'main' });
       },
       reject,
     });

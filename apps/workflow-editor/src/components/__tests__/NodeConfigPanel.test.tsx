@@ -388,6 +388,25 @@ describe('NodeConfigPanel — test this node in isolation (003-validation-runtim
     expect(screen.getByRole('button', { name: /testing/i })).toBeDisabled();
   });
 
+  it('locks every parameter field while isTesting is true, so edits cannot race a pending test', () => {
+    render(<NodeConfigPanel manifest={manifest} values={{ label: '' }} onChange={vi.fn()} onClose={vi.fn()} onTest={vi.fn()} isTesting />);
+    expect(screen.getByLabelText('Label')).toBeDisabled();
+  });
+
+  it('re-enables parameter fields once isTesting goes back to false', () => {
+    const { rerender } = render(<NodeConfigPanel manifest={manifest} values={{ label: '' }} onChange={vi.fn()} onClose={vi.fn()} onTest={vi.fn()} isTesting />);
+    expect(screen.getByLabelText('Label')).toBeDisabled();
+    rerender(<NodeConfigPanel manifest={manifest} values={{ label: '' }} onChange={vi.fn()} onClose={vi.fn()} onTest={vi.fn()} isTesting={false} />);
+    expect(screen.getByLabelText('Label')).not.toBeDisabled();
+  });
+
+  it('locks the JSON field editor while isTesting is true', () => {
+    const jsonManifest: PluginManifest = { ...manifest, parameters: [{ name: 'conditions', label: 'Conditions', type: 'json', required: true }] };
+    render(<NodeConfigPanel manifest={jsonManifest} values={{ conditions: [{ leftValue: '', operator: 'equals', rightValue: '' }] }} onChange={vi.fn()} onClose={vi.fn()} onTest={vi.fn()} isTesting />);
+    expect(screen.getByLabelText('Row 1 Left value')).toBeDisabled();
+    expect(screen.getByRole('button', { name: '+ Add row' })).toBeDisabled();
+  });
+
   it('shows the input and output of the last test result', () => {
     const testResult = { nodeId: 'n1', input: null, output: { ok: true }, error: null, startedAt: 't0', finishedAt: 't1' };
     render(<NodeConfigPanel manifest={manifest} values={{ label: '' }} onChange={vi.fn()} onClose={vi.fn()} onTest={vi.fn()} testResult={testResult} />);

@@ -11,6 +11,8 @@ export interface JsonFieldEditorProps {
   sampleJson?: unknown;
   /** Row shape for an array-of-objects value, authored on the plugin's own parameter (rowSchema). */
   rowSchema?: JsonRowFieldSchema[];
+  /** Freezes every input/button in this editor — e.g. while a webhook test is in flight. */
+  disabled?: boolean;
 }
 
 type Shape = 'list' | 'map' | 'unknown';
@@ -105,7 +107,7 @@ function detectShape(value: unknown): Shape {
  * a key/value list. No per-plugin schema is involved: this stays generic
  * across `conditions`/`fields`/`rules`/`headers`/`body`.
  */
-export function JsonFieldEditor({ id, value, onChange, sampleJson, rowSchema }: JsonFieldEditorProps) {
+export function JsonFieldEditor({ id, value, onChange, sampleJson, rowSchema, disabled }: JsonFieldEditorProps) {
   const shape = detectShape(value);
   const [mode, setMode] = useState<Mode>(shape === 'unknown' ? 'json' : 'fields');
   const [jsonDraft, setJsonDraft] = useState<string | null>(null);
@@ -119,21 +121,23 @@ export function JsonFieldEditor({ id, value, onChange, sampleJson, rowSchema }: 
         <div className="mb-1.5 flex gap-1" role="group" aria-label="Edit mode">
           <button
             type="button"
+            disabled={disabled}
             onClick={() => setMode('fields')}
             aria-pressed={mode === 'fields'}
-            className={`rounded-md px-2 py-0.5 text-[9px] font-bold transition ${mode === 'fields' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+            className={`rounded-md px-2 py-0.5 text-[9px] font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${mode === 'fields' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
           >
             Fields
           </button>
           <button
             type="button"
+            disabled={disabled}
             onClick={() => {
               setMode('json');
               setJsonDraft(null);
               setJsonError(undefined);
             }}
             aria-pressed={mode === 'json'}
-            className={`rounded-md px-2 py-0.5 text-[9px] font-bold transition ${mode === 'json' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+            className={`rounded-md px-2 py-0.5 text-[9px] font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${mode === 'json' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
           >
             JSON
           </button>
@@ -144,7 +148,8 @@ export function JsonFieldEditor({ id, value, onChange, sampleJson, rowSchema }: 
         <>
           <textarea
             id={id}
-            className="min-h-[88px] w-full resize-y rounded-lg border border-slate-200 bg-white px-3 py-2 font-mono text-[11px] text-slate-700 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50"
+            disabled={disabled}
+            className="min-h-[88px] w-full resize-y rounded-lg border border-slate-200 bg-white px-3 py-2 font-mono text-[11px] text-slate-700 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 disabled:cursor-not-allowed disabled:opacity-50"
             value={jsonText}
             onChange={(event) => {
               const text = event.target.value;
@@ -165,10 +170,10 @@ export function JsonFieldEditor({ id, value, onChange, sampleJson, rowSchema }: 
           )}
         </>
       ) : shape === 'list' ? (
-        <ListEditor id={id} items={value as unknown[]} onChange={onChange} sampleJson={sampleJson} rowSchema={rowSchema} />
+        <ListEditor id={id} items={value as unknown[]} onChange={onChange} sampleJson={sampleJson} rowSchema={rowSchema} disabled={disabled} />
       ) : (
         <div id={id}>
-          <ObjectEditor obj={value as Record<string, unknown>} onChange={onChange} sampleJson={sampleJson} />
+          <ObjectEditor obj={value as Record<string, unknown>} onChange={onChange} sampleJson={sampleJson} disabled={disabled} />
         </div>
       )}
     </div>
@@ -181,12 +186,14 @@ function ListEditor({
   onChange,
   sampleJson,
   rowSchema,
+  disabled,
 }: {
   id: string;
   items: unknown[];
   onChange: (value: unknown) => void;
   sampleJson: unknown;
   rowSchema: JsonRowFieldSchema[] | undefined;
+  disabled?: boolean;
 }) {
   const effectiveRowSchema = resolveRowSchema(id, rowSchema);
 
@@ -199,9 +206,10 @@ function ListEditor({
             <span className="text-[8px] font-bold uppercase tracking-wide text-slate-400">{id === 'fields' ? 'Field' : 'Row'} {index + 1}</span>
             <button
               type="button"
+              disabled={disabled}
               onClick={() => onChange(items.filter((_, i) => i !== index))}
               aria-label={`Remove row ${index + 1}`}
-              className="text-[11px] text-red-500 hover:text-red-600"
+              className="text-[11px] text-red-500 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
             >
               ✕
             </button>
@@ -217,10 +225,11 @@ function ListEditor({
               onChange(copy);
             }}
             sampleJson={sampleJson}
+            disabled={disabled}
           />
         </div>
       ))}
-      <Button type="button" variant="outline" size="sm" onClick={() => onChange([...items, createListRow(effectiveRowSchema)])} className="justify-self-start">
+      <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={() => onChange([...items, createListRow(effectiveRowSchema)])} className="justify-self-start">
         {id === 'fields' ? '+ Add field' : '+ Add row'}
       </Button>
     </div>
@@ -255,6 +264,7 @@ function ObjectEditor({
   rowIndex,
   rowSchema,
   sampleJson,
+  disabled,
 }: {
   obj: Record<string, unknown>;
   onChange: (value: Record<string, unknown>) => void;
@@ -262,6 +272,7 @@ function ObjectEditor({
   rowIndex?: number;
   rowSchema?: JsonRowFieldSchema[];
   sampleJson: unknown;
+  disabled?: boolean;
 }) {
   // A row inside a list whose parameter declares (or defaults to) a row schema is ALWAYS
   // edited through its structured fields below — even if this particular object's data
@@ -290,6 +301,7 @@ function ObjectEditor({
             <span className="text-[8px] font-bold uppercase tracking-wide text-slate-400">Field {index + 1}</span>
             <button
               type="button"
+              disabled={disabled}
               onClick={() => {
                 const next: Record<string, unknown> = {};
                 entries.forEach(([existingKey, existingValue], i) => {
@@ -298,7 +310,7 @@ function ObjectEditor({
                 onChange(next);
               }}
               aria-label={`Remove field ${index + 1}`}
-              className="text-[11px] text-red-500 hover:text-red-600"
+              className="text-[11px] text-red-500 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
             >
               ✕
             </button>
@@ -311,6 +323,7 @@ function ObjectEditor({
                 placeholder="key"
                 aria-label={`Field ${index + 1} name`}
                 className="!h-8 text-[10px]"
+                disabled={disabled}
                 onChange={(event) => {
                   const newKey = event.target.value;
                   const next: Record<string, unknown> = {};
@@ -327,6 +340,7 @@ function ObjectEditor({
                 value={entryValue}
                 ariaLabel={`Field ${index + 1} value`}
                 sampleJson={sampleJson}
+                disabled={disabled}
                 onChange={(newValue) => {
                   const next: Record<string, unknown> = {};
                   entries.forEach(([existingKey, existingValue], i) => {
@@ -340,7 +354,7 @@ function ObjectEditor({
         </div>
       ))}
       {!schema && (
-        <Button type="button" variant="outline" size="sm" onClick={() => onChange({ ...obj, '': '' })} className="justify-self-start">
+        <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={() => onChange({ ...obj, '': '' })} className="justify-self-start">
           + Add field
         </Button>
       )}
@@ -361,6 +375,7 @@ function ObjectEditor({
                 value={selectedType}
                 ariaLabel={`Row ${ri + 1} ${typeLabel}`}
                 options={JSON_VALUE_TYPES}
+                disabled={disabled}
                 onChange={(nextType) => {
                   if (!isJsonValueType(nextType)) return;
                   onChange({ ...obj, [key]: convertToJsonType(obj[key], nextType), [typeKey]: nextType });
@@ -374,6 +389,7 @@ function ObjectEditor({
                 selectedType={selectedType}
                 ariaLabel={`Row ${ri + 1} ${label}`}
                 sampleJson={sampleJson}
+                disabled={disabled}
                 onChange={(newValue) => onChange({ ...obj, [key]: newValue, [typeKey]: selectedType })}
               />
             </label>
@@ -386,6 +402,7 @@ function ObjectEditor({
               ariaLabel={`Row ${ri + 1} ${label}`}
               options={field.options ?? []}
               allowCustom={field.allowCustomOptions}
+              disabled={disabled}
               onChange={(newValue) => onChange({
                 ...obj,
                 [key]: newValue,
@@ -400,6 +417,7 @@ function ObjectEditor({
               value={obj[key]}
               ariaLabel={`Row ${ri + 1} ${label}`}
               sampleJson={sampleJson}
+              disabled={disabled}
               onChange={(newValue) => onChange({ ...obj, [key]: newValue })}
             />
           </label>
@@ -416,12 +434,14 @@ function TypedValueInput({
   onChange,
   ariaLabel,
   sampleJson,
+  disabled,
 }: {
   value: unknown;
   selectedType: JsonValueType;
   onChange: (value: unknown) => void;
   ariaLabel: string;
   sampleJson: unknown;
+  disabled?: boolean;
 }) {
   if (selectedType === 'null') {
     return <Input type="text" value="null" aria-label={ariaLabel} className="!h-8 text-[10px]" disabled />;
@@ -432,6 +452,7 @@ function TypedValueInput({
         value={value === true ? 'true' : 'false'}
         ariaLabel={ariaLabel}
         options={BOOLEAN_OPTIONS}
+        disabled={disabled}
         onChange={(newValue) => onChange(newValue === 'true')}
       />
     );
@@ -444,6 +465,7 @@ function TypedValueInput({
       sampleJson={sampleJson}
       conversionType={isPrimitiveType(selectedType) ? selectedType : undefined}
       containerType={isContainerType(selectedType) ? selectedType : undefined}
+      disabled={disabled}
       onChange={onChange}
     />
   );
@@ -455,12 +477,14 @@ function SelectValueEditor({
   ariaLabel,
   options,
   allowCustom,
+  disabled,
 }: {
   value: unknown;
   onChange: (value: string) => void;
   ariaLabel: string;
   options: Array<{ value: string; label: string }>;
   allowCustom?: boolean;
+  disabled?: boolean;
 }) {
   const currentValue = typeof value === 'string' ? value : '';
 
@@ -475,6 +499,7 @@ function SelectValueEditor({
           value={currentValue}
           aria-label={ariaLabel}
           className="!h-8 text-[10px]"
+          disabled={disabled}
           onChange={(event) => onChange(event.target.value)}
         />
         <datalist id={datalistId}>
@@ -492,7 +517,8 @@ function SelectValueEditor({
     <select
       value={selectedValue}
       aria-label={ariaLabel}
-      className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2 text-[10px] text-slate-700 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50"
+      disabled={disabled}
+      className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2 text-[10px] text-slate-700 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 disabled:cursor-not-allowed disabled:opacity-50"
       onChange={(event) => onChange(event.target.value)}
     >
       {options.map((option) => (
@@ -548,6 +574,7 @@ function FieldValueEditor({
   sampleJson,
   conversionType,
   containerType,
+  disabled,
 }: {
   value: unknown;
   onChange: (value: unknown) => void;
@@ -555,12 +582,13 @@ function FieldValueEditor({
   sampleJson: unknown;
   conversionType?: PrimitiveType;
   containerType?: 'array' | 'object';
+  disabled?: boolean;
 }) {
   if (!isPrimitive(value)) {
-    return <JsonLeafInput value={value} onChange={onChange} ariaLabel={ariaLabel} requiredShape={containerType} />;
+    return <JsonLeafInput value={value} onChange={onChange} ariaLabel={ariaLabel} requiredShape={containerType} disabled={disabled} />;
   }
 
-  return <ValueInput value={value} onChange={onChange} ariaLabel={ariaLabel} sampleJson={sampleJson} conversionType={conversionType} />;
+  return <ValueInput value={value} onChange={onChange} ariaLabel={ariaLabel} sampleJson={sampleJson} conversionType={conversionType} disabled={disabled} />;
 }
 
 function isPrimitive(value: unknown): value is Primitive {
@@ -638,12 +666,14 @@ function ValueInput({
   ariaLabel,
   sampleJson,
   conversionType,
+  disabled,
 }: {
   value: Primitive;
   onChange: (value: unknown) => void;
   ariaLabel: string;
   sampleJson: unknown;
   conversionType?: PrimitiveType;
+  disabled?: boolean;
 }) {
   const inferredType = useRef<PrimitiveType>(getPrimitiveType(value)).current;
   const outputType = conversionType ?? inferredType;
@@ -659,6 +689,7 @@ function ValueInput({
         value={text}
         placeholder="value or {{ }}"
         aria-label={ariaLabel}
+        disabled={disabled}
         className={`!h-8 text-[10px] ${preview ? (preview.ok ? '!border-emerald-400 focus:!border-emerald-400 focus:!ring-emerald-50' : '!border-red-400 focus:!border-red-400 focus:!ring-red-50') : ''}`}
         onChange={(event) => {
           const nextValue = event.target.value;
@@ -685,11 +716,13 @@ function JsonLeafInput({
   onChange,
   ariaLabel,
   requiredShape,
+  disabled,
 }: {
   value: unknown;
   onChange: (value: unknown) => void;
   ariaLabel: string;
   requiredShape?: 'array' | 'object';
+  disabled?: boolean;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
   const [error, setError] = useState<string | undefined>();
@@ -702,6 +735,7 @@ function JsonLeafInput({
         value={text}
         aria-label={ariaLabel}
         aria-invalid={Boolean(error)}
+        disabled={disabled}
         className={`!h-8 flex-1 font-mono text-[10px] ${error ? '!border-red-400' : ''}`}
         onChange={(event) => {
           const nextText = event.target.value;
