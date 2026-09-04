@@ -34,10 +34,11 @@ export interface CanvasProps {
   catalog: PluginCatalogAdapter;
   onSelectNode: (nodeId: string | undefined) => void;
   onSelectEdge?: (edgeId: string | undefined) => void;
-  testingNodeId?: string;
+  /** Node ids currently being tested (single node in isolation, or every Webhook Trigger in a whole-workflow run) — each shows the waiting/spinning badge. */
+  testingNodeIds?: Set<string>;
 }
 
-export function Canvas({ catalog, onSelectNode, onSelectEdge, testingNodeId }: CanvasProps) {
+export function Canvas({ catalog, onSelectNode, onSelectEdge, testingNodeIds }: CanvasProps) {
   const workflow = useWorkflowStore((state) => state.workflow);
   const nodeResults = useWorkflowStore((state) => state.nodeResults);
   const addNode = useWorkflowStore((state) => state.addNode);
@@ -58,8 +59,8 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge, testingNodeId }: C
 
   const manifestFor = useCallback((pluginId: string) => manifests[pluginId], [manifests]);
   const nodes: FlowNode[] = useMemo(
-    () => workflow.nodes.map((node) => toReactFlowNode(node, manifestFor(node.pluginId), node.appearance?.shape === 'subflow' ? { status: 'ok' } : { status: manifestFor(node.pluginId) ? 'ok' : 'missing' }, nodeResults[node.id], testingNodeId === node.id)),
-    [workflow.nodes, manifestFor, nodeResults, testingNodeId],
+    () => workflow.nodes.map((node) => toReactFlowNode(node, manifestFor(node.pluginId), node.appearance?.shape === 'subflow' ? { status: 'ok' } : { status: manifestFor(node.pluginId) ? 'ok' : 'missing' }, nodeResults[node.id], testingNodeIds?.has(node.id) ?? false)),
+    [workflow.nodes, manifestFor, nodeResults, testingNodeIds],
   );
   const edges = useMemo(() => workflow.connections.map(toReactFlowEdge), [workflow.connections]);
 

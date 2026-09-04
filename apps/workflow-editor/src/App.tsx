@@ -25,13 +25,17 @@ function WorkflowEditorContent() {
   const connections = workflow.connections;
   const nodeResults = useWorkflowStore((s) => s.nodeResults);
   const setNodeResult = useWorkflowStore((s) => s.setNodeResult);
+  const clearNodeResult = useWorkflowStore((s) => s.clearNodeResult);
   const updateNodeParameters = useWorkflowStore((s) => s.updateNodeParameters);
   const updateNodeAppearance = useWorkflowStore((s) => s.updateNodeAppearance);
   const updateConnection = useWorkflowStore((s) => s.updateConnection);
   const removeNode = useWorkflowStore((s) => s.removeNode);
   const removeConnection = useWorkflowStore((s) => s.removeConnection);
   const [manifestsById, setManifestsById] = useState<Map<string, PluginManifest>>(new Map());
-  const [testingNodeId, setTestingNodeId] = useState<string | undefined>();
+  // Node ids currently "being tested" — a single node under "Test this node", or every
+  // Webhook Trigger in the workflow while the toolbar's whole-workflow "Test" is waiting
+  // on one. Each shows the same waiting/spinning badge on its canvas box.
+  const [testingNodeIds, setTestingNodeIds] = useState<Set<string>>(new Set());
 
   const { isDirty } = useProject();
 
@@ -55,19 +59,22 @@ function WorkflowEditorContent() {
     try {
       await fetch('/runflux-webhook-cancel', { method: 'POST' }).catch(() => {});
     } finally {
-      setTestingNodeId(undefined);
+      setTestingNodeIds(new Set());
     }
   }, []);
 
   const handleTestNode = useCallback(async (nodeId: string) => {
-    setTestingNodeId(nodeId);
+    // Clear whatever the last test left showing — otherwise a stale success/output
+    // stays visible the whole time this new test is running (e.g. a webhook wait).
+    clearNodeResult(nodeId);
+    setTestingNodeIds(new Set([nodeId]));
     try {
       const result = await validation.runNode(workflow, nodeId, { mode: 'sandbox' });
       setNodeResult(result);
     } finally {
-      setTestingNodeId(undefined);
+      setTestingNodeIds(new Set());
     }
-  }, [workflow, setNodeResult]);
+  }, [workflow, setNodeResult, clearNodeResult]);
 
   useEffect(() => {
     let cancelled = false;
@@ -81,11 +88,11 @@ function WorkflowEditorContent() {
 
   return (
     <div className="flex h-full min-w-[900px] flex-col overflow-hidden bg-slate-50 text-slate-900">
-      <Toolbar catalog={catalog} persistence={projectAdapter} validation={validation} />
+      <Toolbar catalog={catalog} persistence={projectAdapter} validation={validation} onTestingNodesChange={(nodeIds) => setTestingNodeIds(new Set(nodeIds))} />
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <Palette catalog={catalog} />
         <ReactFlowProvider>
-          <Canvas catalog={catalog} onSelectNode={setSelectedNodeId} onSelectEdge={setSelectedEdgeId} testingNodeId={testingNodeId} />
+          <Canvas catalog={catalog} onSelectNode={setSelectedNodeId} onSelectEdge={setSelectedEdgeId} testingNodeIds={testingNodeIds} />
         </ReactFlowProvider>
         {selectedNode && (
           <NodeConfigPanel
@@ -102,7 +109,7 @@ function WorkflowEditorContent() {
             onClose={() => setSelectedNodeId(undefined)}
             onTest={() => handleTestNode(selectedNode.id)}
             onCancelTest={handleCancelTest}
-            isTesting={testingNodeId === selectedNode.id}
+            isTesting={testingNodeIds.has(selectedNode.id)}
             testResult={nodeResults[selectedNode.id]}
           />
         )}

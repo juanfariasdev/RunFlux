@@ -14,6 +14,8 @@ export interface ToolbarProps {
   catalog: PluginCatalogAdapter;
   persistence: WorkflowPersistenceAdapter;
   validation: ValidationRuntimeAdapter;
+  /** Called with the node ids that should show the canvas "waiting" badge for the run's duration (every Webhook Trigger while `validation.run` is in flight), and `[]` once it settles. */
+  onTestingNodesChange?: (nodeIds: string[]) => void;
 }
 
 type ToolbarStatus =
@@ -29,20 +31,22 @@ type ToolbarStatus =
  * NodeConfigPanel, before ever calling into ValidationRuntimeAdapter.
  * Integrates ProjectContext (005-workflow-project-management) and CompilerModal (006-compiler).
  */
-export function Toolbar({ catalog, persistence, validation }: ToolbarProps) {
+export function Toolbar({ catalog, persistence, validation, onTestingNodesChange }: ToolbarProps) {
   const workflow = useWorkflowStore((s) => s.workflow);
   const setNodeResults = useWorkflowStore((s) => s.setNodeResults);
+  const clearNodeResults = useWorkflowStore((s) => s.clearNodeResults);
   const [status, setStatus] = useState<ToolbarStatus>({ kind: 'idle' });
   const [mode, setMode] = useState<PluginExecutionMode>('sandbox');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCompilerOpen, setIsCompilerOpen] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
 
-  // A workflow-level test runs every node, including a Webhook Trigger — which,
+  // A workflow-level test runs every node, including any Webhook Trigger — which,
   // just like testing it in isolation (NodeConfigPanel), blocks for up to 120s
   // waiting for a real HTTP request. Without this the whole run just sits there
   // with no visible sign anything is happening — "the Test button does nothing".
-  const webhookNode = workflow.nodes.find((n) => n.pluginId === 'trigger-webhook');
+  const webhookNodes = workflow.nodes.filter((n) => n.pluginId === 'trigger-webhook');
+  const webhookNode = webhookNodes[0];
 
   let projectCtx: ReturnType<typeof useProject> | null = null;
   try {
@@ -77,6 +81,10 @@ export function Toolbar({ catalog, persistence, validation }: ToolbarProps) {
   };
 
   const handleTest = async () => {
+    // Clear whatever the last run left showing (a stale "✓ ok"/error) — otherwise it
+    // sits there, unrelated to this run, for the whole time a new test is in flight.
+    setStatus({ kind: 'idle' });
+
     const grouped = await catalog.listPlugins();
     const manifestsById = new Map(Object.values(grouped).flat().map((m) => [m.id, m]));
 
@@ -91,7 +99,14 @@ export function Toolbar({ catalog, persistence, validation }: ToolbarProps) {
       }
     }
 
+    // Same reasoning as the status line above, but for the canvas: `setNodeResults`
+    // merges into the existing map, so every node's stale "✓" from the last run would
+    // otherwise sit there — some possibly already re-evaluated differently — for the
+    // whole time this new run is in flight (only cleared node-by-node as each result
+    // actually arrives, up to 120s late for one still waiting on a webhook).
+    clearNodeResults();
     setIsRunning(true);
+    onTestingNodesChange?.(webhookNodes.map((n) => n.id));
     try {
       const result = await validation.run(workflow, { mode });
       setNodeResults(result.nodeResults ?? []);
@@ -100,6 +115,7 @@ export function Toolbar({ catalog, persistence, validation }: ToolbarProps) {
       setStatus({ kind: 'error', message: error instanceof Error ? error.message : 'Test run failed' });
     } finally {
       setIsRunning(false);
+      onTestingNodesChange?.([]);
     }
   };
 

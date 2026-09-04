@@ -179,6 +179,14 @@ describe('nodeResults (003-validation-runtime, RF-02/RF-05)', () => {
     updateNodeParameters('a', { url: 'https://example.com' });
     expect(useWorkflowStore.getState().nodeResults.a).toBeUndefined();
   });
+
+  it('clearNodeResult drops one node\'s stale result without touching others (so a new test never shows an old success)', () => {
+    useWorkflowStore.getState().setNodeResults([result('a'), result('b')]);
+    useWorkflowStore.getState().clearNodeResult('a');
+    const { nodeResults } = useWorkflowStore.getState();
+    expect(nodeResults.a).toBeUndefined();
+    expect(nodeResults.b).toBeDefined();
+  });
 });
 
 describe('edge appearance updates', () => {

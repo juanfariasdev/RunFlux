@@ -139,6 +139,62 @@ describe('Toolbar — Test (RF-06, RF-12, RN-04)', () => {
     await waitFor(() => expect(run).toHaveBeenCalledWith(expect.anything(), { mode: 'production' }));
   });
 
+  it('clears a previous "ok" status as soon as a new test starts, instead of leaving it showing for the whole run', async () => {
+    let resolveSecondRun!: (value: unknown) => void;
+    // First click resolves immediately; second click is the one we hold open to inspect mid-run.
+    const run = vi.fn()
+      .mockResolvedValueOnce({ status: 'success', message: 'ok', nodeResults: [] })
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveSecondRun = resolve; }));
+
+    render(
+      <Toolbar
+        catalog={fakeCatalog()}
+        persistence={{ save: vi.fn(), load: vi.fn() }}
+        validation={{ run, runNode: vi.fn() }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /^▶ Test$/ }));
+    expect(await screen.findByText('ok')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /^▶ Test$/ }));
+    await waitFor(() => expect(screen.queryByText('ok')).not.toBeInTheDocument());
+
+    resolveSecondRun({ status: 'success', nodeResults: [] });
+  });
+
+  it('clears every node\'s stale "✓" canvas badge as soon as a new run starts, instead of leaving last run\'s results merged in', async () => {
+    useWorkflowStore.getState().addNode({
+      id: 'n1',
+      pluginId: 'action-example',
+      pluginVersion: '1.0.0',
+      parameters: { url: 'https://example.com' },
+      position: { x: 0, y: 0 },
+    });
+
+    const nodeResult = { nodeId: 'n1', input: null, output: 'ok', error: null, startedAt: 't0', finishedAt: 't1' };
+    let resolveSecondRun!: (value: unknown) => void;
+    const run = vi.fn()
+      .mockResolvedValueOnce({ status: 'success', nodeResults: [nodeResult] })
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveSecondRun = resolve; }));
+
+    render(
+      <Toolbar
+        catalog={fakeCatalog()}
+        persistence={{ save: vi.fn(), load: vi.fn() }}
+        validation={{ run, runNode: vi.fn() }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /^▶ Test$/ }));
+    await waitFor(() => expect(useWorkflowStore.getState().nodeResults.n1).toEqual(nodeResult));
+
+    fireEvent.click(screen.getByRole('button', { name: /^▶ Test$/ }));
+    await waitFor(() => expect(useWorkflowStore.getState().nodeResults).toEqual({}));
+
+    resolveSecondRun({ status: 'success', nodeResults: [] });
+  });
+
   // A workflow-level run waits on every node, including a Webhook Trigger — which can
   // block for up to 120s on a real HTTP request, same as testing it in isolation. Before
   // this, the button gave no sign anything was happening while that wait was in progress
@@ -196,6 +252,38 @@ describe('Toolbar — Test (RF-06, RF-12, RN-04)', () => {
     await waitFor(() => expect(screen.queryByTestId('toolbar-webhook-waiting-banner')).not.toBeInTheDocument());
 
     vi.unstubAllGlobals();
+  });
+
+  // Canvas.tsx renders the same spinning badge for any node id in `testingNodeIds` —
+  // a whole-workflow run needs to report its Webhook Trigger(s) through this callback
+  // so the canvas actually shows them as waiting, not just the toolbar banner.
+  it('reports the Webhook Trigger node id via onTestingNodesChange for the duration of the run, so its canvas badge lights up too', async () => {
+    useWorkflowStore.getState().addNode({
+      id: 'wh1',
+      pluginId: 'trigger-webhook',
+      pluginVersion: '1.0.0',
+      parameters: { path: '/orders', httpMethod: 'POST' },
+      position: { x: 0, y: 0 },
+    });
+
+    let resolveRun!: (value: unknown) => void;
+    const run = vi.fn(() => new Promise((resolve) => { resolveRun = resolve; }));
+    const onTestingNodesChange = vi.fn();
+
+    render(
+      <Toolbar
+        catalog={fakeCatalog()}
+        persistence={{ save: vi.fn(), load: vi.fn() }}
+        validation={{ run, runNode: vi.fn() }}
+        onTestingNodesChange={onTestingNodesChange}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /^▶ Test$/ }));
+
+    await waitFor(() => expect(onTestingNodesChange).toHaveBeenCalledWith(['wh1']));
+
+    resolveRun({ status: 'success', nodeResults: [] });
+    await waitFor(() => expect(onTestingNodesChange).toHaveBeenLastCalledWith([]));
   });
 
   it('shows an error status and re-enables the Test button when the run rejects (e.g. a cancelled webhook wait)', async () => {
