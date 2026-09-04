@@ -138,6 +138,81 @@ describe('Toolbar — Test (RF-06, RF-12, RN-04)', () => {
 
     await waitFor(() => expect(run).toHaveBeenCalledWith(expect.anything(), { mode: 'production' }));
   });
+
+  // A workflow-level run waits on every node, including a Webhook Trigger — which can
+  // block for up to 120s on a real HTTP request, same as testing it in isolation. Before
+  // this, the button gave no sign anything was happening while that wait was in progress
+  // ("the Test button does nothing").
+  it('disables the Test button and shows a busy label while the run is in flight', async () => {
+    let resolveRun!: (value: unknown) => void;
+    const run = vi.fn(() => new Promise((resolve) => { resolveRun = resolve; }));
+    render(
+      <Toolbar
+        catalog={fakeCatalog()}
+        persistence={{ save: vi.fn(), load: vi.fn() }}
+        validation={{ run, runNode: vi.fn() }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /^▶ Test$/ }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /testing/i })).toBeDisabled());
+
+    resolveRun({ status: 'success', nodeResults: [] });
+    await waitFor(() => expect(screen.getByRole('button', { name: /^▶ Test$/ })).not.toBeDisabled());
+  });
+
+  it('shows a waiting-for-webhook banner (with a way to send a test payload or stop) while the run includes a Webhook Trigger', async () => {
+    useWorkflowStore.getState().addNode({
+      id: 'wh1',
+      pluginId: 'trigger-webhook',
+      pluginVersion: '1.0.0',
+      parameters: { path: '/orders', httpMethod: 'POST' },
+      position: { x: 0, y: 0 },
+    });
+
+    let resolveRun!: (value: unknown) => void;
+    const run = vi.fn(() => new Promise((resolve) => { resolveRun = resolve; }));
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, text: async () => '{}' });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <Toolbar
+        catalog={fakeCatalog()}
+        persistence={{ save: vi.fn(), load: vi.fn() }}
+        validation={{ run, runNode: vi.fn() }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /^▶ Test$/ }));
+
+    await screen.findByText(/waiting for an incoming webhook on \/orders/i);
+
+    fireEvent.click(screen.getByRole('button', { name: /send test payload now/i }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/runflux-webhook-test/orders'),
+      expect.objectContaining({ method: 'POST' }),
+    ));
+
+    resolveRun({ status: 'success', nodeResults: [] });
+    await waitFor(() => expect(screen.queryByTestId('toolbar-webhook-waiting-banner')).not.toBeInTheDocument());
+
+    vi.unstubAllGlobals();
+  });
+
+  it('shows an error status and re-enables the Test button when the run rejects (e.g. a cancelled webhook wait)', async () => {
+    const run = vi.fn().mockRejectedValue(new Error('Webhook listening cancelled by user'));
+    render(
+      <Toolbar
+        catalog={fakeCatalog()}
+        persistence={{ save: vi.fn(), load: vi.fn() }}
+        validation={{ run, runNode: vi.fn() }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /^▶ Test$/ }));
+
+    expect(await screen.findByText(/webhook listening cancelled by user/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^▶ Test$/ })).not.toBeDisabled();
+  });
 });
 
 describe("Toolbar — Compiler Button", () => {

@@ -56,7 +56,7 @@ function hasExpressionSyntax(text: string): boolean {
 }
 
 /** `sampleBody` is a `FIELDS_ROW_SCHEMA` array (see trigger-webhook's manifest) — compose it into the flat body a real request would carry. */
-function resolveSampleBodyForTest(sampleBody: unknown): unknown {
+export function resolveSampleBodyForTest(sampleBody: unknown): unknown {
   if (Array.isArray(sampleBody)) return composeFields(sampleBody as FieldConfig[]);
   return sampleBody || { message: 'Sample test payload' };
 }
