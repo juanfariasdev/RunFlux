@@ -22,7 +22,7 @@ function registryWith(...plugins: DiscoveredPlugin[]): PluginRegistry {
 describe('named-output propagation (004-core-nodes-catalog, D-03, D-04, RN-02, RN-05, RF-07)', () => {
   it('propagates only through the output the executor activated, and skips the other named branch', async () => {
     const registry = registryWith(
-      plugin('branch', { outputs: ['true', 'false'] }, () => ({ value: { decided: true }, activeOutput: 'true' })),
+      plugin('branch', { category: 'trigger', outputs: ['true', 'false'] }, () => ({ value: { decided: true }, activeOutput: 'true' })),
       plugin('on-true', {}, (_p, input) => ({ sawTrue: input })),
       plugin('on-false', {}, (_p, input) => ({ sawFalse: input })),
     );
@@ -49,7 +49,7 @@ describe('named-output propagation (004-core-nodes-catalog, D-03, D-04, RN-02, R
 
   it('halts every downstream connection when activeOutput is null, without producing an error', async () => {
     const registry = registryWith(
-      plugin('filter', { outputs: ['main'] }, () => ({ value: { data: 1 }, activeOutput: null })),
+      plugin('filter', { category: 'trigger', outputs: ['main'] }, () => ({ value: { data: 1 }, activeOutput: null })),
       plugin('downstream', {}, (_p, input) => ({ received: input })),
     );
     const wf: WorkflowDefinition = {
@@ -70,8 +70,8 @@ describe('named-output propagation (004-core-nodes-catalog, D-03, D-04, RN-02, R
 
   it('still executes a node with one active and one inactive incoming connection (fan-in preserved)', async () => {
     const registry = registryWith(
-      plugin('branch', { outputs: ['true', 'false'] }, () => ({ value: 'branch-a', activeOutput: 'true' })),
-      plugin('other', {}, () => 'branch-b'),
+      plugin('branch', { category: 'trigger', outputs: ['true', 'false'] }, () => ({ value: 'branch-a', activeOutput: 'true' })),
+      plugin('other', { category: 'trigger' }, () => 'branch-b'),
       plugin('merge', {}, (_p, input) => ({ merged: input })),
     );
     const wf: WorkflowDefinition = {
@@ -96,7 +96,7 @@ describe('named-output propagation (004-core-nodes-catalog, D-03, D-04, RN-02, R
   });
 
   it('keeps the plain (unwrapped) executor result for a plugin without manifest.outputs (legacy behavior unchanged)', async () => {
-    const registry = registryWith(plugin('legacy', {}, () => ({ raw: true })));
+    const registry = registryWith(plugin('legacy', { category: 'trigger' }, () => ({ raw: true })));
     const wf: WorkflowDefinition = {
       id: 'wf-legacy',
       name: 'Legacy workflow',

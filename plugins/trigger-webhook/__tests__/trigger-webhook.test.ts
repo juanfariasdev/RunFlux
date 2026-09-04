@@ -100,4 +100,28 @@ describe('trigger-webhook plugin', () => {
     expect(result.value._headers['x-event']).toBe('payment.succeeded');
     expect(result.value._query.live).toBe('false');
   });
+
+  // RN-08: a whole-workflow run races multiple triggers — validation-runtime's engine
+  // fires `context.signal` for every execution still in flight the moment any trigger
+  // settles, so a still-waiting Webhook Trigger abandons its own wait instead of the
+  // caller having to satisfy every trigger just to see a result.
+  it('abandons its wait and rejects when context.signal aborts, without leaking its pending-webhook entry', async () => {
+    process.env.RUNFLUX_WAIT_WEBHOOK_TEST = 'true';
+    const controller = new AbortController();
+
+    const testPromise = execute!(
+      { path: '/never-fires', httpMethod: 'POST' },
+      {},
+      { ...testContext, signal: controller.signal },
+    );
+
+    controller.abort();
+
+    await expect(testPromise).rejects.toThrow(/another trigger.*already fired/i);
+
+    // The now-cancelled wait must not still be sitting in the pending list — otherwise
+    // a later, unrelated webhook test could be misdelivered to this dead listener.
+    const delivered = pushTestWebhook('/never-fires', { body: { late: true } });
+    expect(delivered).toBe(false);
+  });
 });

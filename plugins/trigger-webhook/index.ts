@@ -200,7 +200,7 @@ function resolveSampleBody(sampleBody: unknown): unknown {
   return { message: 'Sample webhook payload' };
 }
 
-export const execute: PluginModule['execute'] = async (params, input, _context?: PluginExecutionContext) => {
+export const execute: PluginModule['execute'] = async (params, input, context?: PluginExecutionContext) => {
   const reqInput = input && typeof input === 'object' ? (input as Record<string, unknown>) : null;
 
   // 1. If payload was already provided from upstream caller:
@@ -222,23 +222,48 @@ export const execute: PluginModule['execute'] = async (params, input, _context?:
   const list = getGlobalPendingWebhooks();
 
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      const idx = list.findIndex((p) => p.timer === timer);
+    let settled = false;
+
+    // Whichever of timeout / real delivery / explicit cancel (clearPendingWebhooks) /
+    // this run's own abort signal settles first wins — the other paths become no-ops
+    // (the list entry may already be gone, e.g. clearPendingWebhooks/pushTestWebhook
+    // remove it themselves before calling resolve/reject; `indexOf` just won't find it).
+    function finish(settle: () => void) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      const idx = list.indexOf(pending);
       if (idx !== -1) list.splice(idx, 1);
-      reject(
-        new Error(
-          `Timeout waiting for incoming webhook request on "${normalizedPath}" after ${timeoutMs / 1000}s. Send an HTTP request to the test URL and click Test again.`
+      context?.signal?.removeEventListener('abort', onAbort);
+      settle();
+    }
+
+    function onAbort() {
+      // RN-08: a whole-workflow run races multiple triggers — a different one
+      // already fired, so this wait no longer matters.
+      finish(() => reject(new Error('Cancelled: another trigger in this test run already fired')));
+    }
+
+    const timer = setTimeout(() => {
+      finish(() =>
+        reject(
+          new Error(
+            `Timeout waiting for incoming webhook request on "${normalizedPath}" after ${timeoutMs / 1000}s. Send an HTTP request to the test URL and click Test again.`
+          )
         )
       );
     }, timeoutMs);
 
-    list.push({
+    const pending: PendingWebhook = {
       path: normalizedPath,
       timer,
       resolve: (incoming) => {
-        resolve({ value: formatWebhookOutput(incoming?.body, incoming?.headers, incoming?.query), activeOutput: 'main' });
+        finish(() => resolve({ value: formatWebhookOutput(incoming?.body, incoming?.headers, incoming?.query), activeOutput: 'main' }));
       },
-      reject,
-    });
+      reject: (err) => finish(() => reject(err)),
+    };
+
+    context?.signal?.addEventListener('abort', onAbort);
+    list.push(pending);
   });
 };

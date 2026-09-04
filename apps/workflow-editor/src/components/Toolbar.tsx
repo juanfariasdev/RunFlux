@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import type { WorkflowNode } from '@runflux/workflow-model/types';
 import type { PluginCatalogAdapter } from '../adapters/plugin-catalog-adapter';
 import type { PluginExecutionMode, ValidationRuntimeAdapter } from '../adapters/validation-runtime-adapter';
 import type { WorkflowPersistenceAdapter } from '../adapters/workflow-persistence-adapter';
@@ -45,8 +46,11 @@ export function Toolbar({ catalog, persistence, validation, onTestingNodesChange
   // just like testing it in isolation (NodeConfigPanel), blocks for up to 120s
   // waiting for a real HTTP request. Without this the whole run just sits there
   // with no visible sign anything is happening — "the Test button does nothing".
+  // Each one is independent (the engine now runs every trigger branch concurrently,
+  // not one after another) and needs its OWN row: a run with 2 webhooks only ever
+  // finishes once BOTH have received a request, so the UI must give a way to send
+  // a test payload to each of them individually, not just the first one.
   const webhookNodes = workflow.nodes.filter((n) => n.pluginId === 'trigger-webhook');
-  const webhookNode = webhookNodes[0];
 
   let projectCtx: ReturnType<typeof useProject> | null = null;
   try {
@@ -123,14 +127,13 @@ export function Toolbar({ catalog, persistence, validation, onTestingNodesChange
     await fetch('/runflux-webhook-cancel', { method: 'POST' }).catch(() => {});
   };
 
-  const handleSendTestPayload = async () => {
-    if (!webhookNode) return;
-    const path = (webhookNode.parameters.path as string) || '/webhook';
+  const handleSendTestPayload = async (node: WorkflowNode) => {
+    const path = (node.parameters.path as string) || '/webhook';
     const testUrl = `${typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173'}/runflux-webhook-test${path}`;
     await fetch(testUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(resolveSampleBodyForTest(webhookNode.parameters.sampleBody)),
+      body: JSON.stringify(resolveSampleBodyForTest(node.parameters.sampleBody)),
     }).catch(() => {});
   };
 
@@ -235,21 +238,27 @@ export function Toolbar({ catalog, persistence, validation, onTestingNodesChange
         </div>
       </header>
 
-      {isRunning && webhookNode && (
-        <div className="z-10 flex items-center gap-3 border-b border-indigo-200 bg-indigo-50/80 px-5 py-2 text-[11px] text-indigo-900" data-testid="toolbar-webhook-waiting-banner">
-          <span className="relative flex h-2 w-2 shrink-0">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-indigo-600" />
-          </span>
-          <span className="font-semibold">
-            Waiting for an incoming webhook on {(webhookNode.parameters.path as string) || '/webhook'}…
-          </span>
-          <button type="button" onClick={handleSendTestPayload} className="ml-auto font-semibold text-indigo-600 hover:underline">
-            ⚡ Send test payload now
-          </button>
-          <button type="button" onClick={handleCancelTest} className="font-semibold text-red-600 hover:underline">
-            ⏹ Stop
-          </button>
+      {isRunning && webhookNodes.length > 0 && (
+        <div className="z-10 border-b border-indigo-200 bg-indigo-50/80 px-5 py-2 text-[11px] text-indigo-900" data-testid="toolbar-webhook-waiting-banner">
+          {webhookNodes.map((node) => (
+            <div key={node.id} className="flex items-center gap-3 py-0.5">
+              <span className="relative flex h-2 w-2 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-indigo-600" />
+              </span>
+              <span className="font-semibold">
+                Waiting for an incoming webhook on {(node.parameters.path as string) || '/webhook'}…
+              </span>
+              <button type="button" onClick={() => handleSendTestPayload(node)} className="ml-auto font-semibold text-indigo-600 hover:underline">
+                ⚡ Send test payload now
+              </button>
+            </div>
+          ))}
+          <div className="flex justify-end pt-0.5">
+            <button type="button" onClick={handleCancelTest} className="font-semibold text-red-600 hover:underline">
+              ⏹ Stop all
+            </button>
+          </div>
         </div>
       )}
 

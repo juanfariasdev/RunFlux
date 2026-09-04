@@ -254,6 +254,64 @@ describe('Toolbar — Test (RF-06, RF-12, RN-04)', () => {
     vi.unstubAllGlobals();
   });
 
+  // The engine now runs every Webhook Trigger concurrently and independently — a run
+  // with 2 of them only finishes once BOTH have received a request. Before this, the
+  // banner only ever showed (and could send a payload to) `webhookNodes[0]`, so there
+  // was no way through the UI to satisfy the second one — the run looked stuck forever.
+  it('gives each Webhook Trigger its own row and its own "send test payload" button when a run has more than one', async () => {
+    useWorkflowStore.getState().addNode({
+      id: 'wh1',
+      pluginId: 'trigger-webhook',
+      pluginVersion: '1.0.0',
+      parameters: { path: '/hook-a', httpMethod: 'POST' },
+      position: { x: 0, y: 0 },
+    });
+    useWorkflowStore.getState().addNode({
+      id: 'wh2',
+      pluginId: 'trigger-webhook',
+      pluginVersion: '1.0.0',
+      parameters: { path: '/hook-b', httpMethod: 'POST' },
+      position: { x: 0, y: 0 },
+    });
+
+    let resolveRun!: (value: unknown) => void;
+    const run = vi.fn(() => new Promise((resolve) => { resolveRun = resolve; }));
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, text: async () => '{}' });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <Toolbar
+        catalog={fakeCatalog()}
+        persistence={{ save: vi.fn(), load: vi.fn() }}
+        validation={{ run, runNode: vi.fn() }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /^▶ Test$/ }));
+
+    await screen.findByText(/waiting for an incoming webhook on \/hook-a/i);
+    await screen.findByText(/waiting for an incoming webhook on \/hook-b/i);
+
+    const sendButtons = screen.getAllByRole('button', { name: /send test payload now/i });
+    expect(sendButtons).toHaveLength(2);
+
+    fireEvent.click(sendButtons[0]);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/runflux-webhook-test/hook-a'),
+      expect.anything(),
+    ));
+
+    fireEvent.click(sendButtons[1]);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/runflux-webhook-test/hook-b'),
+      expect.anything(),
+    ));
+
+    resolveRun({ status: 'success', nodeResults: [] });
+    await waitFor(() => expect(screen.queryByTestId('toolbar-webhook-waiting-banner')).not.toBeInTheDocument());
+
+    vi.unstubAllGlobals();
+  });
+
   // Canvas.tsx renders the same spinning badge for any node id in `testingNodeIds` —
   // a whole-workflow run needs to report its Webhook Trigger(s) through this callback
   // so the canvas actually shows them as waiting, not just the toolbar banner.

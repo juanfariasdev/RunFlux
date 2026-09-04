@@ -97,6 +97,14 @@ export interface PluginExecutionContext {
   workflowId: string;
   nodeId: string;
   mode: 'sandbox' | 'production';
+  /**
+   * Fires when this node's wait no longer matters — e.g. a whole-workflow
+   * run raced two independent triggers (RN-08) and a different one already
+   * fired. A plugin that waits on a real external event (trigger-webhook)
+   * should abandon that wait and reject when this fires; a plugin that
+   * doesn't wait on anything can ignore it entirely.
+   */
+  signal?: AbortSignal;
 }
 
 /**

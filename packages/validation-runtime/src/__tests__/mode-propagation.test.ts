@@ -4,9 +4,9 @@ import { describe, expect, it } from 'vitest';
 import { runNode, runWorkflow } from '../engine';
 import type { WorkflowDefinition } from '@runflux/workflow-model/types';
 
-function echoModePlugin(id: string): DiscoveredPlugin {
+function echoModePlugin(id: string, category: DiscoveredPlugin['manifest']['category'] = 'action'): DiscoveredPlugin {
   return {
-    manifest: { id, name: id, category: 'action', version: '1.0.0', parameters: [], supportedPlatforms: ['local'] },
+    manifest: { id, name: id, category, version: '1.0.0', parameters: [], supportedPlatforms: ['local'] },
     generators: { local: () => ({ files: [], infra: [] }) },
     execute: (_params, _input, context: PluginExecutionContext) => ({ mode: context.mode, workflowId: context.workflowId, nodeId: context.nodeId }),
     sourcePath: `/plugins/${id}`,
@@ -25,7 +25,7 @@ function workflow(): WorkflowDefinition {
 describe('mode propagation (RF-08, RN-05)', () => {
   it('passes mode "sandbox" through runWorkflow into the executing plugin\'s context', async () => {
     const registry = new PluginRegistry();
-    registry.register(echoModePlugin('echo'));
+    registry.register(echoModePlugin('echo', 'trigger'));
 
     const run = await runWorkflow(workflow(), registry, { mode: 'sandbox' });
 
@@ -34,7 +34,7 @@ describe('mode propagation (RF-08, RN-05)', () => {
 
   it('passes mode "production" through runWorkflow into the executing plugin\'s context', async () => {
     const registry = new PluginRegistry();
-    registry.register(echoModePlugin('echo'));
+    registry.register(echoModePlugin('echo', 'trigger'));
 
     const run = await runWorkflow(workflow(), registry, { mode: 'production' });
 
