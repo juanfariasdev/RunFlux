@@ -131,12 +131,15 @@ function computeReachableFromTriggers(workflow: WorkflowDefinition, registry: Pl
  * as testing it in isolation) never blocks the other from starting, and each
  * resolves on its own regardless of which one a caller interacts with first.
  *
- * With more than one trigger, the run doesn't wait for every one of them —
- * it races them (RN-08): the moment any trigger settles, `signal` fires for
- * every plugin execution still in flight, so a still-waiting trigger (e.g.
- * the other Webhook Trigger) abandons its wait instead of the caller having
- * to satisfy every trigger just to see a result. A plugin that doesn't wait
- * on anything is unaffected either way.
+ * With more than one trigger OF THE SAME PLUGIN TYPE (e.g. two Webhook
+ * Triggers), the run doesn't wait for every one of them — it races that
+ * group (RN-08): the moment any one settles, `signal` fires for every other
+ * still-pending trigger sharing its plugin id, so it can abandon its wait
+ * instead of the caller having to satisfy every one of them just to see a
+ * result. This never crosses plugin types: a Manual Trigger firing instantly
+ * must not cancel an unrelated Webhook Trigger's legitimate wait just because
+ * it happened to settle first — each plugin type's triggers only race their
+ * own siblings. A plugin that doesn't check `signal` is unaffected either way.
  *
  * A node error does not abort the run: it stops propagation to that node's
  * downstream nodes only, while every already-computed result stays in
@@ -167,7 +170,27 @@ export async function runWorkflow(
   const resultsByNodeId = new Map<string, NodeResult>();
   const activeOutputsByNodeId = new Map<string, string[]>();
   const started = new Map<string, Promise<void>>();
-  const abortController = new AbortController();
+
+  // A shared AbortController per plugin id that has more than one reachable trigger
+  // instance — e.g. two 'trigger-webhook' nodes get one controller between them, a
+  // lone 'trigger-manual-example' gets none. Scoping by plugin id (not just "is a
+  // trigger") is what keeps different trigger types from cancelling each other.
+  const controllerByNodeId = new Map<string, AbortController>();
+  const triggerNodeIdsByPlugin = new Map<string, string[]>();
+  for (const node of workflow.nodes) {
+    if (!reachableFromTrigger.has(node.id)) continue;
+    if (registry.getManifest(node.pluginId)?.category !== 'trigger') continue;
+    const list = triggerNodeIdsByPlugin.get(node.pluginId) ?? [];
+    list.push(node.id);
+    triggerNodeIdsByPlugin.set(node.pluginId, list);
+  }
+  const raceGroups: string[][] = [];
+  for (const nodeIds of triggerNodeIdsByPlugin.values()) {
+    if (nodeIds.length <= 1) continue; // nothing to race against
+    raceGroups.push(nodeIds);
+    const controller = new AbortController();
+    for (const id of nodeIds) controllerByNodeId.set(id, controller);
+  }
 
   function run(nodeId: string): Promise<void> {
     const existing = started.get(nodeId);
@@ -196,7 +219,7 @@ export async function runWorkflow(
         workflowId: workflow.id,
         nodeId: node.id,
         mode: options.mode,
-        signal: abortController.signal,
+        signal: controllerByNodeId.get(node.id)?.signal,
       });
       resultsByNodeId.set(node.id, {
         nodeId: node.id,
@@ -214,15 +237,15 @@ export async function runWorkflow(
   }
 
   const reachableNodeIds = workflow.nodes.filter((node) => reachableFromTrigger.has(node.id)).map((node) => node.id);
-  const triggerIds = workflow.nodes
-    .filter((node) => reachableFromTrigger.has(node.id) && registry.getManifest(node.pluginId)?.category === 'trigger')
-    .map((node) => node.id);
 
   const allSettled = Promise.all(reachableNodeIds.map(run));
-  if (triggerIds.length > 1) {
-    await Promise.race(triggerIds.map(run));
-    abortController.abort(); // RN-08: one trigger fired — every other still-pending trigger stops waiting
-  }
+  // RN-08: within each same-plugin-type group, one firing is enough — abort that
+  // group's shared signal so its still-pending siblings stop waiting. Independent
+  // of and unaffected by every other group (different trigger types never race).
+  await Promise.all(raceGroups.map(async (nodeIds) => {
+    await Promise.race(nodeIds.map(run));
+    controllerByNodeId.get(nodeIds[0])!.abort();
+  }));
   await allSettled;
 
   const nodeResults = [...resultsByNodeId.values()];

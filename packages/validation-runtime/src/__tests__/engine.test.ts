@@ -185,24 +185,58 @@ describe('runWorkflow (RF-01, RF-02)', () => {
   // still-pending trigger gets `context.signal` fired so it can abandon its own wait
   // (trigger-webhook does exactly this) instead of the caller having to satisfy all of
   // them, or the run sitting there for up to that trigger's own timeout.
-  it('races multiple triggers — the moment any one settles, every other still-waiting trigger is signalled to abandon its wait (RN-08)', async () => {
+  it('races multiple triggers of the SAME plugin type — the moment any one settles, its siblings abandon their wait (RN-08)', async () => {
+    // One plugin, registered once — two node instances of it, mirroring two real
+    // Webhook Trigger nodes. `fast-node` settles right away (like a payload that
+    // already arrived); `waiting-node` only settles via the abort signal.
     const registry = registryWith(
-      plugin('waits-for-signal', (_params, _input, context) => new Promise((_resolve, reject) => {
-        context.signal?.addEventListener('abort', () => reject(new Error('Cancelled: superseded by another trigger')));
-      }), 'trigger'),
-      plugin('fires-immediately', () => 'fired', 'trigger'),
+      plugin('webhook-like', (_params, _input, context) => {
+        if (context.nodeId === 'fast-node') return Promise.resolve('fired');
+        return new Promise((_resolve, reject) => {
+          context.signal?.addEventListener('abort', () => reject(new Error('Cancelled: superseded by another trigger')));
+        });
+      }, 'trigger'),
     );
     const wf = workflow({
       nodes: [
-        { id: 'waiting-node', pluginId: 'waits-for-signal', pluginVersion: '1.0.0', parameters: {}, position: { x: 0, y: 0 } },
-        { id: 'immediate-node', pluginId: 'fires-immediately', pluginVersion: '1.0.0', parameters: {}, position: { x: 0, y: 0 } },
+        { id: 'waiting-node', pluginId: 'webhook-like', pluginVersion: '1.0.0', parameters: {}, position: { x: 0, y: 0 } },
+        { id: 'fast-node', pluginId: 'webhook-like', pluginVersion: '1.0.0', parameters: {}, position: { x: 0, y: 0 } },
       ],
     });
 
     const run = await runWorkflow(wf, registry, { mode: 'sandbox' });
 
-    expect(run.nodeResults.find((r) => r.nodeId === 'immediate-node')).toMatchObject({ output: 'fired', error: null });
+    expect(run.nodeResults.find((r) => r.nodeId === 'fast-node')).toMatchObject({ output: 'fired', error: null });
     expect(run.nodeResults.find((r) => r.nodeId === 'waiting-node')?.error).toMatch(/cancelled/i);
+  });
+
+  // The bug this guards against: an instant trigger of a DIFFERENT type (e.g. Manual
+  // Trigger) must never cancel a genuinely-waiting trigger of another type (e.g.
+  // Webhook Trigger) just because it happened to settle first — only siblings sharing
+  // the same plugin id race each other.
+  it('never races triggers across different plugin types — an instant one finishing does not cancel a slow one of another kind', async () => {
+    let resolveSlow!: (value: unknown) => void;
+    const registry = registryWith(
+      plugin('manual-like', () => 'fired-instantly', 'trigger'),
+      plugin('webhook-like', () => new Promise((resolve) => { resolveSlow = resolve; }), 'trigger'),
+    );
+    const wf = workflow({
+      nodes: [
+        { id: 'manual-node', pluginId: 'manual-like', pluginVersion: '1.0.0', parameters: {}, position: { x: 0, y: 0 } },
+        { id: 'webhook-node', pluginId: 'webhook-like', pluginVersion: '1.0.0', parameters: {}, position: { x: 0, y: 0 } },
+      ],
+    });
+
+    const runPromise = runWorkflow(wf, registry, { mode: 'sandbox' });
+
+    // Let the instant, unrelated trigger fully settle before the webhook-like one does.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    resolveSlow('finally arrived');
+    const run = await runPromise;
+
+    expect(run.nodeResults.find((r) => r.nodeId === 'manual-node')).toMatchObject({ output: 'fired-instantly', error: null });
+    expect(run.nodeResults.find((r) => r.nodeId === 'webhook-node')).toMatchObject({ output: 'finally arrived', error: null });
   });
 
   it('skips a whole island of action nodes that traces back to no trigger at all', async () => {
