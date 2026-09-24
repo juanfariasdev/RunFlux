@@ -1,5 +1,6 @@
 import type { WorkflowDefinition } from '@runflux/workflow-model';
 import type { GeneratedFile, CompilationOptions } from '../types.js';
+import { buildRunnerCode } from './templates/runner-template.js';
 
 export interface AwsGeneratorContext {
   workflow: WorkflowDefinition;
@@ -9,7 +10,7 @@ export interface AwsGeneratorContext {
 }
 
 export function generateAwsProject(context: AwsGeneratorContext): GeneratedFile[] {
-  const { workflow, projectName, nodeFiles } = context;
+  const { workflow, projectName, nodeFiles, options } = context;
   const sanitizedPkgName =
     projectName
       .toLowerCase()
@@ -159,6 +160,12 @@ new WorkflowStack(app, '${stackName}', {
 `;
   }
 
+  const customEnvVars = options?.envVars || workflow.settings?.envVars || [];
+  const customEnvEntries = customEnvVars.map(
+    (v) => `        ${v.key}: process.env.${v.key} || ${JSON.stringify(v.value ?? '')},`
+  );
+  const customEnvBlock = customEnvEntries.length > 0 ? `\n${customEnvEntries.join('\n')}` : '';
+
   const libStackContent = `${cdkImports.join('\n')}
 
 export class WorkflowStack extends Stack {
@@ -174,7 +181,7 @@ export class WorkflowStack extends Stack {
       environment: {
         WORKFLOW_NAME: '${projectName}',
         NODE_ENV: 'production',
-        ${hasWebhook ? `${webhookSecretEnvVar}: process.env.${webhookSecretEnvVar} || '',` : ''}
+        ${hasWebhook ? `${webhookSecretEnvVar}: process.env.${webhookSecretEnvVar} || '',` : ''}${customEnvBlock}
       },
     });
 
@@ -196,36 +203,64 @@ ${cronCdkBlock}
 }
 `;
 
+  // Assembly of DAG runner and nodes
   const importsList: string[] = [];
-  const executionsList: string[] = [];
+  const graphNodeEntries: string[] = [];
 
-  nodeFiles.forEach((file, index) => {
+  workflow.nodes.forEach((node, index) => {
+    const matchingFile =
+      nodeFiles.find(
+        (f) =>
+          f.path.includes(`/${node.id}-`) ||
+          f.path.includes(`node-${index + 1}-`) ||
+          f.path.endsWith(`${node.pluginId}.ts`) ||
+          f.path.includes(node.id)
+      ) || nodeFiles[index];
+
     const importName = `nodeModule_${index}`;
-    const relativeModulePath = file.path.replace(/^src\//, './').replace(/\.ts$/, '.js');
+    const relativeModulePath = matchingFile
+      ? matchingFile.path.replace(/^src\//, './').replace(/\.ts$/, '.js')
+      : `./nodes/node-${index + 1}-${node.pluginId}.js`;
+
     importsList.push(`import * as ${importName} from '${relativeModulePath}';`);
-    executionsList.push(`
-    // Execute step: ${file.path}
-    if (typeof ${importName}.run === 'function') {
-      const stepResult = await ${importName}.run(currentPayload);
-      if (stepResult && typeof stepResult === 'object' && 'activeOutput' in stepResult) {
-        if (stepResult.activeOutput === null) {
-          return {
-            statusCode: 200,
-            headers: {
-              'Content-Type': 'application/json',
-              'Access-Control-Allow-Origin': '*',
-              'Access-Control-Allow-Headers': '*',
-              'Access-Control-Allow-Methods': 'OPTIONS,POST,GET',
-            },
-            body: JSON.stringify({ success: true, result: null, haltedAt: '${file.path}' }),
-          };
-        }
-        currentPayload = stepResult.value !== undefined ? stepResult.value : stepResult;
-      } else {
-        currentPayload = stepResult !== undefined ? stepResult : currentPayload;
-      }
-    }`);
+
+    const isTrigger = node.pluginId.startsWith('trigger-');
+    const label = JSON.stringify(node.appearance?.label || node.pluginId);
+    graphNodeEntries.push(`  {
+    id: '${node.id}',
+    name: ${label},
+    isTrigger: ${isTrigger},
+    run: (input, context) => typeof ${importName}.run === 'function' ? ${importName}.run(input, context) : Promise.resolve(input),
+  }`);
   });
+
+  if (workflow.nodes.length === 0 && nodeFiles.length > 0) {
+    nodeFiles.forEach((file, index) => {
+      const importName = `nodeModule_${index}`;
+      const relativeModulePath = file.path.replace(/^src\//, './').replace(/\.ts$/, '.js');
+      importsList.push(`import * as ${importName} from '${relativeModulePath}';`);
+      graphNodeEntries.push(`  {
+    id: 'node-${index}',
+    name: 'Node ${index}',
+    isTrigger: ${index === 0},
+    run: (input, context) => typeof ${importName}.run === 'function' ? ${importName}.run(input, context) : Promise.resolve(input),
+  }`);
+    });
+  }
+
+  const graphNodesCode = graphNodeEntries.join(',\n');
+  const graphConnectionsJson = JSON.stringify(
+    workflow.connections.map((c) => ({
+      source: c.sourceNodeId,
+      sourceOutput: c.sourceOutput || 'main',
+      target: c.targetNodeId,
+      targetInput: c.targetInput || 'main',
+    })),
+    null,
+    2
+  );
+
+  const runnerTsContent = buildRunnerCode(importsList, graphNodesCode, graphConnectionsJson);
 
   let webhookAuthCheck = '';
   if (hasWebhook && (webhookAuth === "secret" || webhookAuth === "headerAuth")) {
@@ -250,7 +285,7 @@ ${cronCdkBlock}
   }
 
   const handlerContent = `import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
-${importsList.join('\n')}
+import { runWorkflow } from './runner.js';
 
 export const handler = async (event: APIGatewayProxyEventV2 | any): Promise<APIGatewayProxyResultV2> => {
   try {
@@ -261,20 +296,31 @@ ${webhookAuthCheck}
     } else if (event && typeof event === 'object' && Object.keys(event).length > 0) {
       currentPayload = event;
     }
-${executionsList.join('\n')}
+
+    const execution = await runWorkflow(currentPayload);
+
+    if (execution.success) {
+      return {
+        statusCode: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Headers': '*',
+          'Access-Control-Allow-Methods': 'OPTIONS,POST,GET',
+        },
+        body: JSON.stringify(execution),
+      };
+    }
 
     return {
-      statusCode: 200,
+      statusCode: 500,
       headers: {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Headers': '*',
         'Access-Control-Allow-Methods': 'OPTIONS,POST,GET',
       },
-      body: JSON.stringify({
-        success: true,
-        result: currentPayload,
-      }),
+      body: JSON.stringify(execution),
     };
   } catch (error: any) {
     console.error('[RunFlux Lambda Error]', error);
@@ -302,6 +348,7 @@ ${executionsList.join('\n')}
     { path: 'README.md', content: readmeContent, type: 'asset' },
     { path: 'bin/app.ts', content: binAppContent, type: 'infrastructure' },
     { path: 'lib/workflow-stack.ts', content: libStackContent, type: 'infrastructure' },
+    { path: 'src/runner.ts', content: runnerTsContent, type: 'source' },
     { path: 'src/handler.ts', content: handlerContent, type: 'source' },
     ...nodeFiles,
   ];

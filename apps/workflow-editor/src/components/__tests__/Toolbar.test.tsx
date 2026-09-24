@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Toolbar } from '../Toolbar';
 import { useWorkflowStore } from '../../store/workflow-store';
 import type { PluginCatalogAdapter } from '../../adapters/plugin-catalog-adapter';
-import type { ValidationRuntimeAdapter } from '../../adapters/validation-runtime-adapter';
+import type { ValidationRuntimeAdapter, ValidationRunResult } from '../../adapters/validation-runtime-adapter';
 import type { WorkflowPersistenceAdapter } from '../../adapters/workflow-persistence-adapter';
 import type { PluginManifest } from '@runflux/plugin-system/types';
 
@@ -200,8 +200,8 @@ describe('Toolbar — Test (RF-06, RF-12, RN-04)', () => {
   // this, the button gave no sign anything was happening while that wait was in progress
   // ("the Test button does nothing").
   it('disables the Test button and shows a busy label while the run is in flight', async () => {
-    let resolveRun!: (value: unknown) => void;
-    const run = vi.fn(() => new Promise((resolve) => { resolveRun = resolve; }));
+    let resolveRun!: (value: ValidationRunResult) => void;
+    const run = vi.fn((): Promise<ValidationRunResult> => new Promise((resolve) => { resolveRun = resolve; }));
     render(
       <Toolbar
         catalog={fakeCatalog()}
@@ -226,8 +226,8 @@ describe('Toolbar — Test (RF-06, RF-12, RN-04)', () => {
       position: { x: 0, y: 0 },
     });
 
-    let resolveRun!: (value: unknown) => void;
-    const run = vi.fn(() => new Promise((resolve) => { resolveRun = resolve; }));
+    let resolveRun!: (value: ValidationRunResult) => void;
+    const run = vi.fn((): Promise<ValidationRunResult> => new Promise((resolve) => { resolveRun = resolve; }));
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, text: async () => '{}' });
     vi.stubGlobal('fetch', fetchMock);
 
@@ -274,8 +274,8 @@ describe('Toolbar — Test (RF-06, RF-12, RN-04)', () => {
       position: { x: 0, y: 0 },
     });
 
-    let resolveRun!: (value: unknown) => void;
-    const run = vi.fn(() => new Promise((resolve) => { resolveRun = resolve; }));
+    let resolveRun!: (value: ValidationRunResult) => void;
+    const run = vi.fn((): Promise<ValidationRunResult> => new Promise((resolve) => { resolveRun = resolve; }));
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, text: async () => '{}' });
     vi.stubGlobal('fetch', fetchMock);
 
@@ -324,8 +324,8 @@ describe('Toolbar — Test (RF-06, RF-12, RN-04)', () => {
       position: { x: 0, y: 0 },
     });
 
-    let resolveRun!: (value: unknown) => void;
-    const run = vi.fn(() => new Promise((resolve) => { resolveRun = resolve; }));
+    let resolveRun!: (value: ValidationRunResult) => void;
+    const run = vi.fn((): Promise<ValidationRunResult> => new Promise((resolve) => { resolveRun = resolve; }));
     const onTestingNodesChange = vi.fn();
 
     render(

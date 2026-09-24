@@ -14,6 +14,7 @@ model Project {
   updatedAt              DateTime          @updatedAt
   archivedAt             DateTime?
   currentWorkflowVersion String?
+  envVars                String?
   versions               WorkflowVersion[]
 
   @@index([archivedAt])

@@ -11,6 +11,12 @@ export interface ProjectSummary {
   nodeCount: number;
 }
 
+export interface ProjectEnvVar {
+  key: string;
+  value: string;
+  description?: string;
+}
+
 export interface ProjectDetail {
   id: string;
   name: string;
@@ -18,6 +24,7 @@ export interface ProjectDetail {
   updatedAt: string;
   archivedAt: string | null;
   currentWorkflowVersion: string | null;
+  envVars?: ProjectEnvVar[];
   workflow: WorkflowDefinition;
 }
 
@@ -27,6 +34,7 @@ export interface RunfluxExportEnvelope {
   exportedAt: string;
   project: {
     name: string;
+    envVars?: ProjectEnvVar[];
   };
   workflow: WorkflowDefinition;
 }
@@ -166,5 +174,18 @@ export class HttpProjectApiAdapter implements WorkflowPersistenceAdapter {
       }
       throw err;
     }
+  }
+
+  async getEnvVars(projectId: string): Promise<ProjectEnvVar[]> {
+    const res = await this.request<{ envVars: ProjectEnvVar[] }>(`/${projectId}/env`);
+    return res.envVars || [];
+  }
+
+  async updateEnvVars(projectId: string, envVars: ProjectEnvVar[]): Promise<ProjectEnvVar[]> {
+    const res = await this.request<{ envVars: ProjectEnvVar[] }>(`/${projectId}/env`, {
+      method: 'PUT',
+      body: JSON.stringify({ envVars }),
+    });
+    return res.envVars || [];
   }
 }

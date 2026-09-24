@@ -60,7 +60,7 @@ export class ProjectRepository {
     });
   }
 
-  async update(id: string, data: { name?: string; currentWorkflowVersion?: string }) {
+  async update(id: string, data: { name?: string; currentWorkflowVersion?: string; envVars?: string }) {
     return this.db.project.update({
       where: { id },
       data,

@@ -1,5 +1,6 @@
 import type { WorkflowDefinition } from '@runflux/workflow-model';
 import type { GeneratedFile, CompilationOptions } from '../types.js';
+import { buildRunnerCode } from './templates/runner-template.js';
 
 export interface LocalGeneratorContext {
   workflow: WorkflowDefinition;
@@ -119,6 +120,17 @@ NODE_ENV=production
     envExampleContent += `ENABLE_INLINE_CRON=false\nCRON_TIMEZONE=${cronTimezone}\n`;
   }
 
+  const customEnvVars = options?.envVars || workflow.settings?.envVars || [];
+  if (customEnvVars.length > 0) {
+    envExampleContent += `\n# Project Environment Variables\n`;
+    customEnvVars.forEach((v) => {
+      if (v.description) {
+        envExampleContent += `# ${v.description}\n`;
+      }
+      envExampleContent += `${v.key}=${v.value ?? ''}\n`;
+    });
+  }
+
   let readmeContent = `# ${projectName}
 
 Standalone backend compiled with [RunFlux](https://runflux.io).
@@ -171,28 +183,66 @@ npm run package  # Creates compiled/function.zip
 \`\`\`
 `;
 
-  // Assembly of imports and execution pipeline
+  // Assembly of DAG runner and nodes
   const importsList: string[] = [];
-  const executionsList: string[] = [];
+  const graphNodeEntries: string[] = [];
 
-  nodeFiles.forEach((file, index) => {
+  // Map each node in the workflow to its compiled module
+  workflow.nodes.forEach((node, index) => {
+    const matchingFile =
+      nodeFiles.find(
+        (f) =>
+          f.path.includes(`/${node.id}-`) ||
+          f.path.includes(`node-${index + 1}-`) ||
+          f.path.endsWith(`${node.pluginId}.ts`) ||
+          f.path.includes(node.id)
+      ) || nodeFiles[index];
+
     const importName = `nodeModule_${index}`;
-    const relativeModulePath = file.path.replace(/^src\//, './').replace(/\.ts$/, '.js');
+    const relativeModulePath = matchingFile
+      ? matchingFile.path.replace(/^src\//, './').replace(/\.ts$/, '.js')
+      : `./nodes/node-${index + 1}-${node.pluginId}.js`;
+
     importsList.push(`import * as ${importName} from '${relativeModulePath}';`);
-    executionsList.push(`
-    // Execute step: ${file.path}
-    if (typeof ${importName}.run === 'function') {
-      const stepResult = await ${importName}.run(currentPayload);
-      if (stepResult && typeof stepResult === 'object' && 'activeOutput' in stepResult) {
-        if (stepResult.activeOutput === null) {
-          return { success: true, result: null, haltedAt: '${file.path}' };
-        }
-        currentPayload = stepResult.value !== undefined ? stepResult.value : stepResult;
-      } else {
-        currentPayload = stepResult !== undefined ? stepResult : currentPayload;
-      }
-    }`);
+
+    const isTrigger = node.pluginId.startsWith('trigger-');
+    const label = JSON.stringify(node.appearance?.label || node.pluginId);
+    graphNodeEntries.push(`  {
+    id: '${node.id}',
+    name: ${label},
+    isTrigger: ${isTrigger},
+    run: (input, context) => typeof ${importName}.run === 'function' ? ${importName}.run(input, context) : Promise.resolve(input),
+  }`);
   });
+
+  // Handle case where nodeFiles was provided with arbitrary test files not matching workflow.nodes
+  if (workflow.nodes.length === 0 && nodeFiles.length > 0) {
+    nodeFiles.forEach((file, index) => {
+      const importName = `nodeModule_${index}`;
+      const relativeModulePath = file.path.replace(/^src\//, './').replace(/\.ts$/, '.js');
+      importsList.push(`import * as ${importName} from '${relativeModulePath}';`);
+      graphNodeEntries.push(`  {
+    id: 'node-${index}',
+    name: 'Node ${index}',
+    isTrigger: ${index === 0},
+    run: (input, context) => typeof ${importName}.run === 'function' ? ${importName}.run(input, context) : Promise.resolve(input),
+  }`);
+    });
+  }
+
+  const graphNodesCode = graphNodeEntries.join(',\n');
+  const graphConnectionsJson = JSON.stringify(
+    workflow.connections.map((c) => ({
+      source: c.sourceNodeId,
+      sourceOutput: c.sourceOutput || 'main',
+      target: c.targetNodeId,
+      targetInput: c.targetInput || 'main',
+    })),
+    null,
+    2
+  );
+
+  const runnerTsContent = buildRunnerCode(importsList, graphNodesCode, graphConnectionsJson);
 
   // Webhook express routes
   let webhookRoutesCode = '';
@@ -267,7 +317,7 @@ if (process.env.ENABLE_INLINE_CRON === 'true') {
 import cors from 'cors';
 import dotenv from 'dotenv';
 ${hasCron ? "import cron from 'node-cron';" : ''}
-import { runWorkflow } from './run.js';
+import { runWorkflow } from './runner.js';
 
 dotenv.config();
 
@@ -308,15 +358,11 @@ app.listen(port, () => {
 `;
 
   const runTsContent = `import dotenv from 'dotenv';
-${importsList.join('\n')}
+import { runWorkflow } from './runner.js';
 
 dotenv.config();
 
-export async function runWorkflow(initialPayload: any = {}) {
-  let currentPayload: any = initialPayload;
-${executionsList.join('\n')}
-  return { success: true, result: currentPayload };
-}
+export { runWorkflow };
 
 // Direct CLI execution
 const isDirectRun =
@@ -353,6 +399,7 @@ if (isDirectRun) {
     { path: 'Dockerfile', content: dockerfileContent, type: 'infrastructure' },
     { path: '.env.example', content: envExampleContent, type: 'config' },
     { path: 'README.md', content: readmeContent, type: 'asset' },
+    { path: 'src/runner.ts', content: runnerTsContent, type: 'source' },
     { path: 'src/server.ts', content: serverTsContent, type: 'source' },
     { path: 'src/run.ts', content: runTsContent, type: 'source' },
     ...nodeFiles,

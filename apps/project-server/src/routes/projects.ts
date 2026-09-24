@@ -105,6 +105,27 @@ export function createProjectsRouter(service: ProjectService = new ProjectServic
     }
   });
 
+  // 1.10 Obter Variáveis de Ambiente do Projeto
+  router.get('/:id/env', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const envVars = await service.getProjectEnv(req.params.id);
+      res.json({ envVars });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // 1.11 Atualizar Variáveis de Ambiente do Projeto
+  router.put('/:id/env', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const rawEnv = req.body?.envVars !== undefined ? req.body.envVars : req.body;
+      const envVars = await service.updateProjectEnv(req.params.id, rawEnv);
+      res.json({ envVars });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   // 1.7 Excluir Projeto Definitivamente (Hard Delete)
   router.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
     try {

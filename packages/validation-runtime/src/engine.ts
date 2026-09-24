@@ -55,12 +55,31 @@ interface ExecuteNodeResult extends Pick<NodeResult, 'output' | 'error'> {
   activeOutputs: string[];
 }
 
+function buildNodeContext(
+  nodes: WorkflowDefinition['nodes'],
+  results: Map<string, NodeResult>,
+): Record<string, { json: unknown }> {
+  const nodeContext: Record<string, { json: unknown }> = {};
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+
+  for (const [nodeId, result] of results.entries()) {
+    const entry = { json: result.output };
+    nodeContext[nodeId] = entry;
+    const node = byId.get(nodeId);
+    if (node?.appearance?.label) {
+      nodeContext[node.appearance.label] = entry;
+    }
+  }
+  return nodeContext;
+}
+
 async function executeNode(
   pluginId: string,
   params: Record<string, unknown>,
   input: unknown,
   registry: PluginRegistry,
   context: PluginExecutionContext,
+  expressionContext?: { $node?: Record<string, { json: unknown }>; $env?: Record<string, string> },
 ): Promise<ExecuteNodeResult> {
   const executor = resolveExecutor(registry, pluginId);
   if (!executor) {
@@ -70,7 +89,11 @@ async function executeNode(
   try {
     // D-02: expressions resolve here, once, for every plugin — a plugin's
     // execute() always receives already-resolved parameters, never a raw {{ }}.
-    const resolvedParams = resolveExpressions(params, { $json: input });
+    const resolvedParams = resolveExpressions(params, {
+      $json: input,
+      $node: expressionContext?.$node,
+      $env: expressionContext?.$env,
+    });
     const raw = await executor(resolvedParams, input, context);
     if (!manifest?.outputs) {
       return { output: raw ?? null, error: null, activeOutputs: ['main'] };
@@ -215,12 +238,20 @@ export async function runWorkflow(
 
       const input = resolveInput(activeIncoming, resultsByNodeId);
       const nodeStartedAt = new Date().toISOString();
-      const { output, error, activeOutputs } = await executeNode(node.pluginId, node.parameters, input, registry, {
-        workflowId: workflow.id,
-        nodeId: node.id,
-        mode: options.mode,
-        signal: controllerByNodeId.get(node.id)?.signal,
-      });
+      const nodeContext = buildNodeContext(workflow.nodes, resultsByNodeId);
+      const { output, error, activeOutputs } = await executeNode(
+        node.pluginId,
+        node.parameters,
+        input,
+        registry,
+        {
+          workflowId: workflow.id,
+          nodeId: node.id,
+          mode: options.mode,
+          signal: controllerByNodeId.get(node.id)?.signal,
+        },
+        { $node: nodeContext },
+      );
       resultsByNodeId.set(node.id, {
         nodeId: node.id,
         input,
@@ -284,11 +315,19 @@ export async function runNode(
   const incoming = workflow.connections.filter((c) => c.targetNodeId === nodeId);
   const input = resolveInput(incoming, cache);
   const startedAt = new Date().toISOString();
-  const { output, error } = await executeNode(node.pluginId, node.parameters, input, registry, {
-    workflowId: workflow.id,
-    nodeId: node.id,
-    mode: options.mode,
-  });
+  const nodeContext = buildNodeContext(workflow.nodes, cache);
+  const { output, error } = await executeNode(
+    node.pluginId,
+    node.parameters,
+    input,
+    registry,
+    {
+      workflowId: workflow.id,
+      nodeId: node.id,
+      mode: options.mode,
+    },
+    { $node: nodeContext },
+  );
 
   return { nodeId, input, output, error, startedAt, finishedAt: new Date().toISOString() };
 }

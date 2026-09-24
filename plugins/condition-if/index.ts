@@ -67,17 +67,26 @@ export const generators: PluginModule['generators'] = {
 const CONDITIONS = ${conditions};
 const COMBINATOR = ${combinator};
 
-// Standalone {{ }} evaluator copy (004-core-nodes-catalog, D-08) — this file
-// never runs through @runflux/validation-runtime, so it resolves its own expressions.
-function evaluateExpression(expr, $json) {
-  return new Function('$json', 'return (' + expr + ')')($json);
+// Standalone {{ }} evaluator copy (004-core-nodes-catalog, D-08, 009-expression-global-context)
+function evaluateExpression(expr, $json, $node, $env) {
+  const safeNode = new Proxy($node || {}, {
+    get(target, prop) {
+      if (typeof prop === 'string') {
+        if (prop in target) return target[prop];
+        return { json: undefined };
+      }
+      return undefined;
+    }
+  });
+  const safeEnv = $env || (typeof process !== 'undefined' ? process.env : {});
+  return new Function('$json', '$node', '$env', 'return (' + expr + ')')($json, safeNode, safeEnv);
 }
-function resolveValue(raw, $json) {
+function resolveValue(raw, $json, $node, $env) {
   if (typeof raw !== 'string') return raw;
   const trimmed = raw.trim();
   const whole = /^{{([\\s\\S]*)}}\$/.exec(trimmed);
-  if (whole) return evaluateExpression(whole[1].trim(), $json);
-  return raw.replace(/{{([\\s\\S]*?)}}/g, (_m, expr) => String(evaluateExpression(expr.trim(), $json)));
+  if (whole) return evaluateExpression(whole[1].trim(), $json, $node, $env);
+  return raw.replace(/{{([\\s\\S]*?)}}/g, (_m, expr) => String(evaluateExpression(expr.trim(), $json, $node, $env)));
 }
 function compare(left, operator, right) {
   switch (operator) {
@@ -95,8 +104,10 @@ function combine(results, combinator) {
   return combinator === 'or' ? results.some(Boolean) : results.every(Boolean);
 }
 
-export function run($json) {
-  const results = CONDITIONS.map((c) => compare(resolveValue(c.leftValue, $json), c.operator, resolveValue(c.rightValue, $json)));
+export function run($json, context) {
+  const $node = context?.$node || {};
+  const $env = context?.$env || (typeof process !== 'undefined' ? process.env : {});
+  const results = CONDITIONS.map((c) => compare(resolveValue(c.leftValue, $json, $node, $env), c.operator, resolveValue(c.rightValue, $json, $node, $env)));
   const matched = combine(results, COMBINATOR);
   return { value: $json, activeOutput: matched ? 'true' : 'false' };
 }

@@ -107,9 +107,13 @@ function buildInitialFormState(manifest: PluginManifest | undefined, values: Rec
  * — good enough to catch syntax/reference errors even before the node has
  * ever been tested.
  */
-function resolveExpressionPreview(text: string, sampleJson: unknown): ExpressionPreview {
+function resolveExpressionPreview(
+  text: string,
+  sampleJson: unknown,
+  nodeScope?: Record<string, { json: unknown }>,
+): ExpressionPreview {
   try {
-    const resolved = resolveExpressions({ value: text }, { $json: sampleJson ?? {} });
+    const resolved = resolveExpressions({ value: text }, { $json: sampleJson ?? {}, $node: nodeScope ?? {} });
     return { ok: true, value: resolved.value };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
@@ -130,6 +134,7 @@ export interface NodeConfigPanelProps {
   /** RF-02/RF-05: the node's last validation result, if it has one this session. */
   testResult?: NodeResult;
   onCancelTest?: () => void;
+  nodeScope?: Record<string, { json: unknown }>;
 }
 
 export function NodeConfigPanel({
@@ -144,6 +149,7 @@ export function NodeConfigPanel({
   isTesting = false,
   testResult,
   onCancelTest,
+  nodeScope,
 }: NodeConfigPanelProps) {
   const parameters = manifest?.parameters ?? [];
   const schema = buildZodSchema(parameters);
@@ -266,7 +272,7 @@ export function NodeConfigPanel({
               }
               const liveValue = param.type === 'string' ? watch(param.name) : undefined;
               const preview =
-                typeof liveValue === 'string' && hasExpressionSyntax(liveValue) ? resolveExpressionPreview(liveValue, displayedTestInput) : undefined;
+                typeof liveValue === 'string' && hasExpressionSyntax(liveValue) ? resolveExpressionPreview(liveValue, displayedTestInput, nodeScope) : undefined;
 
               return (
                 <div key={param.name}>
@@ -295,7 +301,7 @@ export function NodeConfigPanel({
                     <Controller
                       name={param.name}
                       control={control}
-                      render={({ field }) => <JsonFieldEditor id={param.name} value={field.value} onChange={field.onChange} sampleJson={displayedTestInput} rowSchema={param.rowSchema} disabled={isTesting} />}
+                      render={({ field }) => <JsonFieldEditor id={param.name} value={field.value} onChange={field.onChange} sampleJson={displayedTestInput} nodeScope={nodeScope} rowSchema={param.rowSchema} disabled={isTesting} />}
                     />
                   ) : param.sensitive ? (
                     <div className="flex gap-1.5">
@@ -304,6 +310,15 @@ export function NodeConfigPanel({
                         {revealed[param.name] ? <UnlockIcon /> : <LockIcon />}
                       </button>
                     </div>
+                  ) : param.name === 'code' ? (
+                    <textarea
+                      id={param.name}
+                      rows={8}
+                      disabled={isTesting}
+                      className="w-full font-mono text-xs rounded-lg border border-slate-200 bg-slate-900 text-emerald-400 p-3 shadow-inner focus:outline-none focus:ring-2 focus:ring-indigo-400 disabled:opacity-50"
+                      placeholder="// return $json;"
+                      {...register(param.name)}
+                    />
                   ) : (
                     <Input
                       id={param.name}

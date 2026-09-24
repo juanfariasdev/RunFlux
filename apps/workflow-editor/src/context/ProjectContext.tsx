@@ -4,6 +4,7 @@ import {
   HttpProjectApiAdapter,
   type ProjectSummary,
   type ProjectDetail,
+  type ProjectEnvVar,
   type RunfluxExportEnvelope,
 } from '../adapters/project-api-adapter';
 import { useWorkflowStore } from '../store/workflow-store';
@@ -16,6 +17,9 @@ export interface ProjectContextValue {
   isDirty: boolean;
   isLoading: boolean;
   error: string | null;
+  envVars: ProjectEnvVar[];
+  setEnvVars: (envVars: ProjectEnvVar[]) => void;
+  saveEnvVars: (envVars: ProjectEnvVar[]) => Promise<void>;
   refreshProjects: () => Promise<void>;
   openProject: (id: string) => Promise<void>;
   createNewProject: (name: string) => Promise<ProjectDetail>;
@@ -39,6 +43,7 @@ export function ProjectProvider({
   adapter?: HttpProjectApiAdapter;
 }) {
   const [currentProject, setCurrentProject] = useState<ProjectDetail | null>(null);
+  const [envVars, setEnvVars] = useState<ProjectEnvVar[]>([]);
   const [lastSavedSnapshot, setLastSavedSnapshot] = useState<string>('');
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [archivedProjects, setArchivedProjects] = useState<ProjectSummary[]>([]);
@@ -79,6 +84,7 @@ export function ProjectProvider({
     try {
       const detail = await adapter.getProject(id);
       setCurrentProject(detail);
+      setEnvVars(detail.envVars || []);
       setWorkflow(detail.workflow);
       setLastSavedSnapshot(
         JSON.stringify({
@@ -107,6 +113,7 @@ export function ProjectProvider({
       };
       const detail = await adapter.createProject({ name, definition: emptyWf });
       setCurrentProject(detail);
+      setEnvVars(detail.envVars || []);
       setWorkflow(detail.workflow);
       setLastSavedSnapshot(
         JSON.stringify({
@@ -124,6 +131,19 @@ export function ProjectProvider({
       setIsLoading(false);
     }
   }, [adapter, setWorkflow, refreshProjects]);
+
+  const saveEnvVars = useCallback(async (newEnvVars: ProjectEnvVar[]) => {
+    setEnvVars(newEnvVars);
+    if (!currentProject) return;
+    try {
+      const saved = await adapter.updateEnvVars(currentProject.id, newEnvVars);
+      setEnvVars(saved);
+      setCurrentProject((prev) => (prev ? { ...prev, envVars: saved } : null));
+    } catch (err: any) {
+      setError(err?.message || 'Falha ao salvar variáveis de ambiente');
+      throw err;
+    }
+  }, [adapter, currentProject]);
 
   const saveCurrentProject = useCallback(async () => {
     if (!currentProject) return;
@@ -158,6 +178,7 @@ export function ProjectProvider({
       await adapter.archiveProject(id);
       if (currentProject?.id === id) {
         setCurrentProject(null);
+        setEnvVars([]);
         setLastSavedSnapshot('');
         setWorkflow({ id: crypto.randomUUID(), name: 'Untitled workflow', nodes: [], connections: [] });
       }
@@ -251,6 +272,9 @@ export function ProjectProvider({
       isDirty,
       isLoading,
       error,
+      envVars,
+      setEnvVars,
+      saveEnvVars,
       refreshProjects,
       openProject,
       createNewProject,
@@ -269,6 +293,8 @@ export function ProjectProvider({
       isDirty,
       isLoading,
       error,
+      envVars,
+      saveEnvVars,
       refreshProjects,
       openProject,
       createNewProject,
@@ -292,6 +318,9 @@ const dummyProjectContext: ProjectContextValue = {
   isDirty: false,
   isLoading: false,
   error: null,
+  envVars: [],
+  setEnvVars: () => {},
+  saveEnvVars: async () => {},
   refreshProjects: async () => {},
   openProject: async () => {},
   createNewProject: async () => ({} as any),

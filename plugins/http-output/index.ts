@@ -78,35 +78,46 @@ const URL_TEMPLATE = ${url};
 const HEADERS_TEMPLATE = ${headers};
 const BODY_TEMPLATE = ${body};
 
-// Standalone {{ }} evaluator copy (004-core-nodes-catalog, D-08) — this file
-// never runs through @runflux/validation-runtime, so it resolves its own expressions.
-function evaluateExpression(expr, $json) {
-  return new Function('$json', 'return (' + expr + ')')($json);
+// Standalone {{ }} evaluator copy (004-core-nodes-catalog, D-08, 009-expression-global-context)
+function evaluateExpression(expr, $json, $node, $env) {
+  const safeNode = new Proxy($node || {}, {
+    get(target, prop) {
+      if (typeof prop === 'string') {
+        if (prop in target) return target[prop];
+        return { json: undefined };
+      }
+      return undefined;
+    }
+  });
+  const safeEnv = $env || (typeof process !== 'undefined' ? process.env : {});
+  return new Function('$json', '$node', '$env', 'return (' + expr + ')')($json, safeNode, safeEnv);
 }
-function resolveValue(raw, $json) {
+function resolveValue(raw, $json, $node, $env) {
   if (typeof raw !== 'string') {
-    if (Array.isArray(raw)) return raw.map((v) => resolveValue(v, $json));
+    if (Array.isArray(raw)) return raw.map((v) => resolveValue(v, $json, $node, $env));
     if (raw !== null && typeof raw === 'object') {
       const out = {};
-      for (const [k, v] of Object.entries(raw)) out[k] = resolveValue(v, $json);
+      for (const [k, v] of Object.entries(raw)) out[k] = resolveValue(v, $json, $node, $env);
       return out;
     }
     return raw;
   }
   const trimmed = raw.trim();
   const whole = /^{{([\\s\\S]*)}}\$/.exec(trimmed);
-  if (whole) return evaluateExpression(whole[1].trim(), $json);
-  return raw.replace(/{{([\\s\\S]*?)}}/g, (_m, expr) => String(evaluateExpression(expr.trim(), $json)));
+  if (whole) return evaluateExpression(whole[1].trim(), $json, $node, $env);
+  return raw.replace(/{{([\\s\\S]*?)}}/g, (_m, expr) => String(evaluateExpression(expr.trim(), $json, $node, $env)));
 }
 
-export async function run($json) {
-  const url = resolveValue(URL_TEMPLATE, $json);
+export async function run($json, context) {
+  const $node = context?.$node || {};
+  const $env = context?.$env || (typeof process !== 'undefined' ? process.env : {});
+  const url = resolveValue(URL_TEMPLATE, $json, $node, $env);
   if (typeof url !== 'string' || url.trim() === '') {
     throw new Error('http-output: "url" is empty or invalid');
   }
   const method = METHOD.toUpperCase();
-  const headers = resolveValue(HEADERS_TEMPLATE, $json);
-  const body = resolveValue(BODY_TEMPLATE, $json);
+  const headers = resolveValue(HEADERS_TEMPLATE, $json, $node, $env);
+  const body = resolveValue(BODY_TEMPLATE, $json, $node, $env);
   const init = { method, headers };
   if (method !== 'GET' && method !== 'HEAD') {
     headers['Content-Type'] = headers['Content-Type'] || 'application/json';

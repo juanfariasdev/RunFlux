@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
 import type { PluginManifest } from '@runflux/plugin-system/types';
 import { HttpPluginCatalogAdapter } from './adapters/plugin-catalog-adapter';
@@ -86,6 +86,19 @@ function WorkflowEditorContent() {
 
   const selectedManifest = selectedNode ? manifestsById.get(selectedNode.pluginId) : undefined;
 
+  const nodeScope = useMemo(() => {
+    const scope: Record<string, { json: unknown }> = {};
+    for (const node of nodes) {
+      const res = nodeResults[node.id];
+      const entry = { json: res?.output ?? {} };
+      scope[node.id] = entry;
+      if (node.appearance?.label) {
+        scope[node.appearance.label] = entry;
+      }
+    }
+    return scope;
+  }, [nodes, nodeResults]);
+
   return (
     <div className="flex h-full min-w-[900px] flex-col overflow-hidden bg-slate-50 text-slate-900">
       <Toolbar catalog={catalog} persistence={projectAdapter} validation={validation} onTestingNodesChange={(nodeIds) => setTestingNodeIds(new Set(nodeIds))} />
@@ -111,6 +124,7 @@ function WorkflowEditorContent() {
             onCancelTest={handleCancelTest}
             isTesting={testingNodeIds.has(selectedNode.id)}
             testResult={nodeResults[selectedNode.id]}
+            nodeScope={nodeScope}
           />
         )}
         {selectedConnection && (

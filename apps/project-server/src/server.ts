@@ -1,5 +1,6 @@
 import express, { type Express, type Request, type Response, type NextFunction } from 'express';
 import cors from 'cors';
+import { ZodError } from 'zod';
 import { createProjectsRouter } from './routes/projects.js';
 import { createCompilerRouter } from './routes/compiler.js';
 import {
@@ -63,6 +64,16 @@ export function createServer(service?: ProjectService, compilerService?: Compile
           code: err.code,
           message: err.message,
           details: null,
+        },
+      });
+    }
+
+    if (err instanceof ZodError) {
+      return res.status(400).json({
+        error: {
+          code: 'INVALID_PAYLOAD',
+          message: err.errors.map((e) => `${e.path.join('.')}: ${e.message}`).join(', '),
+          details: err.errors,
         },
       });
     }

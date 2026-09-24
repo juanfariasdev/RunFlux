@@ -71,4 +71,23 @@ describe('AWS Target Generator', () => {
     expect(stackFile.content).toContain('class WorkflowStack extends Stack');
     expect(stackFile.content).toContain('lambda.Function');
   });
+
+  it('injects registered project environment variables into AWS CDK Lambda environment (011-env-vars-secrets)', () => {
+    const files = generateAwsProject({
+      workflow: sampleWorkflow,
+      projectName: 'AWS Lambda Backend',
+      nodeFiles,
+      options: {
+        envVars: [
+          { key: 'PAYMENT_KEY', value: 'secret-pay', description: 'Payment gateway key' },
+          { key: 'CACHE_TTL', value: '3600', description: 'Cache expiration' },
+        ],
+      },
+    });
+
+    const stackFile = files.find((f) => f.path === 'lib/workflow-stack.ts')!;
+    expect(stackFile).toBeDefined();
+    expect(stackFile.content).toContain('PAYMENT_KEY: process.env.PAYMENT_KEY || "secret-pay"');
+    expect(stackFile.content).toContain('CACHE_TTL: process.env.CACHE_TTL || "3600"');
+  });
 });

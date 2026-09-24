@@ -9,6 +9,7 @@ import { Button } from './ui/button';
 import { useProject } from '../context/ProjectContext';
 import { ProjectManagerModal } from './ProjectManagerModal';
 import { CompilerModal } from './CompilerModal';
+import { EnvVarsModal } from './EnvVarsModal';
 import { resolveSampleBodyForTest } from './NodeConfigPanel';
 
 export interface ToolbarProps {
@@ -40,6 +41,7 @@ export function Toolbar({ catalog, persistence, validation, onTestingNodesChange
   const [mode, setMode] = useState<PluginExecutionMode>('sandbox');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCompilerOpen, setIsCompilerOpen] = useState(false);
+  const [isEnvModalOpen, setIsEnvModalOpen] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
 
   // A workflow-level test runs every node, including any Webhook Trigger — which,
@@ -221,6 +223,20 @@ export function Toolbar({ catalog, persistence, validation, onTestingNodesChange
           <Button
             variant="outline"
             size="sm"
+            onClick={() => setIsEnvModalOpen(true)}
+            className="text-xs font-medium relative"
+            data-testid="open-env-modal-btn"
+          >
+            💲 Env Vars
+            {projectCtx?.envVars && projectCtx.envVars.length > 0 && (
+              <span className="ml-1.5 inline-flex items-center justify-center px-1.5 py-0.2 text-[9px] font-bold leading-none text-emerald-800 bg-emerald-100 rounded-full" data-testid="env-vars-count">
+                {projectCtx.envVars.length}
+              </span>
+            )}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => setIsModalOpen(true)}
             className="text-xs font-medium"
             data-testid="open-projects-modal-btn"
@@ -270,6 +286,11 @@ export function Toolbar({ catalog, persistence, validation, onTestingNodesChange
       <CompilerModal
         isOpen={isCompilerOpen}
         onClose={() => setIsCompilerOpen(false)}
+      />
+
+      <EnvVarsModal
+        isOpen={isEnvModalOpen}
+        onClose={() => setIsEnvModalOpen(false)}
       />
     </>
   );

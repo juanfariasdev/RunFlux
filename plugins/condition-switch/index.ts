@@ -85,17 +85,26 @@ const RULES = ${rules};
 const FALLBACK_ENABLED = ${fallbackEnabled};
 const RULE_OUTPUTS = ${ruleOutputs};
 
-// Standalone {{ }} evaluator copy (004-core-nodes-catalog, D-08) — this file
-// never runs through @runflux/validation-runtime, so it resolves its own expressions.
-function evaluateExpression(expr, $json) {
-  return new Function('$json', 'return (' + expr + ')')($json);
+// Standalone {{ }} evaluator copy (004-core-nodes-catalog, D-08, 009-expression-global-context)
+function evaluateExpression(expr, $json, $node, $env) {
+  const safeNode = new Proxy($node || {}, {
+    get(target, prop) {
+      if (typeof prop === 'string') {
+        if (prop in target) return target[prop];
+        return { json: undefined };
+      }
+      return undefined;
+    }
+  });
+  const safeEnv = $env || (typeof process !== 'undefined' ? process.env : {});
+  return new Function('$json', '$node', '$env', 'return (' + expr + ')')($json, safeNode, safeEnv);
 }
-function resolveValue(raw, $json) {
+function resolveValue(raw, $json, $node, $env) {
   if (typeof raw !== 'string') return raw;
   const trimmed = raw.trim();
   const whole = /^{{([\\s\\S]*)}}\$/.exec(trimmed);
-  if (whole) return evaluateExpression(whole[1].trim(), $json);
-  return raw.replace(/{{([\\s\\S]*?)}}/g, (_m, expr) => String(evaluateExpression(expr.trim(), $json)));
+  if (whole) return evaluateExpression(whole[1].trim(), $json, $node, $env);
+  return raw.replace(/{{([\\s\\S]*?)}}/g, (_m, expr) => String(evaluateExpression(expr.trim(), $json, $node, $env)));
 }
 function compare(left, operator, right) {
   switch (operator) {
@@ -112,15 +121,17 @@ function combine(results, combinator) {
   if (results.length === 0) return true;
   return combinator === 'or' ? results.some(Boolean) : results.every(Boolean);
 }
-function matchRule(rule, $json) {
+function matchRule(rule, $json, $node, $env) {
   const conditions = Array.isArray(rule && rule.conditions) ? rule.conditions : [];
-  const results = conditions.map((c) => compare(resolveValue(c.leftValue, $json), c.operator, resolveValue(c.rightValue, $json)));
+  const results = conditions.map((c) => compare(resolveValue(c.leftValue, $json, $node, $env), c.operator, resolveValue(c.rightValue, $json, $node, $env)));
   return combine(results, (rule && rule.combinator) || 'and');
 }
 
-export function run($json) {
+export function run($json, context) {
+  const $node = context?.$node || {};
+  const $env = context?.$env || (typeof process !== 'undefined' ? process.env : {});
   for (let i = 0; i < RULES.length && i < RULE_OUTPUTS.length; i++) {
-    if (matchRule(RULES[i], $json)) {
+    if (matchRule(RULES[i], $json, $node, $env)) {
       return { value: $json, activeOutput: RULE_OUTPUTS[i] };
     }
   }

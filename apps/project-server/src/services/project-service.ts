@@ -65,12 +65,30 @@ export const workflowDefinitionSchema = z.object({
   connections: z.array(workflowConnectionSchema).default([]),
 });
 
+export interface ProjectEnvVar {
+  key: string;
+  value: string;
+  description?: string;
+}
+
+export const envVarItemSchema = z.object({
+  key: z
+    .string()
+    .min(1, 'Nome da variável não pode ser vazio')
+    .regex(/^[A-Za-z_][A-Za-z0-9_]*$/, 'Nome da variável deve ser um identificador válido (ex: API_KEY)'),
+  value: z.string().default(''),
+  description: z.string().optional(),
+});
+
+export const envVarsArraySchema = z.array(envVarItemSchema);
+
 export const runfluxEnvelopeSchema = z.object({
   $schema: z.string().optional(),
   schemaVersion: z.literal(1),
   exportedAt: z.string(),
   project: z.object({
     name: z.string().min(1, 'Nome do projeto é obrigatório'),
+    envVars: envVarsArraySchema.optional(),
   }),
   workflow: workflowDefinitionSchema,
 });
@@ -78,7 +96,7 @@ export const runfluxEnvelopeSchema = z.object({
 export class ProjectService {
   constructor(private readonly repo = new ProjectRepository()) {}
 
-  async createProject(data: { name: string; definition?: WorkflowDefinition }) {
+  async createProject(data: { name: string; definition?: WorkflowDefinition; envVars?: ProjectEnvVar[] }) {
     const trimmedName = data.name.trim();
     if (!trimmedName) {
       throw new ValidationError('Nome do projeto não pode ser vazio');
@@ -93,6 +111,13 @@ export class ProjectService {
       name: trimmedName,
       currentWorkflowVersion: data.definition ? 'v1' : undefined,
     });
+
+    if (data.envVars && data.envVars.length > 0) {
+      const validatedEnv = envVarsArraySchema.parse(data.envVars);
+      await this.repo.update(project.id, {
+        envVars: JSON.stringify(validatedEnv),
+      });
+    }
 
     if (data.definition) {
       const validated = workflowDefinitionSchema.parse(data.definition);
@@ -157,6 +182,16 @@ export class ProjectService {
       }
     }
 
+    let envVars: ProjectEnvVar[] = [];
+    if (project.envVars) {
+      try {
+        const parsed = JSON.parse(project.envVars);
+        if (Array.isArray(parsed)) envVars = parsed;
+      } catch {
+        envVars = [];
+      }
+    }
+
     return {
       id: project.id,
       name: project.name,
@@ -164,6 +199,7 @@ export class ProjectService {
       updatedAt: project.updatedAt,
       archivedAt: project.archivedAt,
       currentWorkflowVersion: project.currentWorkflowVersion,
+      envVars,
       workflow,
     };
   }
@@ -250,6 +286,34 @@ export class ProjectService {
     return this.repo.hardDelete(id);
   }
 
+  async getProjectEnv(id: string): Promise<ProjectEnvVar[]> {
+    const project = await this.repo.findById(id);
+    if (!project) {
+      throw new ProjectNotFoundError(`Projeto '${id}' não encontrado`);
+    }
+    if (!project.envVars) return [];
+    try {
+      const parsed = JSON.parse(project.envVars);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  async updateProjectEnv(id: string, envVars: unknown): Promise<ProjectEnvVar[]> {
+    const project = await this.repo.findById(id);
+    if (!project) {
+      throw new ProjectNotFoundError(`Projeto '${id}' não encontrado`);
+    }
+
+    const validated = envVarsArraySchema.parse(envVars);
+    await this.repo.update(id, {
+      envVars: JSON.stringify(validated),
+    });
+
+    return validated;
+  }
+
   async exportProject(id: string) {
     const projectWithWf = await this.getProject(id);
     return {
@@ -258,6 +322,7 @@ export class ProjectService {
       exportedAt: new Date().toISOString(),
       project: {
         name: projectWithWf.name,
+        envVars: projectWithWf.envVars,
       },
       workflow: projectWithWf.workflow,
     };
@@ -274,6 +339,7 @@ export class ProjectService {
 
     return this.createProject({
       name: finalName,
+      envVars: projectData.envVars,
       definition: {
         id: '',
         name: finalName,

@@ -39,17 +39,26 @@ export const generators: PluginModule['generators'] = {
 const FIELDS = ${fields};
 const INCLUDE_OTHER_FIELDS = ${includeOtherFields};
 
-// Standalone {{ }} evaluator copy (004-core-nodes-catalog, D-08) — this file
-// never runs through @runflux/validation-runtime, so it resolves its own expressions.
-function evaluateExpression(expr, $json) {
-  return new Function('$json', 'return (' + expr + ')')($json);
+// Standalone {{ }} evaluator copy (004-core-nodes-catalog, D-08, 009-expression-global-context)
+function evaluateExpression(expr, $json, $node, $env) {
+  const safeNode = new Proxy($node || {}, {
+    get(target, prop) {
+      if (typeof prop === 'string') {
+        if (prop in target) return target[prop];
+        return { json: undefined };
+      }
+      return undefined;
+    }
+  });
+  const safeEnv = $env || (typeof process !== 'undefined' ? process.env : {});
+  return new Function('$json', '$node', '$env', 'return (' + expr + ')')($json, safeNode, safeEnv);
 }
-function resolveValue(raw, $json) {
+function resolveValue(raw, $json, $node, $env) {
   if (typeof raw !== 'string') return raw;
   const trimmed = raw.trim();
   const whole = /^{{([\\s\\S]*)}}\$/.exec(trimmed);
-  if (whole) return evaluateExpression(whole[1].trim(), $json);
-  return raw.replace(/{{([\\s\\S]*?)}}/g, (_m, expr) => String(evaluateExpression(expr.trim(), $json)));
+  if (whole) return evaluateExpression(whole[1].trim(), $json, $node, $env);
+  return raw.replace(/{{([\\s\\S]*?)}}/g, (_m, expr) => String(evaluateExpression(expr.trim(), $json, $node, $env)));
 }
 function normalizeFieldValue(field, value) {
   if (field.type === 'null') return null;
@@ -79,11 +88,13 @@ function normalizeFieldValue(field, value) {
   return value;
 }
 
-export function run($json) {
+export function run($json, context) {
+  const $node = context?.$node || {};
+  const $env = context?.$env || (typeof process !== 'undefined' ? process.env : {});
   const base = INCLUDE_OTHER_FIELDS && $json !== null && typeof $json === 'object' ? { ...$json } : {};
   for (const field of FIELDS) {
     if (field && typeof field.name === 'string') {
-      base[field.name] = normalizeFieldValue(field, resolveValue(field.value, $json));
+      base[field.name] = normalizeFieldValue(field, resolveValue(field.value, $json, $node, $env));
     }
   }
   return base;

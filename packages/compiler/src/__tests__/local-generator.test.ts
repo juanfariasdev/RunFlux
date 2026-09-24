@@ -80,4 +80,28 @@ describe('Local Target Generator', () => {
     expect(serverFile.content).toContain('app.post(');
     expect(serverFile.content).toContain('3000');
   });
+
+  it('generates .env.example with registered project environment variables (011-env-vars-secrets)', () => {
+    const files = generateLocalProject({
+      workflow: sampleWorkflow,
+      projectName: 'Local Test Backend',
+      nodeFiles,
+      options: {
+        port: 8080,
+        envVars: [
+          { key: 'STRIPE_SECRET_KEY', value: 'sk_test_demo', description: 'Stripe API private token' },
+          { key: 'DATABASE_URL', value: 'postgres://user:pass@localhost:5432/app', description: 'Main database' },
+        ],
+      },
+    });
+
+    const envFile = files.find((f) => f.path === '.env.example')!;
+    expect(envFile).toBeDefined();
+    expect(envFile.content).toContain('PORT=8080');
+    expect(envFile.content).toContain('# Project Environment Variables');
+    expect(envFile.content).toContain('# Stripe API private token');
+    expect(envFile.content).toContain('STRIPE_SECRET_KEY=sk_test_demo');
+    expect(envFile.content).toContain('# Main database');
+    expect(envFile.content).toContain('DATABASE_URL=postgres://user:pass@localhost:5432/app');
+  });
 });

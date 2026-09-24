@@ -1,4 +1,4 @@
-import type { JsonRowFieldSchema } from './types';
+import type { JsonRowFieldSchema } from './types.js';
 
 /**
  * Shared by every plugin whose json parameter is a list of named, typed

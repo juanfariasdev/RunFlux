@@ -40,9 +40,20 @@ export interface WorkflowConnection {
 
 export type WorkflowEdgeType = 'smoothstep' | 'bezier' | 'straight';
 
+export interface WorkflowEnvVar {
+  key: string;
+  value?: string;
+  description?: string;
+}
+
+export interface WorkflowSettings {
+  envVars?: WorkflowEnvVar[];
+}
+
 export interface WorkflowDefinition {
   id: string;
   name: string;
   nodes: WorkflowNode[];
   connections: WorkflowConnection[];
+  settings?: WorkflowSettings;
 }

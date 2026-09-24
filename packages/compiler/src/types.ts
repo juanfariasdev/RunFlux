@@ -23,12 +23,19 @@ export interface BuildManifest {
   generatedFiles: string[];
 }
 
+export interface ProjectEnvVar {
+  key: string;
+  value?: string;
+  description?: string;
+}
+
 export interface CompilationOptions {
   port?: number;
   includeDocker?: boolean;
   includeCdk?: boolean;
   packageName?: string;
   skipTests?: boolean;
+  envVars?: ProjectEnvVar[];
 }
 
 export interface CompilationRequest {
