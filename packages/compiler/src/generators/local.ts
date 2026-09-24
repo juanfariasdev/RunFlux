@@ -45,6 +45,9 @@ export function generateLocalProject(context: LocalGeneratorContext): GeneratedF
     start: 'node dist/server.mjs',
     run: 'node dist/run.mjs',
     dev: 'tsx watch src/server.ts',
+    'docker:build': `docker build -t ${sanitizedPkgName} .`,
+    'docker:up': 'docker compose up -d',
+    'docker:down': 'docker compose down',
   };
 
   if (hasCron) {
@@ -109,12 +112,61 @@ export function generateLocalProject(context: LocalGeneratorContext): GeneratedF
     2
   );
 
-  const dockerfileContent = `FROM node:20-alpine
+  const dockerfileContent = `# Stage 1: Build
+FROM node:20-alpine AS builder
 WORKDIR /app
-COPY dist ./dist
+COPY package*.json tsconfig.json ./
+RUN npm ci || npm install
+COPY . .
+RUN npm run build
+
+# Stage 2: Runner
+FROM node:20-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+COPY package*.json ./
+RUN npm ci --omit=dev || npm install --omit=dev
+COPY --from=builder /app/dist ./dist
+USER node
 EXPOSE ${port}
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \\
+  CMD wget -qO- http://localhost:${port}/health || exit 1
 CMD ["node", "dist/server.mjs"]
 `;
+
+  let dockerComposeContent = `services:
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "\${PORT:-${port}}:${port}"
+    env_file:
+      - .env
+    environment:
+      - PORT=${port}
+      - NODE_ENV=production
+`;
+
+  if (hasDatabase) {
+    dockerComposeContent += `    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: \${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: \${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: \${POSTGRES_DB:-runflux}
+    ports:
+      - "\${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
+`;
+  }
 
   let envExampleContent = `PORT=${port}
 NODE_ENV=production
@@ -186,6 +238,24 @@ Schedule: \`${cronExpression}\` (Timezone: ${cronTimezone})
 \`\`\`bash
 npm run build    # Produces optimized dist/*.mjs bundles
 npm run package  # Creates compiled/function.zip
+\`\`\`
+
+## Docker & Container Deployment
+
+### 1. Build and Run with Docker Compose (Recommended)
+\`\`\`bash
+npm run docker:up
+# Or directly:
+docker compose up -d --build
+\`\`\`
+- Health Check: \`GET http://localhost:${port}/health\`
+- View Logs: \`docker compose logs -f\`
+- Stop Services: \`npm run docker:down\`
+
+### 2. Standalone Docker Container
+\`\`\`bash
+npm run docker:build
+docker run -d -p ${port}:${port} --env-file .env ${sanitizedPkgName}
 \`\`\`
 `;
 
@@ -403,6 +473,7 @@ if (isDirectRun) {
     { path: 'package.json', content: packageJsonContent, type: 'config' },
     { path: 'tsconfig.json', content: tsconfigContent, type: 'config' },
     { path: 'Dockerfile', content: dockerfileContent, type: 'infrastructure' },
+    { path: 'docker-compose.yml', content: dockerComposeContent, type: 'infrastructure' },
     { path: '.env.example', content: envExampleContent, type: 'config' },
     { path: 'README.md', content: readmeContent, type: 'asset' },
     { path: 'src/runner.ts', content: runnerTsContent, type: 'source' },
