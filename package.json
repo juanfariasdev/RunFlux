@@ -2,7 +2,7 @@
   "name": "runflux",
   "version": "0.1.0",
   "private": true,
-  "description": "Visual backend compiler \u2014 design a workflow visually, compile it into a real deployable backend.",
+  "description": "Visual backend compiler — design a workflow visually, compile it into a real deployable backend.",
   "author": "Juan Pablo Farias <juanpablofarias.com>",
   "type": "module",
   "workspaces": [
@@ -14,13 +14,15 @@
     "postinstall": "npm run build:node --workspaces --if-present",
     "test": "npm run typecheck && npm run test:unit",
     "test:unit": "npm run test --workspaces --if-present && npm run test:plugins",
-    "typecheck": "npm run typecheck --workspaces --if-present -- --force --pretty false",
+    "typecheck": "tsc -b tsconfig.json --pretty false && tsc -p tests/tsconfig.json",
     "dev:editor": "npm run dev --workspace=@runflux/app-workflow-editor",
     "dev:server": "npm run dev --workspace=@runflux/project-server",
     "dev:all": "concurrently -n \"server,editor\" -c \"cyan,magenta\" \"npm run dev:server\" \"npm run dev:editor\"",
     "db:generate": "npm run db:generate --workspace=@runflux/project-server",
     "db:migrate": "npm run db:migrate --workspace=@runflux/project-server",
-    "test:plugins": "vitest run --config vitest.plugins.config.ts"
+    "test:plugins": "vitest run --config vitest.plugins.config.ts",
+    "build": "npm run build:node --workspaces --if-present && npm run build --workspace=@runflux/app-workflow-editor",
+    "pretest:plugins": "npm run build:node --workspace=@runflux/plugin-system"
   },
   "devDependencies": {
     "@types/jszip": "^3.4.0",
@@ -28,7 +30,11 @@
     "concurrently": "^9.1.2",
     "typescript": "^5.5.4",
     "vitest": "^4.1.9",
-    "esbuild": "^0.28.2"
+    "esbuild": "^0.28.2",
+    "@types/supertest": "^6.0.2",
+    "supertest": "^7.0.0",
+    "aws-cdk-lib": "^2.177.0",
+    "constructs": "^10.3.0"
   },
   "dependencies": {
     "@types/node-cron": "^3.0.11",

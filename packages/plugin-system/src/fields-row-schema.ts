@@ -50,8 +50,8 @@ export function normalizeFieldValue(field: FieldConfig, valueOverride?: unknown)
 }
 
 /** Composes a `FIELDS_ROW_SCHEMA`-shaped array into the flat object it describes. */
-export function composeFields(fields: FieldConfig[]): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
+export function composeFields(fields: FieldConfig[], base: Record<string, unknown> = {}): Record<string, unknown> {
+  const result: Record<string, unknown> = { ...base };
   for (const field of fields) {
     if (field && typeof field.name === 'string') {
       result[field.name] = normalizeFieldValue(field);

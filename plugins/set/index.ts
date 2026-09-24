@@ -22,17 +22,11 @@ export const manifest: PluginModule['manifest'] = {
   supportedPlatforms: ['local', 'aws'],
 };
 
-function compose(fields: FieldConfig[], includeOtherFields: boolean, input: unknown): Record<string, unknown> {
-  const base: Record<string, unknown> =
-    includeOtherFields && input !== null && typeof input === 'object' ? { ...(input as Record<string, unknown>) } : {};
-  return { ...base, ...composeFields(fields) };
-}
-
 export const generators = createCodeGenerators(manifest, generateSetCode);
 
 export const execute: PluginModule['execute'] = (params, input) => {
   const fields = Array.isArray(params.fields) ? (params.fields as FieldConfig[]) : [];
   const includeOtherFields = Boolean(params.includeOtherFields);
-  return compose(fields, includeOtherFields, input);
+  return composeFields(fields, includeOtherFields && input !== null && typeof input === 'object' ? input as Record<string, unknown> : {});
 };
 

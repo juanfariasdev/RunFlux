@@ -107,6 +107,7 @@ export async function compileWorkflow(
   // 4. Assemble project tree via target platform generator
   let projectFiles: GeneratedFile[];
 
+  try {
   if (targetPlatform === 'local') {
     projectFiles = generateLocalProject({
       workflow,
@@ -131,6 +132,9 @@ export async function compileWorkflow(
         message: `Target platform '${targetPlatform}' is not supported.`,
       },
     };
+  }
+  } catch (error) {
+    return { status: 'failed', error: { code: 'INVALID_WORKFLOW', message: error instanceof Error ? error.message : String(error) } };
   }
 
   // 5. Build manifest generation (runflux-build.json)

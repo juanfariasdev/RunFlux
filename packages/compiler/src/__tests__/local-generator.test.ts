@@ -76,8 +76,9 @@ describe('Local Target Generator', () => {
     expect(pkgJson.devDependencies).toHaveProperty('esbuild');
 
     const serverFile = files.find((f) => f.path === 'src/server.ts')!;
-    expect(serverFile.content).toContain('express');
-    expect(serverFile.content).toContain('app.post(');
+    const app = files.find((file) => file.path === 'src/app.ts')!;
+    expect(app.content).toContain('express');
+    expect(app.content).toContain('app.post(');
     expect(serverFile.content).toContain('3000');
   });
 

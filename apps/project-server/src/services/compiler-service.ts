@@ -1,6 +1,7 @@
+import { PluginRegistry } from '@runflux/plugin-system/plugin-registry';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import * as esbuild from 'esbuild';
 import type { WorkflowDefinition } from '@runflux/workflow-model';
 import {
@@ -92,53 +93,16 @@ export class CompilerService {
       return;
     }
 
-    const pluginsDir = this.getPluginsDir();
-    if (!fs.existsSync(pluginsDir)) {
-      this.pluginsLoaded = true;
-      return;
+    const registry = new PluginRegistry();
+    await registry.discover({ pluginDirectories: [this.getPluginsDir()], onLog: (message) => {
+      if (process.env.NODE_ENV !== 'test') console.info(message);
+    } });
+    for (const manifest of registry.listManifests()) {
+      this.pluginsCache.set(manifest.id, {
+        manifest,
+        generators: Object.fromEntries(manifest.supportedPlatforms.map((platform) => [platform, registry.resolveGenerator(manifest.id, platform)])),
+      });
     }
-
-    const entries = await fs.promises.readdir(pluginsDir, { withFileTypes: true });
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      const pluginFolder = path.join(pluginsDir, entry.name);
-      const candidates = ['index.ts', 'index.js', 'dist/index.js'];
-      let entryFile: string | null = null;
-      for (const cand of candidates) {
-        const full = path.join(pluginFolder, cand);
-        if (fs.existsSync(full)) {
-          entryFile = full;
-          break;
-        }
-      }
-
-      if (!entryFile) continue;
-
-      try {
-        const fileUrl = pathToFileURL(entryFile).href;
-        const mod = await import(fileUrl);
-        if (mod.manifest && mod.manifest.id) {
-          const generators = { ...(mod.generators || {}) };
-          const supportedPlatforms = [...(mod.manifest.supportedPlatforms || ['local'])];
-          if (generators.local && !generators.aws) {
-            generators.aws = generators.local;
-            if (!supportedPlatforms.includes('aws')) {
-              supportedPlatforms.push('aws');
-            }
-          }
-          this.pluginsCache.set(mod.manifest.id, {
-            manifest: {
-              ...mod.manifest,
-              supportedPlatforms,
-            },
-            generators,
-          });
-        }
-      } catch (err) {
-        console.warn(`[CompilerService] Failed to load plugin at ${pluginFolder}:`, err);
-      }
-    }
-
     this.pluginsLoaded = true;
   }
 
@@ -249,7 +213,7 @@ export class CompilerService {
       }
       console.log(`[compiler] esbuild bundle created successfully in ${distDir}`);
     } catch (bundleErr) {
-      console.warn(`[compiler] Warning during esbuild bundling:`, bundleErr);
+      throw new CompilerValidationError(`Backend build failed: ${bundleErr instanceof Error ? bundleErr.message : String(bundleErr)}`);
     }
 
     // 5. Coleta dos arquivos em dist/ para criar o pacote leve (function.zip e <projeto>.zip)
@@ -265,7 +229,7 @@ export class CompilerService {
     }
 
     const zipBuffer = bundledFilesForZip.length > 0
-      ? await createZipArchive(bundledFilesForZip as any)
+      ? await createZipArchive(bundledFilesForZip)
       : (result.zipBuffer ? Buffer.from(result.zipBuffer) : await createZipArchive(result.files));
 
     // Grava compiled/function.zip (padrão esbuild/serverless)
@@ -273,9 +237,13 @@ export class CompilerService {
     await fs.promises.writeFile(functionZipPath, zipBuffer);
 
     // Grava <projeto>.zip na raiz da pasta do backend
-    const zipFilename = `${projectName}.zip`;
+    const zipFilename = `${projectName.replace(/[\\/<>:"|?*\x00-\x1f]/g, '_') || 'backend'}.zip`;
     const zipPath = path.join(outputDir, zipFilename);
-    await fs.promises.writeFile(zipPath, zipBuffer);
+    const projectZip = await createZipArchive([
+      ...result.files,
+      ...bundledFilesForZip.map((file) => ({ ...file, path: `dist/${file.path}` })),
+    ]);
+    await fs.promises.writeFile(zipPath, projectZip);
 
     console.log(`[compiler] Compilation succeeded: ${result.files.length} source files, esbuild bundle in dist/, zip created at ${zipPath} (${zipBuffer.length} bytes)`);
     const downloadUrl = `/api/compiler/downloads/${encodeURIComponent(zipFilename)}`;
@@ -292,6 +260,7 @@ export class CompilerService {
   }
 
   async findZipFile(filename: string): Promise<string | null> {
+    if (filename !== path.basename(filename) || filename.includes('\\') || !filename.endsWith('.zip')) return null;
     const baseDir = this.getOutputDir();
     if (!fs.existsSync(baseDir)) return null;
 

@@ -8,6 +8,21 @@ export function getSchedules(workflow: WorkflowDefinition) {
   }));
 }
 
+export function buildLocalSchedules(workflow: WorkflowDefinition): string {
+  return `import cron from 'node-cron';
+import { runWorkflow } from './runner.js';
+const schedules = ${JSON.stringify(getSchedules(workflow))};
+export function startSchedules() {
+  return schedules.map((schedule) => cron.schedule(schedule.expression, async () => {
+    try {
+      const result = await runWorkflow({ triggeredAt: new Date().toISOString(), cronExpression: schedule.expression, timezone: schedule.timezone }, schedule.nodeId);
+      if (!result.success) console.error('[RunFlux Cron]', result.error);
+    } catch (error) { console.error('[RunFlux Cron]', error); }
+  }, { timezone: schedule.timezone }));
+}
+`;
+}
+
 /** AWS uses six fields, 1-based weekdays, and mutually exclusive day selectors. */
 export function toAwsCron(expression: string): string {
   const fields = expression.trim().split(/\s+/);

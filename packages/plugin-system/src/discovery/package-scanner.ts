@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { validateManifest } from '../manifest-validator';
+import { importPlugin } from './import-plugin.js';
 import type { DiscoveredPlugin, PluginModule } from '../types';
 import type { ScanError, ScanResult } from './directory-scanner';
 
@@ -86,7 +87,7 @@ export async function scanPackages(nodeModulesDir: string): Promise<ScanResult> 
 
     const entryFile = path.join(pkgDir, pkgJson.main ?? 'index.js');
     try {
-      const mod = (await import(pathToFileURL(entryFile).href)) as Partial<PluginModule>;
+      const mod = await importPlugin(pathToFileURL(entryFile));
       if (!mod.manifest || !mod.generators) {
         errors.push({ path: pkgDir, error: 'module must export "manifest" and "generators"' });
         continue;

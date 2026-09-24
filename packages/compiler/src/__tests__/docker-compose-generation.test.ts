@@ -94,7 +94,7 @@ describe('Docker & Docker Compose Generation', () => {
     // Multi-stage builder & runner
     expect(content).toContain('AS builder');
     expect(content).toContain('AS runner');
-    expect(content).toContain('node:20-alpine');
+    expect(content).toContain('node:22-alpine');
     // Dependencies & compilation
     expect(content).toContain('npm run build');
     expect(content).toContain('npm ci --omit=dev');

@@ -1,57 +1,11 @@
-import { STANDALONE_EXPRESSION_EVALUATOR_CODE, STANDALONE_OPERATOR_CODE } from './snippets.js';
+import { STANDALONE_EXPRESSION_EVALUATOR_CODE } from './snippets.js';
 import { bundleStandalone } from './standalone.js';
 
-const STANDALONE_FIELDS_CODE = bundleStandalone('@runflux/plugin-system/fields-row-schema', ['normalizeFieldValue'], '__runfluxFields');
-
-/**
- * Componentized Code Generators for RunFlux Plugins
- *
- * Provides standardized, professional code generation for compiled workflows.
- * Completely eliminates raw code string duplication and ad-hoc context handling in plugins.
- */
-
-const STANDALONE_RUNTIME_PREAMBLE = `
-${bundleStandalone('@runflux/plugin-system/context-helpers', ['extractContext'], '__runfluxContext')}
-
-${STANDALONE_EXPRESSION_EVALUATOR_CODE}
-${STANDALONE_OPERATOR_CODE}
-${STANDALONE_FIELDS_CODE}
-
-function evaluateConditions(conditions, combinator, $json, $node, $env) {
-  const list = Array.isArray(conditions) ? conditions : [];
-  if (list.length === 0) return true;
-  const results = list.map((c) =>
-    evaluateOperator(
-      resolveValue(c.leftValue, $json, $node, $env),
-      c.operator,
-      resolveValue(c.rightValue, $json, $node, $env)
-    )
-  );
-  return combineConditions(results, combinator);
-}
-
-function evaluateSwitchRules(rules, ruleOutputs, fallbackEnabled, $json, $node, $env) {
-  const list = Array.isArray(rules) ? rules : [];
-  for (let i = 0; i < list.length && i < ruleOutputs.length; i++) {
-    const rule = list[i];
-    if (evaluateConditions(rule?.conditions, rule?.combinator || 'and', $json, $node, $env)) {
-      return ruleOutputs[i];
-    }
-  }
-  return fallbackEnabled ? 'fallback' : null;
-}
-
-function composeSetFields(fields, includeOtherFields, $json, $node, $env) {
-  const base = includeOtherFields && $json !== null && typeof $json === 'object' ? { ...$json } : {};
-  const list = Array.isArray(fields) ? fields : [];
-  for (const field of list) {
-    if (field && typeof field.name === 'string') {
-      base[field.name] = normalizeFieldValue(field, resolveValue(field.value, $json, $node, $env));
-    }
-  }
-  return base;
-}
-`;
+const CONTEXT_CODE = bundleStandalone('@runflux/plugin-system/context-helpers', ['extractContext'], '__runfluxContext');
+const EXPRESSION_CODE = CONTEXT_CODE + STANDALONE_EXPRESSION_EVALUATOR_CODE;
+const CONDITION_CODE = EXPRESSION_CODE + bundleStandalone('@runflux/plugin-system/operators', ['matchRule'], '__runfluxConditions');
+const SWITCH_CODE = EXPRESSION_CODE + bundleStandalone('@runflux/plugin-system/operators', ['evaluateSwitch'], '__runfluxSwitch');
+const FIELDS_CODE = EXPRESSION_CODE + bundleStandalone('@runflux/plugin-system/fields-row-schema', ['composeFields'], '__runfluxFields');
 
 export function generateConditionIfCode(config: { conditions?: unknown; combinator?: unknown }): string {
   const conditions = JSON.stringify(Array.isArray(config.conditions) ? config.conditions : []);
@@ -61,11 +15,11 @@ export function generateConditionIfCode(config: { conditions?: unknown; combinat
 const CONDITIONS = ${conditions};
 const COMBINATOR = ${combinator};
 
-${STANDALONE_RUNTIME_PREAMBLE}
+${CONDITION_CODE}
 
 export function run($json, context) {
   const { $node, $env } = extractContext(context);
-  const matched = evaluateConditions(CONDITIONS, COMBINATOR, $json, $node, $env);
+  const matched = matchRule(resolveValue(CONDITIONS, $json, $node, $env), COMBINATOR);
   return { value: $json, activeOutput: matched ? 'true' : 'false' };
 }
 `;
@@ -86,11 +40,11 @@ const RULES = ${rules};
 const FALLBACK_ENABLED = ${fallbackEnabled};
 const RULE_OUTPUTS = ${ruleOutputs};
 
-${STANDALONE_RUNTIME_PREAMBLE}
+${SWITCH_CODE}
 
 export function run($json, context) {
   const { $node, $env } = extractContext(context);
-  const activeOutput = evaluateSwitchRules(RULES, RULE_OUTPUTS, FALLBACK_ENABLED, $json, $node, $env);
+  const activeOutput = evaluateSwitch(resolveValue(RULES, $json, $node, $env), RULE_OUTPUTS, FALLBACK_ENABLED);
   return { value: $json, activeOutput };
 }
 `;
@@ -104,11 +58,11 @@ export function generateFilterCode(config: { conditions?: unknown; combinator?: 
 const CONDITIONS = ${conditions};
 const COMBINATOR = ${combinator};
 
-${STANDALONE_RUNTIME_PREAMBLE}
+${CONDITION_CODE}
 
 export function run($json, context) {
   const { $node, $env } = extractContext(context);
-  const matched = evaluateConditions(CONDITIONS, COMBINATOR, $json, $node, $env);
+  const matched = matchRule(resolveValue(CONDITIONS, $json, $node, $env), COMBINATOR);
   return { value: $json, activeOutput: matched ? 'main' : null };
 }
 `;
@@ -122,11 +76,11 @@ export function generateSetCode(config: { fields?: unknown; includeOtherFields?:
 const FIELDS = ${fields};
 const INCLUDE_OTHER_FIELDS = ${includeOtherFields};
 
-${STANDALONE_RUNTIME_PREAMBLE}
+${FIELDS_CODE}
 
 export function run($json, context) {
   const { $node, $env } = extractContext(context);
-  return composeSetFields(FIELDS, INCLUDE_OTHER_FIELDS, $json, $node, $env);
+  return composeFields(resolveValue(FIELDS, $json, $node, $env), INCLUDE_OTHER_FIELDS && $json !== null && typeof $json === 'object' ? $json : {});
 }
 `;
 }
@@ -149,14 +103,11 @@ const HEADERS_TEMPLATE = ${headers};
 const BODY_TEMPLATE = ${body};
 
 ${bundleStandalone('@runflux/plugin-system/http-client', ['callHttp'], '__runfluxHttp')}
-${STANDALONE_RUNTIME_PREAMBLE}
+${EXPRESSION_CODE}
 
 export async function run($json, context) {
   const { $node, $env } = extractContext(context);
   const url = resolveValue(URL_TEMPLATE, $json, $node, $env);
-  if (typeof url !== 'string' || url.trim() === '') {
-    throw new Error('http-output: "url" is empty or invalid');
-  }
   return callHttp(
     resolveValue(METHOD, $json, $node, $env), url,
     resolveValue(HEADERS_TEMPLATE, $json, $node, $env),
@@ -170,7 +121,7 @@ export function generateCodeJavascriptCode(config: { code?: unknown }): string {
   const userCode = (config.code as string | undefined)?.trim() || 'return $json;';
 
   return `// Generated by RunFlux for plugin "code-javascript"
-${STANDALONE_RUNTIME_PREAMBLE}
+${CONTEXT_CODE}
 
 export async function run($json: any, context?: any) {
   const { $node, $env } = extractContext(context);

@@ -2,6 +2,7 @@ export interface WebhookRequest {
   body?: unknown;
   headers?: unknown;
   query?: unknown;
+  method?: string;
 }
 
 export interface PendingWebhook {
@@ -48,4 +49,3 @@ export function clearPendingWebhooks(): void {
     }
   }
 }
-

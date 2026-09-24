@@ -1,11 +1,59 @@
 {
   "files": [],
   "references": [
-    { "path": "packages/plugin-system" },
-    { "path": "packages/workflow-model" },
-    { "path": "packages/validation-runtime" },
-    { "path": "packages/expression-engine" },
-    { "path": "packages/compiler" },
-    { "path": "apps/project-server" }
+    {
+      "path": "packages/compiler"
+    },
+    {
+      "path": "packages/expression-engine"
+    },
+    {
+      "path": "packages/plugin-system"
+    },
+    {
+      "path": "packages/validation-runtime"
+    },
+    {
+      "path": "packages/workflow-model"
+    },
+    {
+      "path": "plugins/code-javascript"
+    },
+    {
+      "path": "plugins/condition-if"
+    },
+    {
+      "path": "plugins/condition-switch"
+    },
+    {
+      "path": "plugins/database-query"
+    },
+    {
+      "path": "plugins/filter"
+    },
+    {
+      "path": "plugins/http-output"
+    },
+    {
+      "path": "plugins/log-output"
+    },
+    {
+      "path": "plugins/set"
+    },
+    {
+      "path": "plugins/trigger-cron"
+    },
+    {
+      "path": "plugins/trigger-manual-example"
+    },
+    {
+      "path": "plugins/trigger-webhook"
+    },
+    {
+      "path": "apps/project-server"
+    },
+    {
+      "path": "apps/workflow-editor"
+    }
   ]
 }

@@ -64,8 +64,8 @@ describe('AWS Target Generator', () => {
     expect(filePaths).toContain('src/nodes/node-trigger.ts');
 
     const handlerFile = files.find((f) => f.path === 'src/handler.ts')!;
-    expect(handlerFile.content).toContain('export const handler = async');
-    expect(handlerFile.content).toContain('statusCode: 200');
+    expect(handlerFile.content).toContain('export async function handler');
+    expect(handlerFile.content).toContain('execution.success ? 200 : 500');
 
     const stackFile = files.find((f) => f.path === 'lib/workflow-stack.ts')!;
     expect(stackFile.content).toContain('class WorkflowStack extends Stack');
@@ -87,7 +87,7 @@ describe('AWS Target Generator', () => {
 
     const stackFile = files.find((f) => f.path === 'lib/workflow-stack.ts')!;
     expect(stackFile).toBeDefined();
-    expect(stackFile.content).toContain('PAYMENT_KEY: process.env.PAYMENT_KEY || "secret-pay"');
-    expect(stackFile.content).toContain('CACHE_TTL: process.env.CACHE_TTL || "3600"');
+    expect(stackFile.content).toContain('"PAYMENT_KEY": process.env["PAYMENT_KEY"] || "secret-pay"');
+    expect(stackFile.content).toContain('"CACHE_TTL": process.env["CACHE_TTL"] || "3600"');
   });
 });

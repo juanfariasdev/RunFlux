@@ -1,7 +1,6 @@
 import JSZip from 'jszip';
-import type { GeneratedFile } from './types.js';
 
-export async function createZipPackage(files: GeneratedFile[]): Promise<Uint8Array> {
+export async function createZipPackage(files: Array<{ path: string; content: string | Uint8Array }>): Promise<Uint8Array> {
   const zip = new JSZip();
 
   for (const file of files) {

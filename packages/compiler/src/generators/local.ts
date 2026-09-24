@@ -1,3 +1,4 @@
+import { buildLocalSchedules } from './schedules.js';
 import { buildLocalApp } from './templates/local-app.js';
 import { generateRunnerRuntime } from './templates/runner-template.js';
 import type { WorkflowDefinition } from '@runflux/workflow-model';
@@ -266,37 +267,13 @@ docker run -d -p ${port}:${port} --env-file .env ${sanitizedPkgName}
   const runnerTsContent = generateGraphRunner(workflow, nodeFiles, context.nodeEntries);
 
 
-  let cronInlineCode = '';
-  if (hasCron) {
-    cronInlineCode = `
-if (process.env.ENABLE_INLINE_CRON === 'true') {
-  cron.schedule('${cronExpression}', async () => {
-    console.log('[RunFlux Inline Cron] Triggering scheduled execution...');
-    try {
-      const payload = {
-        triggeredAt: new Date().toISOString(),
-        cronExpression: '${cronExpression}',
-        timezone: '${cronTimezone}',
-      };
-      await runWorkflow(payload);
-    } catch (err) {
-      console.error('[RunFlux Inline Cron Error]', err);
-    }
-  }, {
-    timezone: '${cronTimezone}'
-  });
-  console.log('[RunFlux Server] Inline cron enabled: "${cronExpression}"');
-}
-`;
-  }
-
   const appTsContent = buildLocalApp(workflow, projectName);
   const serverTsContent = `import 'dotenv/config';
 import { app } from './app.js';
-${hasCron ? "import cron from 'node-cron';" : ''}
+${hasCron ? "import { startSchedules } from './schedules.js';" : ''}
 import { runWorkflow } from './runner.js';
 const port = Number(process.env.PORT || ${port});
-${cronInlineCode}
+${hasCron ? "if (process.env.ENABLE_INLINE_CRON === 'true') startSchedules();" : ''}
 app.listen(port, () => console.log('[RunFlux] Listening on port', port));
 `;
 
@@ -352,40 +329,14 @@ if (isDirectRun) {
   ];
 
   if (hasCron) {
-    const runCronTsContent = `import dotenv from 'dotenv';
-import cron from 'node-cron';
-import { runWorkflow } from './run.js';
-
-dotenv.config();
-
-const CRON_EXPRESSION = ${JSON.stringify(cronExpression)};
-const CRON_TIMEZONE = process.env.CRON_TIMEZONE || ${JSON.stringify(cronTimezone)};
-
-console.log(\`[RunFlux Cron Worker] Starting cron worker for workflow "${projectName}"\`);
-console.log(\`[RunFlux Cron Worker] Schedule: "\${CRON_EXPRESSION}" (Timezone: \${CRON_TIMEZONE})\`);
-
-cron.schedule(
-  CRON_EXPRESSION,
-  async () => {
-    const timestamp = new Date().toISOString();
-    console.log(\`[RunFlux Cron Worker] [\${timestamp}] Triggering scheduled execution...\`);
-    try {
-      const payload = {
-        triggeredAt: timestamp,
-        cronExpression: CRON_EXPRESSION,
-        timezone: CRON_TIMEZONE,
-      };
-      const result = await runWorkflow(payload);
-      console.log(\`[RunFlux Cron Worker] [\${timestamp}] Execution result:\`, JSON.stringify(result));
-    } catch (err) {
-      console.error(\`[RunFlux Cron Worker] [\${timestamp}] Execution error:\`, err);
-    }
-  },
-  {
-    timezone: CRON_TIMEZONE,
-  }
-);
+    const runCronTsContent = `import 'dotenv/config';
+import { startSchedules } from './schedules.js';
+const tasks = startSchedules();
+const stop = () => { for (const task of tasks) task.stop(); process.exit(0); };
+process.once('SIGTERM', stop);
+process.once('SIGINT', stop);
 `;
+    files.push({ path: 'src/schedules.ts', content: buildLocalSchedules(workflow), type: 'source' });
     files.push({ path: 'src/run-cron.ts', content: runCronTsContent, type: 'source' });
   }
 

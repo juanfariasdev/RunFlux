@@ -16,3 +16,16 @@ it('delivers interactive webhook requests only to the matching endpoint', async 
     vi.unstubAllEnvs();
   }
 });
+
+it('does not register a listener after its workflow was already cancelled', async () => {
+  vi.stubEnv('RUNFLUX_WAIT_WEBHOOK_TEST', '1');
+  const controller = new AbortController();
+  controller.abort();
+  const pending = Promise.resolve(execute!({ path: '/cancelled' }, undefined, { ...context, signal: controller.signal }));
+  const observed = pending.catch((error) => error);
+  try {
+    const result = await Promise.race([observed, new Promise((resolve) => setTimeout(() => resolve('still waiting'), 0))]);
+    expect(result).toBeInstanceOf(Error);
+    expect(pushTestWebhook('/cancelled', { body: {} })).toBe(false);
+  } finally { clearPendingWebhooks(); await observed; vi.unstubAllEnvs(); }
+});

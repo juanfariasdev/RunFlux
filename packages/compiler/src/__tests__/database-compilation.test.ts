@@ -1,3 +1,4 @@
+import { loadGeneratedModule } from '@runflux/plugin-system/testing';
 import { describe, it, expect } from 'vitest';
 import { compileWorkflow } from '../compiler.js';
 import type { PluginResolver, CompiledPlugin } from '../types.js';
@@ -122,7 +123,7 @@ describe('database-query compilation (012-database-query-plugin)', () => {
 
     const dbFile = result.files.find((f) => f.path.includes('database-query.js'));
     expect(dbFile).toBeDefined();
-    expect(dbFile?.content).toContain("import pg from 'pg';");
+    expect(await loadGeneratedModule(dbFile!.content).run({})).toEqual([{ id: 42, name: 'Alice' }]);
   });
 
   it('compiles workflow with database-query for aws adding pg to dependencies', async () => {

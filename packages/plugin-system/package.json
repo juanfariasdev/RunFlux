@@ -37,11 +37,12 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -b tsconfig.json",
-    "build:node": "esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist-node/index.mjs --external:zod --external:esbuild"
+    "build:node": "esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist-node/index.mjs --external:zod --external:esbuild --external:tsx"
   },
   "dependencies": {
     "zod": "^3.23.8",
-    "esbuild": "^0.28.2"
+    "esbuild": "^0.28.2",
+    "tsx": "^4.19.0"
   },
   "devDependencies": {
     "typescript": "^5.5.4",

@@ -7,7 +7,12 @@ import { validateManifest, type ManifestValidationResult } from './manifest-vali
  * and in project export/import (workflow-project-management RF-07/RF-08).
  */
 export function serializeManifest(manifest: PluginManifest): string {
-  return JSON.stringify(manifest, Object.keys(manifest).sort());
+  return JSON.stringify(manifest, (_key, value) => {
+    if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+      return Object.fromEntries(Object.keys(value).sort().map((key) => [key, value[key]]));
+    }
+    return value;
+  });
 }
 
 /** Deserializes and validates a JSON manifest string back into a PluginManifest. */

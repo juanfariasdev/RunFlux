@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { validateManifest } from '../manifest-validator';
+import { importPlugin } from './import-plugin.js';
 import type { DiscoveredPlugin, PluginModule } from '../types';
 
 export interface ScanError {
@@ -46,7 +47,7 @@ export async function scanDirectory(dirPath: string): Promise<ScanResult> {
       const entryUrl = pathToFileURL(entryFile);
       const { mtimeNs, size } = await fs.stat(entryFile, { bigint: true });
       entryUrl.searchParams.set('runflux-version', `${mtimeNs}-${size}`);
-      const mod = (await import(entryUrl.href)) as Partial<PluginModule>;
+      const mod = await importPlugin(entryUrl);
       if (!mod.manifest || !mod.generators) {
         errors.push({ path: pluginDir, error: 'module must export "manifest" and "generators"' });
         continue;

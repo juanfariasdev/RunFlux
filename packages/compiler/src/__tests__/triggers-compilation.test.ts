@@ -109,13 +109,13 @@ export function run(input: any) { return input; }`,
       expect(parsedPkg.scripts.build).toContain('src/run-cron.ts');
       expect(parsedPkg.dependencies['node-cron']).toBeDefined();
 
-      const runCronFile = result.files.find((f) => f.path === 'src/run-cron.ts');
-      expect(runCronFile!.content).toContain('CRON_EXPRESSION = "*/5 * * * *"');
+      const runCronFile = result.files.find((f) => f.path === 'src/schedules.ts');
+      expect(runCronFile!.content).toContain('"expression":"*/5 * * * *"');
       expect(runCronFile!.content).toContain('America/Sao_Paulo');
     }
   });
 
-  it('compiles a workflow with trigger-cron for aws and includes EventBridge Rule in CDK', async () => {
+  it('compiles a workflow with trigger-cron for aws and includes EventBridge Scheduler in CDK', async () => {
     const cronWorkflow: WorkflowDefinition = {
       id: 'wf-cron-aws-test',
       name: 'AWS Scheduled Workflow',
@@ -146,9 +146,9 @@ export function run(input: any) { return input; }`,
     if (result.status === 'success') {
       const stackFile = result.files.find((f) => f.path === 'lib/workflow-stack.ts');
       expect(stackFile).toBeDefined();
-      expect(stackFile!.content).toContain("import * as events from 'aws-cdk-lib/aws-events';");
-      expect(stackFile!.content).toContain('WorkflowCronRule');
-      expect(stackFile!.content).toContain('events.Schedule.expression');
+      expect(stackFile!.content).toContain("import * as scheduler from 'aws-cdk-lib/aws-scheduler';");
+      expect(stackFile!.content).toContain('WorkflowSchedule1');
+      expect(stackFile!.content).toContain('cron(0 0 * * ? *)');
     }
   });
 
@@ -184,11 +184,11 @@ export function run(input: any) { return input; }`,
 
     expect(result.status).toBe('success');
     if (result.status === 'success') {
-      const serverFile = result.files.find((f) => f.path === 'src/server.ts');
+      const serverFile = result.files.find((f) => f.path === 'src/app.ts');
       expect(serverFile).toBeDefined();
-      expect(serverFile!.content).toContain("app.post('/webhook/orders'");
-      expect(serverFile!.content).toContain("process.env.ORDER_SECRET");
-      expect(serverFile!.content).toContain("x-webhook-secret");
+      expect(serverFile!.content).toContain('"path":"/webhook/orders"');
+      expect(serverFile!.content).toContain('"secretEnvVar":"ORDER_SECRET"');
+      expect(serverFile!.content).toContain("X-Webhook-Secret");
       expect(serverFile!.content).toContain("401");
 
       const envFile = result.files.find((f) => f.path === '.env.example');
@@ -230,9 +230,9 @@ export function run(input: any) { return input; }`,
     if (result.status === 'success') {
       const handlerFile = result.files.find((f) => f.path === 'src/handler.ts');
       expect(handlerFile).toBeDefined();
-      expect(handlerFile!.content).toContain("process.env.MY_SECRET");
-      expect(handlerFile!.content).toContain("x-webhook-secret");
-      expect(handlerFile!.content).toContain("statusCode: 401");
+      expect(handlerFile!.content).toContain('"secretEnvVar":"MY_SECRET"');
+      expect(handlerFile!.content).toContain("X-Webhook-Secret");
+      expect(handlerFile!.content).toContain("response(401,");
     }
   });
 });

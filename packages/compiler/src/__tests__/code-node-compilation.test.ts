@@ -1,3 +1,4 @@
+import { loadGeneratedModule } from '@runflux/plugin-system/testing';
 import { describe, it, expect } from 'vitest';
 import { compileWorkflow } from '../compiler.js';
 import { executeWorkflowGraph } from '../generators/templates/runner-template.js';
@@ -114,7 +115,7 @@ describe('code-node compilation (010-code-node-plugin)', () => {
     const codeFile = result.files.find((f) => f.path.includes('code-javascript.js'));
     expect(codeFile).toBeDefined();
     expect(codeFile?.content).toContain('calculated: $json.price * 3');
-    expect(codeFile?.content).toContain('export async function run($json: any, context?: any)');
+    expect(await loadGeneratedModule(codeFile!.content).run({ price: 7 }, {})).toEqual({ calculated: 21, processed: true });
 
     const runnerFile = result.files.find((f) => f.path === 'src/runner.ts');
     expect(runnerFile).toBeDefined();
