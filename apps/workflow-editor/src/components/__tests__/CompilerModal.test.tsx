@@ -30,7 +30,7 @@ describe('CompilerModal', () => {
     const compileBtn = screen.getByRole('button', { name: /Compile and Download/i });
     fireEvent.click(compileBtn);
 
-    expect(handleCompile).toHaveBeenCalledWith('local');
+    expect(handleCompile).toHaveBeenCalledWith('local', { includeCli: false });
   });
 
   it('allows selecting AWS target platform', async () => {
@@ -57,6 +57,20 @@ describe('CompilerModal', () => {
     const compileBtn = screen.getByRole('button', { name: /Compile and Download/i });
     fireEvent.click(compileBtn);
 
-    expect(handleCompile).toHaveBeenCalledWith('aws');
+    expect(handleCompile).toHaveBeenCalledWith('aws', { includeCli: false });
+  });
+
+  it('can include the optional local CLI runner', async () => {
+    const handleCompile = vi.fn().mockResolvedValue({ status: 'success' });
+    render(
+      <ProjectProvider>
+        <CompilerModal isOpen={true} onClose={() => {}} onCompile={handleCompile} projectName="CLI Project" />
+      </ProjectProvider>,
+    );
+
+    fireEvent.click(screen.getByLabelText(/Include CLI runner/i));
+    fireEvent.click(screen.getByRole('button', { name: /Compile and Download/i }));
+
+    expect(handleCompile).toHaveBeenCalledWith('local', { includeCli: true });
   });
 });

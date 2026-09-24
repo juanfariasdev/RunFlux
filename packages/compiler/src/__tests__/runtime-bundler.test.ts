@@ -55,6 +55,7 @@ describe('RuntimeBundler', () => {
     const declarations = files.filter((file) => file.path.includes('/types/')).map((file) => file.path);
     expect(declarations).toEqual(expect.arrayContaining([`${VENDOR_DIRECTORY}/types/index.d.ts`, `${VENDOR_DIRECTORY}/types/plugins.d.ts`, `${VENDOR_DIRECTORY}/types/hosts/express/index.d.ts`]));
     expect(declarations.some((file) => /__tests__|\/testing\//.test(file))).toBe(false);
+    expect(declarations.some((file) => /\/hosts\/(cron|cli|lambda)\//.test(file))).toBe(false);
     expect(files.find((file) => file.path.endsWith('/express.js'))!.content).toMatch(/from "express"/);
   });
 
@@ -97,6 +98,13 @@ describe('RuntimeBundler', () => {
       const later = new Date(Date.now() + 60_000);
       await fs.utimes(path.join(runtime, 'src', 'values.ts'), later, later);
       await expect(typesOf(runtime)).rejects.toThrow('Runtime type declarations are older than src/values.ts; run "npm run build:node -w @runflux/runtime"');
+    });
+
+    it('does not treat tests as runtime sources when checking declaration freshness', async () => {
+      const runtime = await copyRuntime();
+      const later = new Date(Date.now() + 60_000);
+      await fs.utimes(path.join(runtime, 'src', 'fields', '__tests__', 'field-composer.test.ts'), later, later);
+      await expect(typesOf(runtime)).resolves.toContain('index.d.ts');
     });
 
     it('reads the dependency versions the runtime declares', async () => {

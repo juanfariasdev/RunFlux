@@ -7,7 +7,7 @@ import { Button } from './ui/button';
 export interface CompilerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCompile?: (platform: TargetPlatform) => Promise<any>;
+  onCompile?: (platform: TargetPlatform, options: { includeCli: boolean }) => Promise<any>;
   projectName?: string;
 }
 
@@ -16,6 +16,7 @@ export function CompilerModal({ isOpen, onClose, onCompile, projectName }: Compi
   const workflow = useWorkflowStore((s) => s.workflow);
 
   const [targetPlatform, setTargetPlatform] = useState<TargetPlatform>('local');
+  const [includeCli, setIncludeCli] = useState(false);
   const [status, setStatus] = useState<'idle' | 'compiling' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [errorDetails, setErrorDetails] = useState<any[] | null>(null);
@@ -31,8 +32,9 @@ export function CompilerModal({ isOpen, onClose, onCompile, projectName }: Compi
     setErrorDetails(null);
     try {
       let res;
+      const options = { includeCli: targetPlatform === 'local' && includeCli };
       if (onCompile) {
-        res = await onCompile(targetPlatform);
+        res = await onCompile(targetPlatform, options);
       } else {
         const adapter = new HttpCompilerApiAdapter();
         const workflowWithSettings = {
@@ -46,6 +48,7 @@ export function CompilerModal({ isOpen, onClose, onCompile, projectName }: Compi
           workflow: workflowWithSettings,
           targetPlatform,
           projectName: effectiveProjectName,
+          options,
         });
       }
       setResultData(res);
@@ -170,6 +173,21 @@ export function CompilerModal({ isOpen, onClose, onCompile, projectName }: Compi
               <span className="text-slate-400">Workflow nodes:</span>
               <span className="font-semibold text-white">{workflow.nodes.length} nodes</span>
             </div>
+            {targetPlatform === 'local' && (
+              <label className="flex items-center justify-between gap-3 pt-1 text-xs text-slate-300">
+                <span>
+                  <span className="block font-medium text-slate-200">Include CLI runner</span>
+                  <span className="text-[10px] text-slate-500">Adds <code>npm run run</code> for manual workflow execution.</span>
+                </span>
+                <input
+                  type="checkbox"
+                  aria-label="Include CLI runner"
+                  checked={includeCli}
+                  onChange={(event) => setIncludeCli(event.target.checked)}
+                  className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-indigo-600 focus:ring-indigo-500"
+                />
+              </label>
+            )}
           </div>
 
           {/* Status Feedback */}

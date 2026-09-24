@@ -100,12 +100,13 @@ As expressões são lidas por um analisador que respeita strings e chaves do Jav
 ```
 src/workflow.json        documento executável (dados)
 src/workflow.ts          ponto de composição: WorkflowEngine.fromDocument(workflow.json, plugins)
-src/server.ts, run.ts    hosts Express e CLI (local)
+src/server.ts            host Express (local); com cron, também o host de agendamentos
+src/run.ts               CLI (local, opcional: includeCli, desligada por padrão no editor)
 src/run-cron.ts          worker de agendamentos (local, se houver cron)
 src/lifecycle.ts         desligamento em SIGINT/SIGTERM: para hosts, espera runs, descarta o motor
 src/handler.ts           handler Lambda (AWS)
 lib/, bin/, infrastructure.json   stack CDK e seus dados (AWS)
-vendor/runflux-runtime/  runtime + plugins usados, em JS compilado com tipos .d.ts
+vendor/runflux-runtime/  runtime + plugins usados, em JS compilado com tipos .d.ts (só os hosts que o projeto importa)
 ```
 
 Os arquivos de `src/`, `lib/` e `bin/` vêm de `packages/compiler/templates/` sem alteração. São TypeScript real, verificado por `npm run typecheck`. O projeto depende de `@runflux/runtime` via `file:./vendor/runflux-runtime`, e o módulo `@runflux/runtime/plugins` do vendor contém as definições dos plugins daquele fluxo.

@@ -8,6 +8,7 @@ import { LocalTarget } from './targets/local-target.js';
 import {
   CompilationError,
   type BuildManifest,
+  type CompilationOptions,
   type CompilationRequest,
   type CompilationResult,
   type GeneratedFile,
@@ -60,9 +61,10 @@ export class WorkflowCompiler {
     if (!target) throw new CompilationError('UNSUPPORTED_TARGET', `Target platform '${targetPlatform}' is not supported.`);
     this.validator.validate(workflow, targetPlatform);
     const plan = this.planner.plan(workflow, options);
-    const hostDependencies = this.hostDependencies(target, plan);
+    const hostPackages = target.hostPackages(plan, options);
+    const hostDependencies = this.hostDependencies(target.platform, hostPackages, plan);
     const projectFiles = await target.files({ plan, projectName, options, hostDependencies });
-    const runtimeFiles = await this.bundleRuntime(target, plan);
+    const runtimeFiles = await this.bundleRuntime(target, plan, options, hostPackages);
     const generated = [...projectFiles, ...runtimeFiles];
     const manifest = this.buildManifest(request, target, plan, generated);
     const files: GeneratedFile[] = [{ path: 'runflux-build.json', content: `${JSON.stringify(manifest, null, 2)}\n`, type: 'config' }, ...generated];
@@ -70,26 +72,26 @@ export class WorkflowCompiler {
   }
 
   /** The versions of the packages the target's hosts import, which the plugins must not contradict. */
-  private hostDependencies(target: DeploymentTarget, plan: DeploymentPlan): Record<string, string> {
+  private hostDependencies(platform: TargetPlatform, hostPackages: readonly string[], plan: DeploymentPlan): Record<string, string> {
     let versions: Record<string, string>;
     try {
-      versions = this.bundler.dependencyVersions(target.hostPackages);
+      versions = this.bundler.dependencyVersions(hostPackages);
     } catch (error) {
       if (error instanceof RuntimeBundleError) throw new CompilationError('GENERATOR_ERROR', error.message);
       throw error;
     }
     const requirements = new PackageRequirements();
-    requirements.add(`The ${target.platform} runtime hosts`, versions);
+    requirements.add(`The ${platform} runtime hosts`, versions);
     requirements.add('the workflow plugins', plan.dependencies);
     return versions;
   }
 
-  private async bundleRuntime(target: DeploymentTarget, plan: DeploymentPlan): Promise<GeneratedFile[]> {
+  private async bundleRuntime(target: DeploymentTarget, plan: DeploymentPlan, options: CompilationOptions, hostPackages: readonly string[]): Promise<GeneratedFile[]> {
     try {
       return await this.bundler.bundle({
-        entries: target.runtimeEntries,
+        entries: target.runtimeEntries(plan, options),
         plugins: plan.plugins,
-        external: [...target.hostPackages, ...Object.keys(plan.dependencies)],
+        external: [...hostPackages, ...Object.keys(plan.dependencies)],
       });
     } catch (error) {
       if (error instanceof RuntimeBundleError) throw new CompilationError('GENERATOR_ERROR', error.message);
@@ -98,7 +100,7 @@ export class WorkflowCompiler {
   }
 
   private buildManifest(request: CompilationRequest, target: DeploymentTarget, plan: DeploymentPlan, files: readonly GeneratedFile[]): BuildManifest {
-    const profile = target.buildProfile(plan);
+    const profile = target.buildProfile(plan, request.options ?? {});
     return {
       runfluxVersion: RUNFLUX_VERSION,
       targetPlatform: request.targetPlatform,

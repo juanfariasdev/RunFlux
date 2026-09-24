@@ -52,6 +52,7 @@ describe('LocalTarget', () => {
     const files = await generate([node('hourly', 'schedule')]);
     const manifest = JSON.parse(file(files, 'package.json'));
     expect(paths(files)).toContain('src/run-cron.ts');
+    expect(file(files, 'src/server.ts')).toContain("@runflux/runtime/cron");
     expect(manifest.scripts.cron).toBe('node dist/run-cron.mjs');
     expect(manifest.scripts.build).toContain('src/run-cron.ts');
     expect(manifest.dependencies['node-cron']).toBe('^4.6.0');
@@ -75,6 +76,7 @@ describe('LocalTarget', () => {
 
     const withoutSchedules = await generate([node('hook', 'webhook')]);
     expect(paths(withoutSchedules)).not.toContain('src/run-cron.ts');
+    expect(file(withoutSchedules, 'src/server.ts')).not.toContain('@runflux/runtime/cron');
     expect(JSON.parse(file(withoutSchedules, 'package.json')).dependencies['node-cron']).toBeUndefined();
     expect(file(withoutSchedules, 'docker-compose.yml')).not.toContain('cron');
   });
@@ -146,9 +148,12 @@ describe('LocalTarget', () => {
 
   it('builds the entry points it generates and leaves its host packages external', () => {
     const plan = planner.plan(workflow([node('hourly', 'schedule')]));
-    expect(target.buildProfile(plan).entryPoints).toEqual(['src/server.ts', 'src/run.ts', 'src/run-cron.ts']);
-    expect(target.buildProfile(plan).bundleDependencies).toBe(false);
-    expect(target.hostPackages).toEqual(['cors', 'express', 'node-cron']);
+    expect(target.buildProfile(plan, {}).entryPoints).toEqual(['src/server.ts', 'src/run.ts', 'src/run-cron.ts']);
+    expect(target.buildProfile(plan, {}).bundleDependencies).toBe(false);
+    expect(target.hostPackages(plan)).toEqual(['cors', 'express', 'node-cron']);
+    const withoutSchedules = planner.plan(workflow([node('hook', 'webhook')]));
+    expect(target.runtimeEntries(withoutSchedules, {}).map((entry) => entry.subpath)).toEqual(['.', './express', './cli']);
+    expect(target.hostPackages(withoutSchedules)).toEqual(['cors', 'express']);
   });
 });
 
@@ -168,7 +173,7 @@ describe('AwsTarget', () => {
     expect(manifest.scripts.build).toContain('--banner:js=');
     expect(manifest.dependencies).toMatchObject({ '@runflux/runtime': 'file:./vendor/runflux-runtime', 'aws-cdk-lib': expect.any(String), constructs: expect.any(String) });
     expect(manifest.devDependencies.tsx).toBeDefined();
-    expect(target.hostPackages).toEqual([]);
+    expect(target.hostPackages()).toEqual([]);
   });
 
   it('translates every schedule and keeps its timezone and trigger', () => {

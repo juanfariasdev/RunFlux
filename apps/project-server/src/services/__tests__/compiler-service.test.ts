@@ -53,6 +53,8 @@ it.each([
   [{ workflow: { ...workflow, nodes: [{ id: 'n1' }] } }, 'VALIDATION_ERROR', 'Invalid workflow: nodes.0.pluginId: Required; nodes.0.position: Required'],
   [{ workflow, targetPlatform: 'gcp' }, 'UNSUPPORTED_TARGET', 'Plataforma alvo inválida: "gcp". Suportadas: local, aws.'],
   [{ workflow: { ...workflow, connections: [{ sourceNodeId: 'n1', targetNodeId: 'ghost' }] } }, 'INVALID_WORKFLOW', 'Connection n1 -> ghost references an unknown node'],
+  [{ workflow, options: 'lean' }, 'VALIDATION_ERROR', 'Invalid compilation options: expected an object.'],
+  [{ workflow, options: { includeCli: 'no' } }, 'VALIDATION_ERROR', 'Invalid compilation option: includeCli must be a boolean.'],
 ])('rejects the request %j with a client error', async (request, code, message) => {
   const { service } = fixture(PASS_THROUGH);
   await expect(service.compile(request as never)).rejects.toMatchObject({ code, message, status: 400 });
@@ -73,6 +75,25 @@ it('downloads a complete standalone project with dependencies, source and compil
   ]));
   expect(existsSync(join(result.outputDirectory, 'function.zip'))).toBe(false);
   expect(result.downloadUrl).toBe(`/api/compiler/downloads/${result.compilationId}/Test-local.zip`);
+});
+
+it('can produce a lean local backend without the optional CLI runtime', async () => {
+  const { service } = fixture(PASS_THROUGH);
+  const result = await service.compile({ workflow, targetPlatform: 'local', options: { includeCli: false } });
+  expect(result.manifest.build.entryPoints).toEqual(['src/server.ts']);
+  expect(existsSync(join(result.outputDirectory, 'src', 'run.ts'))).toBe(false);
+  expect(existsSync(join(result.outputDirectory, 'dist', 'run.mjs'))).toBe(false);
+  expect(existsSync(join(result.outputDirectory, 'vendor', 'runflux-runtime', 'cli.js'))).toBe(false);
+});
+
+it('ignores the options a client may not set, such as the port and the variables', async () => {
+  const { service } = fixture(PASS_THROUGH);
+  const options = { port: 'abc', envVars: [{ key: 'INJECTED', value: 'x' }] };
+  const result = await service.compile({ workflow: { ...workflow, settings: { envVars: [{ key: 'API_KEY', value: 'k' }] } } as never, targetPlatform: 'local', options: options as never });
+  const env = readFileSync(join(result.outputDirectory, '.env.example'), 'utf8');
+  expect(env).toContain('PORT=3000');
+  expect(env).toContain('API_KEY=k');
+  expect(env).not.toContain('INJECTED');
 });
 
 it('packages the AWS function on its own', async () => {

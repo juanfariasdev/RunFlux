@@ -1,17 +1,17 @@
-import { useState, useEffect } from 'react';
+import { lazy, Suspense, useState, useEffect } from 'react';
 import type { WorkflowNode } from '@runflux/workflow-model/types';
 import type { PluginCatalogAdapter } from '../adapters/plugin-catalog-adapter';
 import type { PluginExecutionMode, ValidationRuntimeAdapter } from '../adapters/validation-runtime-adapter';
 import type { WorkflowPersistenceAdapter } from '../adapters/workflow-persistence-adapter';
-import { buildZodSchema } from '../forms/build-zod-schema';
 import { useWorkflowStore } from '../store/workflow-store';
 import { Button } from './ui/button';
 import { useProject } from '../context/ProjectContext';
-import { ProjectManagerModal } from './ProjectManagerModal';
-import { CompilerModal } from './CompilerModal';
-import { EnvVarsModal } from './EnvVarsModal';
 import { projectEnvironment } from '../adapters/project-environment';
 import { webhookTestRequest } from '../adapters/webhook-test-request';
+
+const ProjectManagerModal = lazy(() => import('./ProjectManagerModal').then((module) => ({ default: module.ProjectManagerModal })));
+const CompilerModal = lazy(() => import('./CompilerModal').then((module) => ({ default: module.CompilerModal })));
+const EnvVarsModal = lazy(() => import('./EnvVarsModal').then((module) => ({ default: module.EnvVarsModal })));
 
 export interface ToolbarProps {
   catalog: PluginCatalogAdapter;
@@ -94,6 +94,7 @@ export function Toolbar({ catalog, persistence, validation, onTestingNodesChange
 
     const grouped = await catalog.listPlugins();
     const manifestsById = new Map(Object.values(grouped).flat().map((m) => [m.id, m]));
+    const { buildZodSchema } = await import('../forms/build-zod-schema');
 
     for (const node of workflow.nodes) {
       const manifest = manifestsById.get(node.pluginId);
@@ -274,20 +275,23 @@ export function Toolbar({ catalog, persistence, validation, onTestingNodesChange
         </div>
       )}
 
-      <ProjectManagerModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-      />
+      {isModalOpen && (
+        <Suspense fallback={null}>
+          <ProjectManagerModal isOpen onClose={() => setIsModalOpen(false)} />
+        </Suspense>
+      )}
 
-      <CompilerModal
-        isOpen={isCompilerOpen}
-        onClose={() => setIsCompilerOpen(false)}
-      />
+      {isCompilerOpen && (
+        <Suspense fallback={null}>
+          <CompilerModal isOpen onClose={() => setIsCompilerOpen(false)} />
+        </Suspense>
+      )}
 
-      <EnvVarsModal
-        isOpen={isEnvModalOpen}
-        onClose={() => setIsEnvModalOpen(false)}
-      />
+      {isEnvModalOpen && (
+        <Suspense fallback={null}>
+          <EnvVarsModal isOpen onClose={() => setIsEnvModalOpen(false)} />
+        </Suspense>
+      )}
     </>
   );
 }

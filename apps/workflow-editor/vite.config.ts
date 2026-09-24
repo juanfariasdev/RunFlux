@@ -9,6 +9,31 @@ const plugins = new PluginRegistryCache(['../../plugins']);
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), runfluxPluginCatalogPlugin(plugins), runfluxValidationPlugin(plugins)],
+  build: {
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            {
+              name: 'react-vendor',
+              test: /node_modules[\\/](?:react|react-dom|scheduler)[\\/]/,
+              priority: 30,
+            },
+            {
+              name: 'xyflow-vendor',
+              test: /node_modules[\\/]@xyflow[\\/]/,
+              priority: 25,
+            },
+            {
+              name: 'forms-vendor',
+              test: /node_modules[\\/](?:@hookform[\\/]|react-hook-form[\\/]|zod[\\/])/,
+              priority: 20,
+            },
+          ],
+        },
+      },
+    },
+  },
   server: {
     proxy: {
       '/api': {

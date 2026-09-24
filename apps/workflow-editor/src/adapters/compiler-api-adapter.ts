@@ -6,6 +6,9 @@ export interface CompileParams {
   workflow: WorkflowDefinition;
   targetPlatform: TargetPlatform;
   projectName?: string;
+  options?: {
+    includeCli?: boolean;
+  };
 }
 
 export interface CompileResult {
@@ -42,6 +45,7 @@ export class HttpCompilerApiAdapter implements CompilerApi {
         workflow: params.workflow,
         targetPlatform: params.targetPlatform,
         projectName: params.projectName,
+        options: params.options,
       }),
     });
 

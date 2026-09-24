@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
 import type { PluginManifest } from '@runflux/plugin-system/types';
 import { HttpPluginCatalogAdapter } from './adapters/plugin-catalog-adapter';
@@ -6,8 +6,6 @@ import { HttpValidationRuntimeAdapter } from './adapters/validation-runtime-adap
 import { HttpProjectApiAdapter } from './adapters/project-api-adapter';
 import { connectionId } from './adapters/react-flow-adapter';
 import { Canvas } from './components/Canvas';
-import { EdgeConfigPanel } from './components/EdgeConfigPanel';
-import { NodeConfigPanel } from './components/NodeConfigPanel';
 import { Palette } from './components/Palette';
 import { Toolbar } from './components/Toolbar';
 import { useWorkflowStore } from './store/workflow-store';
@@ -17,6 +15,8 @@ import { projectEnvironment } from './adapters/project-environment';
 const catalog = new HttpPluginCatalogAdapter();
 const projectAdapter = new HttpProjectApiAdapter();
 const validation = new HttpValidationRuntimeAdapter();
+const NodeConfigPanel = lazy(() => import('./components/NodeConfigPanel').then((module) => ({ default: module.NodeConfigPanel })));
+const EdgeConfigPanel = lazy(() => import('./components/EdgeConfigPanel').then((module) => ({ default: module.EdgeConfigPanel })));
 
 function WorkflowEditorContent() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | undefined>();
@@ -113,42 +113,46 @@ function WorkflowEditorContent() {
           <Canvas catalog={catalog} onSelectNode={setSelectedNodeId} onSelectEdge={setSelectedEdgeId} testingNodeIds={testingNodeIds} />
         </ReactFlowProvider>
         {selectedNode && (
-          <NodeConfigPanel
-            key={selectedNode.id}
-            manifest={selectedManifest}
-            values={selectedNode.parameters}
-            appearance={selectedNode.appearance}
-            onChange={(values) => updateNodeParameters(selectedNode.id, values)}
-            onAppearanceChange={(appearance) => updateNodeAppearance(selectedNode.id, appearance)}
-            onDelete={() => {
-              removeNode(selectedNode.id);
-              setSelectedNodeId(undefined);
-            }}
-            onClose={() => setSelectedNodeId(undefined)}
-            onTest={() => handleTestNode(selectedNode.id)}
-            onCancelTest={handleCancelTest}
-            isTesting={testingNodeIds.has(selectedNode.id)}
-            testResult={nodeResults[selectedNode.id]}
-            nodeScope={nodeScope}
-            envScope={envScope}
-          />
+          <Suspense fallback={null}>
+            <NodeConfigPanel
+              key={selectedNode.id}
+              manifest={selectedManifest}
+              values={selectedNode.parameters}
+              appearance={selectedNode.appearance}
+              onChange={(values) => updateNodeParameters(selectedNode.id, values)}
+              onAppearanceChange={(appearance) => updateNodeAppearance(selectedNode.id, appearance)}
+              onDelete={() => {
+                removeNode(selectedNode.id);
+                setSelectedNodeId(undefined);
+              }}
+              onClose={() => setSelectedNodeId(undefined)}
+              onTest={() => handleTestNode(selectedNode.id)}
+              onCancelTest={handleCancelTest}
+              isTesting={testingNodeIds.has(selectedNode.id)}
+              testResult={nodeResults[selectedNode.id]}
+              nodeScope={nodeScope}
+              envScope={envScope}
+            />
+          </Suspense>
         )}
         {selectedConnection && (
-          <EdgeConfigPanel
-            connection={selectedConnection}
-            onChange={(appearance) => updateConnection(
-              selectedConnection.sourceNodeId,
-              selectedConnection.sourceOutput,
-              selectedConnection.targetNodeId,
-              selectedConnection.targetInput,
-              appearance,
-            )}
-            onDelete={() => {
-              removeConnection(selectedConnection.sourceNodeId, selectedConnection.sourceOutput, selectedConnection.targetNodeId, selectedConnection.targetInput);
-              setSelectedEdgeId(undefined);
-            }}
-            onClose={() => setSelectedEdgeId(undefined)}
-          />
+          <Suspense fallback={null}>
+            <EdgeConfigPanel
+              connection={selectedConnection}
+              onChange={(appearance) => updateConnection(
+                selectedConnection.sourceNodeId,
+                selectedConnection.sourceOutput,
+                selectedConnection.targetNodeId,
+                selectedConnection.targetInput,
+                appearance,
+              )}
+              onDelete={() => {
+                removeConnection(selectedConnection.sourceNodeId, selectedConnection.sourceOutput, selectedConnection.targetNodeId, selectedConnection.targetInput);
+                setSelectedEdgeId(undefined);
+              }}
+              onClose={() => setSelectedEdgeId(undefined)}
+            />
+          </Suspense>
         )}
       </div>
     </div>

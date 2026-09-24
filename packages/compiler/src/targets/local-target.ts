@@ -1,6 +1,6 @@
 import type { HttpTrigger } from '@runflux/runtime';
 import type { EnvironmentVariableDeclaration } from '@runflux/plugin-system';
-import { RUNTIME_ENTRIES } from '../bundling/runtime-bundler.js';
+import { RUNTIME_ENTRIES, type RuntimeEntry } from '../bundling/runtime-bundler.js';
 import type { DeploymentPlan } from '../deployment/deployment-plan.js';
 import { BuildProfile } from '../project/build-profile.js';
 import { EnvFile, EnvFileError } from '../project/env-file.js';
@@ -10,7 +10,7 @@ import { toPackageName } from '../project/package-name.js';
 import { ProjectFiles } from '../project/project-files.js';
 import { TemplateDirectory } from '../project/template-directory.js';
 import { toYaml, type YamlValue } from '../project/yaml.js';
-import { CompilationError, type GeneratedFile } from '../types.js';
+import { CompilationError, type CompilationOptions, type GeneratedFile } from '../types.js';
 import type { DeploymentTarget, TargetContext } from './deployment-target.js';
 
 const DEFAULT_PORT = 3000;
@@ -21,40 +21,63 @@ const CRON_PACKAGE = 'node-cron';
 export class LocalTarget implements DeploymentTarget {
   readonly platform = 'local' as const;
   readonly entrypoint = 'src/server.ts';
-  readonly runtimeEntries = [RUNTIME_ENTRIES.core, RUNTIME_ENTRIES.express, RUNTIME_ENTRIES.cron, RUNTIME_ENTRIES.cli];
-  readonly hostPackages = ['cors', 'express', CRON_PACKAGE];
   private readonly templates: TemplateDirectory;
 
   constructor(templates = new TemplateDirectory()) {
     this.templates = templates;
   }
 
-  buildProfile(plan: DeploymentPlan): BuildProfile {
-    return BuildProfile.server(['src/server.ts', 'src/run.ts', ...(hasSchedules(plan) ? [CRON_WORKER] : [])]);
+  runtimeEntries(plan: DeploymentPlan, options: CompilationOptions): readonly RuntimeEntry[] {
+    return [
+      RUNTIME_ENTRIES.core,
+      RUNTIME_ENTRIES.express,
+      ...(hasSchedules(plan) ? [RUNTIME_ENTRIES.cron] : []),
+      ...(includeCli(options) ? [RUNTIME_ENTRIES.cli] : []),
+    ];
+  }
+
+  hostPackages(plan: DeploymentPlan): readonly string[] {
+    return ['cors', 'express', ...(hasSchedules(plan) ? [CRON_PACKAGE] : [])];
+  }
+
+  buildProfile(plan: DeploymentPlan, options: CompilationOptions = {}): BuildProfile {
+    return BuildProfile.server([
+      'src/server.ts',
+      ...(includeCli(options) ? ['src/run.ts'] : []),
+      ...(hasSchedules(plan) ? [CRON_WORKER] : []),
+    ]);
   }
 
   async files({ plan, projectName, options, hostDependencies }: TargetContext): Promise<GeneratedFile[]> {
     const port = options.port ?? DEFAULT_PORT;
     const packageName = toPackageName(projectName, 'runflux-app');
-    return new ProjectFiles()
-      .addAll(await this.templates.files(['shared', 'local'], (file) => hasSchedules(plan) || file !== CRON_WORKER))
+    const files = new ProjectFiles()
+      .addAll(await this.templates.files(['shared']))
+      .addAll(await this.templates.files(['local'], (file) => {
+        if (!hasSchedules(plan) && file === CRON_WORKER) return false;
+        if (hasSchedules(plan) && file === 'src/server.ts') return false;
+        if (!includeCli(options) && file === 'src/run.ts') return false;
+        return true;
+      }));
+    if (hasSchedules(plan)) files.addAll(await this.templates.files(['local-scheduled']));
+    return files
       .json('src/workflow.json', plan.workflow, 'source')
-      .json('package.json', this.packageJson(plan, packageName, hostDependencies))
+      .json('package.json', this.packageJson(plan, packageName, hostDependencies, options))
       .text('.env.example', environmentFile(port, hasSchedules(plan), plan.environment), 'config')
       .text('docker-compose.yml', toYaml(this.compose(plan, port)), 'infrastructure')
-      .text('README.md', this.readme(plan, projectName, packageName, port), 'asset')
+      .text('README.md', this.readme(plan, projectName, packageName, port, options), 'asset')
       .list();
   }
 
-  private packageJson(plan: DeploymentPlan, name: string, hostDependencies: Readonly<Record<string, string>>) {
+  private packageJson(plan: DeploymentPlan, name: string, hostDependencies: Readonly<Record<string, string>>, options: CompilationOptions) {
     const { [CRON_PACKAGE]: cron, ...alwaysNeeded } = hostDependencies;
     return packageManifest({
       name,
       scripts: {
         clean: 'rm -rf dist',
-        build: `npm run clean && ${this.buildProfile(plan).command()}`,
+        build: `npm run clean && ${this.buildProfile(plan, options).command()}`,
         start: 'node dist/server.mjs',
-        run: 'node dist/run.mjs',
+        ...(includeCli(options) ? { run: 'node dist/run.mjs' } : {}),
         dev: 'tsx watch src/server.ts',
         ...(hasSchedules(plan) ? { cron: 'node dist/run-cron.mjs' } : {}),
         'docker:build': `docker build -t ${name} .`,
@@ -107,7 +130,7 @@ export class LocalTarget implements DeploymentTarget {
     };
   }
 
-  private readme(plan: DeploymentPlan, projectName: string, packageName: string, port: number): string {
+  private readme(plan: DeploymentPlan, projectName: string, packageName: string, port: number, options: CompilationOptions): string {
     const { http, schedules } = plan.workflow.triggers;
     const readme = new MarkdownDocument()
       .heading(1, projectName)
@@ -119,9 +142,12 @@ export class LocalTarget implements DeploymentTarget {
       .heading(3, 'HTTP server')
       .code('bash', ['npm run start'])
       .list([`Health check: ${code(`GET http://localhost:${port}/health`)}`, ...endpoints(http, port)])
-      .heading(3, 'Command line')
-      .paragraph('Runs the workflow once with a JSON payload:')
-      .code('bash', ["npm run run '{\"example\": \"payload\"}'"]);
+    if (includeCli(options)) {
+      readme
+        .heading(3, 'Command line')
+        .paragraph('Runs the workflow once with a JSON payload:')
+        .code('bash', ["npm run run '{\"example\": \"payload\"}'"]);
+    }
     if (schedules.length > 0) {
       readme
         .heading(3, 'Scheduled worker')
@@ -139,6 +165,10 @@ export class LocalTarget implements DeploymentTarget {
 
 function hasSchedules(plan: DeploymentPlan): boolean {
   return plan.workflow.triggers.schedules.length > 0;
+}
+
+function includeCli(options: CompilationOptions): boolean {
+  return options.includeCli !== false;
 }
 
 function endpoints(triggers: readonly HttpTrigger[], port: number): string[] {

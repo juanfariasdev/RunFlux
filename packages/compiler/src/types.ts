@@ -41,6 +41,8 @@ export type ProjectEnvVar = WorkflowEnvVar;
 export interface CompilationOptions {
   /** Port of the local server. Defaults to 3000. */
   port?: number;
+  /** Include the local command-line runner. Defaults to true for backwards compatibility. */
+  includeCli?: boolean;
   /** Replace the workflow's own environment variables. */
   envVars?: ProjectEnvVar[];
 }

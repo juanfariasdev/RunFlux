@@ -1,4 +1,4 @@
-import { RUNTIME_ENTRIES } from '../bundling/runtime-bundler.js';
+import { RUNTIME_ENTRIES, type RuntimeEntry } from '../bundling/runtime-bundler.js';
 import type { DeploymentPlan } from '../deployment/deployment-plan.js';
 import { BuildProfile } from '../project/build-profile.js';
 import { code, MarkdownDocument } from '../project/markdown.js';
@@ -29,12 +29,18 @@ export interface WorkflowInfrastructure {
 export class AwsTarget implements DeploymentTarget {
   readonly platform = 'aws' as const;
   readonly entrypoint = 'src/handler.ts';
-  readonly runtimeEntries = [RUNTIME_ENTRIES.core, RUNTIME_ENTRIES.lambda];
-  readonly hostPackages: readonly string[] = [];
   private readonly templates: TemplateDirectory;
 
   constructor(templates = new TemplateDirectory()) {
     this.templates = templates;
+  }
+
+  runtimeEntries(): readonly RuntimeEntry[] {
+    return [RUNTIME_ENTRIES.core, RUNTIME_ENTRIES.lambda];
+  }
+
+  hostPackages(): readonly string[] {
+    return [];
   }
 
   buildProfile(): BuildProfile {

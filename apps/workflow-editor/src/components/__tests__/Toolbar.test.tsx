@@ -362,7 +362,7 @@ describe('Toolbar — Test (RF-06, RF-12, RN-04)', () => {
 });
 
 describe("Toolbar — Compiler Button", () => {
-  it("renders the compile button in English and opens the compiler modal", () => {
+  it("renders the compile button in English and opens the compiler modal", async () => {
     render(
       <Toolbar
         catalog={fakeCatalog()}
@@ -373,6 +373,6 @@ describe("Toolbar — Compiler Button", () => {
     const compileBtn = screen.getByTestId("open-compiler-modal-btn");
     expect(compileBtn).toHaveTextContent("Compile");
     fireEvent.click(compileBtn);
-    expect(screen.getByText(/Compile Backend/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Compile Backend/i)).toBeInTheDocument();
   });
 });

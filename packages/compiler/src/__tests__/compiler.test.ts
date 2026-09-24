@@ -50,6 +50,29 @@ describe('WorkflowCompiler', () => {
     expect(express.content).toMatch(/from "express"/);
   });
 
+  it('ships only runtime hosts used by a local workflow', async () => {
+    const withoutSchedule = await compiler.compile(request());
+    if (withoutSchedule.status !== 'success') throw new Error(withoutSchedule.error.message);
+    const withoutSchedulePaths = withoutSchedule.files.map((file) => file.path);
+    expect(withoutSchedulePaths).toContain('vendor/runflux-runtime/express.js');
+    expect(withoutSchedulePaths).toContain('vendor/runflux-runtime/cli.js');
+    expect(withoutSchedulePaths).not.toContain('vendor/runflux-runtime/cron.js');
+
+    const withSchedule = await compiler.compile(request({ workflow: workflow([node('hourly', 'schedule')]) }));
+    if (withSchedule.status !== 'success') throw new Error(withSchedule.error.message);
+    expect(withSchedule.files.map((file) => file.path)).toContain('vendor/runflux-runtime/cron.js');
+  });
+
+  it('can omit the local CLI from production-focused exports', async () => {
+    const result = await compiler.compile(request({ options: { includeCli: false } }));
+    if (result.status !== 'success') throw new Error(result.error.message);
+    const paths = result.files.map((file) => file.path);
+    expect(paths).not.toContain('src/run.ts');
+    expect(paths).not.toContain('vendor/runflux-runtime/cli.js');
+    expect(result.manifest.build.entryPoints).toEqual(['src/server.ts']);
+    expect(JSON.parse(result.files.find((file) => file.path === 'package.json')!.content).scripts.run).toBeUndefined();
+  });
+
   it.each<[string, Partial<CompilationRequest>, string]>([
     ['incompatible nodes', { targetPlatform: 'aws', workflow: workflow([node('a', 'localOnly')]) }, 'INCOMPATIBLE_NODES'],
     ['an unsupported target', { targetPlatform: 'gcp' as never }, 'UNSUPPORTED_TARGET'],
@@ -70,8 +93,8 @@ describe('WorkflowCompiler', () => {
     const custom: DeploymentTarget = {
       platform: 'local',
       entrypoint: 'custom.txt',
-      runtimeEntries: [],
-      hostPackages: [],
+      runtimeEntries: () => [],
+      hostPackages: () => [],
       buildProfile: () => BuildProfile.server(['custom.txt']),
       files: async () => [{ path: 'custom.txt', content: 'custom', type: 'asset' }],
     };

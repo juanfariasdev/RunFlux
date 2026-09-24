@@ -11,10 +11,10 @@ describe('HttpCompilerApiAdapter', () => {
   it('posts the workflow, target and project name, and returns the compilation', async () => {
     const compiled = { status: 'success', compilationId: 'Orders-local-1-abcdef12', zipFilename: 'Orders-local.zip', downloadUrl: '/x' };
     vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => compiled } as Response);
-    await expect(new HttpCompilerApiAdapter('http://server').compile({ workflow, targetPlatform: 'aws', projectName: 'Orders' })).resolves.toEqual(compiled);
+    await expect(new HttpCompilerApiAdapter('http://server').compile({ workflow, targetPlatform: 'aws', projectName: 'Orders', options: { includeCli: false } })).resolves.toEqual(compiled);
     const [url, init] = vi.mocked(fetch).mock.calls[0];
     expect(url).toBe('http://server/api/compiler/compile');
-    expect(JSON.parse(init!.body as string)).toEqual({ workflow, targetPlatform: 'aws', projectName: 'Orders' });
+    expect(JSON.parse(init!.body as string)).toEqual({ workflow, targetPlatform: 'aws', projectName: 'Orders', options: { includeCli: false } });
   });
 
   it('throws the server message with its code and details', async () => {

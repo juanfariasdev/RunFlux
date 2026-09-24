@@ -11,7 +11,7 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "types": ["node"],
-    "rootDirs": ["shared/src", "local/src", "aws/src", "fixtures/src"]
+    "rootDirs": ["shared/src", "local/src", "local-scheduled/src", "aws/src", "fixtures/src"]
   },
-  "include": ["shared/**/*.ts", "local/**/*.ts", "aws/**/*.ts"]
+  "include": ["shared/**/*.ts", "local/**/*.ts", "local-scheduled/**/*.ts", "aws/**/*.ts"]
 }

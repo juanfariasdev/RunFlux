@@ -58,7 +58,7 @@ export class RuntimeBundler {
 
   async bundle(request: RuntimeBundleRequest): Promise<GeneratedFile[]> {
     const sourceDirectory = path.join(this.packageDirectory, 'src');
-    const [javascript, declarations] = await Promise.all([this.compile(request, sourceDirectory), this.declarations(sourceDirectory)]);
+    const [javascript, declarations] = await Promise.all([this.compile(request, sourceDirectory), this.declarations(sourceDirectory, request.entries)]);
     return [this.packageJson(request.entries), ...javascript, ...declarations];
   }
 
@@ -111,17 +111,18 @@ export class RuntimeBundler {
    * build info, which every build that saw a change rewrites: a source edited after it means the
    * declarations may be stale.
    */
-  private async declarations(sourceDirectory: string): Promise<GeneratedFile[]> {
+  private async declarations(sourceDirectory: string, entries: readonly RuntimeEntry[]): Promise<GeneratedFile[]> {
     const typesDirectory = path.join(this.packageDirectory, 'dist');
     const rebuild = 'run "npm run build:node -w @runflux/runtime"';
-    const sources = (await listFiles(sourceDirectory)).filter((file) => file.endsWith('.ts') && !file.endsWith('.d.ts'));
+    const sources = (await listFiles(sourceDirectory)).filter(isRuntimeSource);
     const files = await listFiles(typesDirectory).catch(() => []);
-    const declarations = files.filter((file) => file.endsWith('.d.ts')
-      && !/(^|\/)(__tests__|testing)\//.test(file)
-      && sources.includes(file.replace(/\.d\.ts$/, '.ts')));
-    if (!declarations.includes('index.d.ts')) throw new RuntimeBundleError(`Runtime type declarations are missing in ${typesDirectory}; ${rebuild}`);
+    const sourceDeclarations = new Set(sources.map((file) => file.replace(/\.ts$/, '.d.ts')));
+    const available = new Set(files.filter((file) => file.endsWith('.d.ts') && sourceDeclarations.has(file)));
+    if (!available.has('index.d.ts')) throw new RuntimeBundleError(`Runtime type declarations are missing in ${typesDirectory}; ${rebuild}`);
     const stale = await this.editedAfterBuild(sourceDirectory, sources);
     if (stale) throw new RuntimeBundleError(`Runtime type declarations are older than src/${stale}; ${rebuild}`);
+    const roots = [...entries.map((entry) => entry.source.replace(/\.ts$/, '.d.ts')), 'plugins.d.ts'];
+    const declarations = await reachableDeclarations(typesDirectory, roots, available);
     return Promise.all(declarations.map(async (file) => ({
       path: `${VENDOR_DIRECTORY}/types/${file}`,
       content: await fs.readFile(path.join(typesDirectory, file), 'utf8'),
@@ -206,4 +207,46 @@ async function listFiles(directory: string, prefix = ''): Promise<string[]> {
     return entry.isDirectory() ? listFiles(directory, relative) : Promise.resolve([relative]);
   }));
   return nested.flat();
+}
+
+function isRuntimeSource(file: string): boolean {
+  return file.endsWith('.ts')
+    && !file.endsWith('.d.ts')
+    && !/(^|\/)(__tests__|testing)\//.test(file)
+    && !/\.test\.ts$/.test(file);
+}
+
+/** Only declaration files reachable from the package exports are needed by an exported backend. */
+async function reachableDeclarations(typesDirectory: string, roots: readonly string[], available: ReadonlySet<string>): Promise<string[]> {
+  const queue = [...new Set(roots)];
+  const reachable = new Set<string>();
+  while (queue.length > 0) {
+    const file = queue.shift()!;
+    if (reachable.has(file)) continue;
+    if (!available.has(file)) throw new RuntimeBundleError(`Runtime type declaration is missing: ${file}`);
+    reachable.add(file);
+    const content = await fs.readFile(path.join(typesDirectory, file), 'utf8');
+    for (const specifier of relativeDeclarationSpecifiers(content)) {
+      const dependency = resolveDeclaration(file, specifier, available);
+      if (dependency && !reachable.has(dependency)) queue.push(dependency);
+    }
+  }
+  return [...reachable].sort();
+}
+
+function relativeDeclarationSpecifiers(content: string): string[] {
+  const found: string[] = [];
+  const pattern = /(?:from\s+|import\s*\()(['"])(\.[^'"]+)\1/g;
+  for (const match of content.matchAll(pattern)) found.push(match[2]);
+  return found;
+}
+
+function resolveDeclaration(importer: string, specifier: string, available: ReadonlySet<string>): string | undefined {
+  const relative = path.posix.normalize(path.posix.join(path.posix.dirname(importer), specifier));
+  const candidates = relative.endsWith('.js')
+    ? [relative.replace(/\.js$/, '.d.ts')]
+    : relative.endsWith('.d.ts')
+      ? [relative]
+      : [`${relative}.d.ts`, `${relative}/index.d.ts`];
+  return candidates.find((candidate) => available.has(candidate));
 }

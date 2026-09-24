@@ -10,6 +10,7 @@ import {
   WorkflowCompiler,
   createZipPackage,
   type BuildManifest,
+  type CompilationOptions,
   type CompilationFailure,
   type CompilationSuccess,
   type IncompatibleNode,
@@ -54,6 +55,8 @@ export interface CompileWorkflowRequest {
   targetPlatform?: TargetPlatform;
   target?: TargetPlatform;
   projectName?: string;
+  /** Only the options a client may choose; the port and variables come from the workflow. */
+  options?: Pick<CompilationOptions, 'includeCli'>;
 }
 
 export interface CompileWorkflowResponse {
@@ -113,11 +116,12 @@ export class CompilerService {
     if (!TARGET_PLATFORMS.includes(targetPlatform)) {
       throw new CompilerRequestError('UNSUPPORTED_TARGET', `Plataforma alvo inválida: "${targetPlatform}". Suportadas: ${TARGET_PLATFORMS.join(', ')}.`);
     }
+    const options = this.validOptions(request.options);
     const registry = await this.loadPlugins();
     const projectName = String(request.projectName || workflow.name || 'runflux-project').trim();
     console.log(`[compiler] Starting compilation for project "${projectName}" (target: ${targetPlatform})`);
 
-    const result = await new WorkflowCompiler((pluginId) => registry.get(pluginId)).compile({ workflow, targetPlatform, projectName });
+    const result = await new WorkflowCompiler((pluginId) => registry.get(pluginId)).compile({ workflow, targetPlatform, projectName, options });
     if (result.status === 'failed') throw toRequestError(result);
 
     const key = `${projectName.replace(/[^a-zA-Z0-9_-]/g, '_')}-${targetPlatform}`;
@@ -164,6 +168,16 @@ export class CompilerService {
       throw new CompilerValidationError(`Invalid workflow: ${problems}`);
     }
     return parsed.data as WorkflowDefinition;
+  }
+
+  /** Keeps only the options a client may set, so a request cannot change the port or the variables. */
+  private validOptions(options: unknown): CompilationOptions {
+    if (options === undefined || options === null) return {};
+    if (typeof options !== 'object' || Array.isArray(options)) throw new CompilerValidationError('Invalid compilation options: expected an object.');
+    const { includeCli } = options as Record<string, unknown>;
+    if (includeCli === undefined) return {};
+    if (typeof includeCli !== 'boolean') throw new CompilerValidationError('Invalid compilation option: includeCli must be a boolean.');
+    return { includeCli };
   }
 
   /** Writes and builds the project under a temporary name, then renames it into place. */

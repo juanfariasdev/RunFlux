@@ -6,8 +6,8 @@ export function createCompilerRouter(service = new CompilerService()): Router {
 
   router.post('/compile', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { workflow, targetPlatform, target, projectName } = req.body ?? {};
-      return res.status(200).json(await service.compile({ workflow, targetPlatform, target, projectName }));
+      const { workflow, targetPlatform, target, projectName, options } = req.body ?? {};
+      return res.status(200).json(await service.compile({ workflow, targetPlatform, target, projectName, options }));
     } catch (err) {
       if (err instanceof CompilerRequestError) {
         return res.status(err.status).json({ error: { code: err.code, message: err.message, details: err.details } });
