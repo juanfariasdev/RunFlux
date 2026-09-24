@@ -61,13 +61,13 @@ export interface IncompatibleNode {
   targetPlatform: TargetPlatform;
 }
 
+/** The generated project. The compiler does not archive it: zip `files` with createZipPackage when needed. */
 export interface CompilationSuccess {
   status: 'success';
   projectName: string;
   targetPlatform: TargetPlatform;
   files: GeneratedFile[];
   manifest: BuildManifest;
-  zipBuffer: Uint8Array;
 }
 
 export type CompilationErrorCode =

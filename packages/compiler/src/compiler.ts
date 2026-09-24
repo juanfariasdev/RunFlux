@@ -1,7 +1,6 @@
 import { RuntimeBundleError, RuntimeBundler } from './bundling/runtime-bundler.js';
 import { PackageRequirements } from './deployment/contributions.js';
 import { DeploymentPlanner, type DeploymentPlan } from './deployment/deployment-plan.js';
-import { createZipPackage } from './packager.js';
 import { AwsTarget } from './targets/aws-target.js';
 import type { DeploymentTarget } from './targets/deployment-target.js';
 import { LocalTarget } from './targets/local-target.js';
@@ -68,7 +67,7 @@ export class WorkflowCompiler {
     const generated = [...projectFiles, ...runtimeFiles];
     const manifest = this.buildManifest(request, target, plan, generated);
     const files: GeneratedFile[] = [{ path: 'runflux-build.json', content: `${JSON.stringify(manifest, null, 2)}\n`, type: 'config' }, ...generated];
-    return { status: 'success', projectName, targetPlatform, files, manifest, zipBuffer: await createZipPackage(files) };
+    return { status: 'success', projectName, targetPlatform, files, manifest };
   }
 
   /** The versions of the packages the target's hosts import, which the plugins must not contradict. */

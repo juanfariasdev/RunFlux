@@ -1,6 +1,7 @@
 import JSZip from 'jszip';
 import { describe, expect, it } from 'vitest';
 import { WorkflowCompiler } from '../compiler.js';
+import { createZipPackage } from '../packager.js';
 import { BuildProfile } from '../project/build-profile.js';
 import type { DeploymentTarget } from '../targets/deployment-target.js';
 import type { CompilationRequest } from '../types.js';
@@ -39,7 +40,7 @@ describe('WorkflowCompiler', () => {
       generatedFiles: paths.slice(1),
     });
     expect(JSON.parse(result.files[0].content)).toEqual(result.manifest);
-    const zip = await JSZip.loadAsync(result.zipBuffer);
+    const zip = await JSZip.loadAsync(await createZipPackage(result.files));
     expect(Object.keys(zip.files).filter((path) => !path.endsWith('/')).sort()).toEqual([...paths].sort());
   });
 
