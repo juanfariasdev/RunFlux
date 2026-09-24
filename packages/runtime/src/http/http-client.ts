@@ -6,6 +6,8 @@ export interface HttpRequest {
   readonly headers?: Readonly<Record<string, string>>;
   /** Sent as JSON unless the method is GET or HEAD. Undefined sends no body. */
   readonly body?: unknown;
+  /** Aborts the request, e.g. when its workflow run is cancelled. */
+  readonly signal?: AbortSignal;
 }
 
 export interface HttpResponse {
@@ -15,15 +17,16 @@ export interface HttpResponse {
   readonly body: unknown;
 }
 
+/** Sends HTTP requests on behalf of nodes. Unsuccessful responses reject with HttpRequestError. */
+export interface HttpClient {
+  send(request: HttpRequest): Promise<HttpResponse>;
+}
+
 export class HttpRequestError extends Error {
   readonly url: string;
   readonly status: number;
 
-  constructor(
-    url: string,
-    status: number,
-    responseText: string,
-  ) {
+  constructor(url: string, status: number, responseText: string) {
     super(`request to ${url} failed with status ${status}: ${responseText.slice(0, 200)}`);
     this.name = 'HttpRequestError';
     this.url = url;
@@ -33,10 +36,11 @@ export class HttpRequestError extends Error {
 
 const BODYLESS_METHODS = new Set(['GET', 'HEAD']);
 
-export class HttpClient {
-  /** The default transport reads `fetch` on every call, so replacing the global takes effect. */
+/** HttpClient over `fetch`. JSON request bodies get a JSON content type unless one is given. */
+export class FetchHttpClient implements HttpClient {
   private readonly transport: HttpTransport;
 
+  /** The default transport reads `fetch` on every call, so replacing the global takes effect. */
   constructor(transport: HttpTransport = (url, init) => globalThis.fetch(url, init)) {
     this.transport = transport;
   }
@@ -55,9 +59,10 @@ export class HttpClient {
   private createInit(request: HttpRequest): RequestInit {
     const method = request.method.toUpperCase();
     const headers: Record<string, string> = { ...request.headers };
-    if (BODYLESS_METHODS.has(method) || request.body === undefined) return { method, headers };
+    const signal = request.signal ? { signal: request.signal } : {};
+    if (BODYLESS_METHODS.has(method) || request.body === undefined) return { method, headers, ...signal };
     if (!Object.keys(headers).some((key) => key.toLowerCase() === 'content-type')) headers['Content-Type'] = 'application/json';
-    return { method, headers, body: JSON.stringify(request.body) };
+    return { method, headers, body: JSON.stringify(request.body), ...signal };
   }
 }
 

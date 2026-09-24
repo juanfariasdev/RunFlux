@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
@@ -57,8 +58,18 @@ export class RuntimeBundler {
 
   async bundle(request: RuntimeBundleRequest): Promise<GeneratedFile[]> {
     const sourceDirectory = path.join(this.packageDirectory, 'src');
-    const [javascript, declarations] = await Promise.all([this.compile(request, sourceDirectory), this.declarations()]);
+    const [javascript, declarations] = await Promise.all([this.compile(request, sourceDirectory), this.declarations(sourceDirectory)]);
     return [this.packageJson(request.entries), ...javascript, ...declarations];
+  }
+
+  /** The version ranges the runtime package declares for some of its dependencies. */
+  dependencyVersions(names: readonly string[]): Record<string, string> {
+    const manifest = JSON.parse(readFileSync(path.join(this.packageDirectory, 'package.json'), 'utf8')) as { dependencies?: Record<string, string> };
+    return Object.fromEntries(names.map((name) => {
+      const version = manifest.dependencies?.[name];
+      if (!version) throw new RuntimeBundleError(`@runflux/runtime does not declare the dependency "${name}"`);
+      return [name, version];
+    }));
   }
 
   private async compile(request: RuntimeBundleRequest, sourceDirectory: string): Promise<GeneratedFile[]> {
@@ -94,18 +105,38 @@ export class RuntimeBundler {
     }));
   }
 
-  private async declarations(): Promise<GeneratedFile[]> {
+  /**
+   * The declarations tsc wrote for the runtime's current sources; those left over from deleted
+   * sources are skipped. tsc leaves unchanged declarations untouched, so freshness is judged by its
+   * build info, which every build that saw a change rewrites: a source edited after it means the
+   * declarations may be stale.
+   */
+  private async declarations(sourceDirectory: string): Promise<GeneratedFile[]> {
     const typesDirectory = path.join(this.packageDirectory, 'dist');
+    const rebuild = 'run "npm run build:node -w @runflux/runtime"';
+    const sources = (await listFiles(sourceDirectory)).filter((file) => file.endsWith('.ts') && !file.endsWith('.d.ts'));
     const files = await listFiles(typesDirectory).catch(() => []);
-    const declarations = files.filter((file) => file.endsWith('.d.ts') && !/(^|\/)(__tests__|testing)\//.test(file));
-    if (!declarations.some((file) => file === 'index.d.ts')) {
-      throw new RuntimeBundleError(`Runtime type declarations are missing in ${typesDirectory}; run "npm run build:node -w @runflux/runtime"`);
-    }
+    const declarations = files.filter((file) => file.endsWith('.d.ts')
+      && !/(^|\/)(__tests__|testing)\//.test(file)
+      && sources.includes(file.replace(/\.d\.ts$/, '.ts')));
+    if (!declarations.includes('index.d.ts')) throw new RuntimeBundleError(`Runtime type declarations are missing in ${typesDirectory}; ${rebuild}`);
+    const stale = await this.editedAfterBuild(sourceDirectory, sources);
+    if (stale) throw new RuntimeBundleError(`Runtime type declarations are older than src/${stale}; ${rebuild}`);
     return Promise.all(declarations.map(async (file) => ({
       path: `${VENDOR_DIRECTORY}/types/${file}`,
       content: await fs.readFile(path.join(typesDirectory, file), 'utf8'),
       type: 'runtime' as const,
     })));
+  }
+
+  /** A source changed after the last build, if the package keeps tsc build info. */
+  private async editedAfterBuild(sourceDirectory: string, sources: readonly string[]): Promise<string | undefined> {
+    const buildInfo = await fs.stat(path.join(this.packageDirectory, 'tsconfig.tsbuildinfo')).catch(() => undefined);
+    if (!buildInfo) return undefined;
+    for (const source of sources) {
+      if ((await fs.stat(path.join(sourceDirectory, source))).mtimeMs > buildInfo.mtimeMs) return source;
+    }
+    return undefined;
   }
 
   private packageJson(entries: readonly RuntimeEntry[]): GeneratedFile {

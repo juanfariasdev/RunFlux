@@ -1,18 +1,18 @@
 import { validateManifest } from '@runflux/plugin-system/manifest-validator';
-import { ParameterReader, ServiceRegistry } from '@runflux/runtime';
+import { ObjectParameterReader, ServiceRegistry } from '@runflux/runtime';
 import { executeNode } from '@runflux/runtime/testing';
 import { describe, expect, it, vi } from 'vitest';
 import { deployment, manifest } from '../index';
 import { PostgresClient, type PostgresPool } from '../postgres-client';
-import database, { DATABASE_CLIENT, type DatabaseClient } from '../runtime';
+import database, { DATABASE_CLIENT, DatabaseQueryNode, type DatabaseClient } from '../runtime';
 
 function fakeClient(rows: Record<string, unknown>[] = [{ id: 7 }, { id: 8 }]) {
-  return { query: vi.fn(async () => rows), close: vi.fn(async () => {}) } satisfies DatabaseClient;
+  return { query: vi.fn(async () => rows), close: vi.fn(async () => {}) } satisfies DatabaseClient & { close: unknown };
 }
 
 const run = (parameters: Record<string, unknown>, options: { client?: DatabaseClient; mode?: 'sandbox' | 'production'; env?: Record<string, string>; input?: unknown } = {}) =>
   executeNode(database, {
-    parameters,
+    parameters: { query: 'SELECT 1;', ...parameters },
     literalParameters: ['query'],
     mode: options.mode ?? 'production',
     env: options.env ?? { DATABASE_URL: 'postgres://localhost/app' },
@@ -47,7 +47,7 @@ describe('database-query in production', () => {
   });
 
   it('reports query failures', async () => {
-    const client = { query: vi.fn(async () => { throw new Error('relation "users" does not exist'); }), close: vi.fn() };
+    const client = { query: vi.fn(async () => { throw new Error('relation "users" does not exist'); }) };
     expect((await run({ query: 'SELECT * FROM users' }, { client })).error).toBe('relation "users" does not exist');
   });
 
@@ -55,6 +55,8 @@ describe('database-query in production', () => {
     [{ databaseType: 'sqlite' }, 'database-query: parameter "databaseType" must be one of "postgres"'],
     [{ outputMode: 'many' }, 'database-query: parameter "outputMode" must be one of "all", "first"'],
     [{ queryParams: '7' }, 'database-query: parameter "queryParams" must be a list'],
+    [{ query: '   ' }, 'database-query: parameter "query" is required'],
+    [{ connectionEnvVar: 'ORDERS-URL' }, 'database-query: parameter "connectionEnvVar" "ORDERS-URL" is not an environment variable name'],
   ])('rejects %j before querying', async (parameters, message) => {
     const client = fakeClient();
     expect((await run(parameters, { client })).error).toBe(message);
@@ -92,16 +94,27 @@ describe('PostgresClient', () => {
     expect([...pools.values()].every((created) => created.end.mock.calls.length === 1)).toBe(true);
   });
 
-  it('is closed when the engine disposes the node', async () => {
+  it('leaves an injected client to its owner when the engine disposes the node', async () => {
     const client = fakeClient();
-    const handler = database.createHandler({ extensions: new ServiceRegistry().set(DATABASE_CLIENT, client) } as never);
+    const handler = database.createHandler({ extensions: new ServiceRegistry().set(DATABASE_CLIENT, client), logger } as never);
     await handler.dispose?.();
-    expect(client.close).toHaveBeenCalledOnce();
+    expect(client.close).not.toHaveBeenCalled();
+  });
+
+  it('releases what the node owns when it is disposed', async () => {
+    const release = vi.fn(async () => {});
+    await new DatabaseQueryNode(fakeClient(), release).dispose();
+    expect(release).toHaveBeenCalledOnce();
+  });
+
+  it('creates its own PostgreSQL client when none is injected', () => {
+    const handler = database.createHandler({ extensions: new ServiceRegistry(), logger } as never);
+    expect(handler).toBeInstanceOf(DatabaseQueryNode);
   });
 });
 
 describe('database-query deployment', () => {
-  const reader = (values: Record<string, unknown>) => new ParameterReader(values, 'database-query');
+  const reader = (values: Record<string, unknown>) => new ObjectParameterReader(values, 'database-query');
 
   it('declares the driver, its connection variable and a local PostgreSQL service', () => {
     expect(deployment?.dependencies).toEqual({ pg: '^8.13.0' });

@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { plugins } from '../plugins.js';
 import { ConsoleLogger, SystemClock, createRuntimeServices } from '../services/default-services.js';
 import { ServiceKey, ServiceRegistry } from '../services/service-registry.js';
-import { HttpClient } from '../http/http-client.js';
+import { FetchHttpClient } from '../http/http-client.js';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -48,7 +48,7 @@ describe('default services', () => {
 
   it('uses production defaults and honours overrides', () => {
     const defaults = createRuntimeServices();
-    expect(defaults.http).toBeInstanceOf(HttpClient);
+    expect(defaults.http).toBeInstanceOf(FetchHttpClient);
     expect(defaults.logger).toBeInstanceOf(ConsoleLogger);
     expect(defaults.clock).toBeInstanceOf(SystemClock);
     expect(defaults.triggerEvents).toBeUndefined();

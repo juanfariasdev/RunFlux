@@ -1,6 +1,6 @@
 import { validateManifest } from '@runflux/plugin-system/manifest-validator';
 import { WebhookTestHub } from '@runflux/plugin-system/webhook-test-hub';
-import { ParameterReader } from '@runflux/runtime';
+import { ObjectParameterReader } from '@runflux/runtime';
 import { executeNode } from '@runflux/runtime/testing';
 import { describe, expect, it, vi } from 'vitest';
 import { deployment, manifest } from '../index';
@@ -8,7 +8,7 @@ import webhook from '../runtime';
 
 const run = (parameters: Record<string, unknown>, input?: unknown, extra: Parameters<typeof executeNode>[1] = {}) =>
   executeNode(webhook, { parameters, input, outputs: manifest.outputs, pluginId: 'trigger-webhook', ...extra });
-const reader = (values: Record<string, unknown>) => new ParameterReader(values, 'trigger-webhook');
+const reader = (values: Record<string, unknown>) => new ObjectParameterReader(values, 'trigger-webhook');
 
 describe('trigger-webhook runtime', () => {
   it('declares a valid trigger manifest with a main output', () => {
@@ -39,6 +39,13 @@ describe('trigger-webhook runtime', () => {
     expect((await run({})).output).toEqual({ message: 'Sample webhook payload', _headers: {}, _query: {} });
   });
 
+  it('never uses its sample, nor waits, in production', async () => {
+    const hub = new WebhookTestHub();
+    const record = await run({ sampleBody: [{ name: 'id', value: '42', type: 'number' }] }, undefined, { mode: 'production', services: { triggerEvents: hub } });
+    expect(record.output).toEqual({ data: undefined, _headers: {}, _query: {} });
+    expect(hub.pending).toBe(0);
+  });
+
   it('waits for a test request on its path when the editor delivers them', async () => {
     const hub = new WebhookTestHub();
     const pending = run({ path: '/orders' }, undefined, { services: { triggerEvents: hub } });
@@ -59,8 +66,8 @@ describe('trigger-webhook runtime', () => {
   });
 
   it.each([
-    [{ path: 'orders' }, 'trigger-webhook: parameter "path" must be an absolute URL path without query or fragment'],
-    [{ path: '/orders?x=1' }, 'must be an absolute URL path without query or fragment'],
+    [{ path: '/orders?x=1' }, 'trigger-webhook: parameter "path" must be a URL path without query, fragment or whitespace'],
+    [{ path: '/orders#top' }, 'must be a URL path without query, fragment or whitespace'],
     [{ sampleBody: [{ name: 'n', value: 'x', type: 'number' }] }, 'Field "n" must be a number'],
   ])('reports invalid configuration %j', async (parameters, message) => {
     expect((await run(parameters)).error).toContain(message);
@@ -89,12 +96,25 @@ describe('trigger-webhook deployment', () => {
   it.each([
     [{ httpMethod: 'FETCH' }, 'parameter "httpMethod" "FETCH" is not an HTTP method'],
     [{ authentication: 'oauth' }, 'parameter "authentication" must be one of "none", "secret", "headerAuth"'],
-    [{ path: '/with space' }, 'parameter "path" must be an absolute URL path'],
+    [{ path: '/with space' }, 'parameter "path" must be a URL path without query, fragment or whitespace'],
+    [{ authentication: 'headerAuth', headerName: 'X Key' }, 'parameter "headerName" "X Key" is not an HTTP header name'],
+    [{ authentication: 'headerAuth', secretEnvVar: 'MY-SECRET' }, 'parameter "secretEnvVar" "MY-SECRET" is not an environment variable name'],
   ])('rejects %j', (parameters, message) => {
     expect(() => deployment?.triggers?.(reader(parameters))).toThrow(message);
   });
 
   it('accepts ANY as a method', () => {
     expect(deployment?.triggers?.(reader({ httpMethod: 'any' }))?.[0]).toMatchObject({ method: 'ANY' });
+  });
+
+  it.each([['orders', '/orders'], ['/orders/', '/orders'], ['//hooks//orders', '/hooks/orders'], ['/', '/']])('declares path %j as %j', (path, route) => {
+    expect(deployment?.triggers?.(reader({ path }))?.[0]).toMatchObject({ path: route });
+  });
+
+  it('offers every method and authentication mode the runtime accepts, and only those', () => {
+    const options = (name: string) => manifest.parameters.find((parameter) => parameter.name === name)?.options?.map((option) => option.value) ?? [];
+    for (const httpMethod of options('httpMethod')) expect(() => deployment?.triggers?.(reader({ httpMethod }))).not.toThrow();
+    for (const authentication of options('authentication')) expect(() => deployment?.triggers?.(reader({ authentication }))).not.toThrow();
+    expect(options('httpMethod')).toEqual(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS', 'ANY']);
   });
 });

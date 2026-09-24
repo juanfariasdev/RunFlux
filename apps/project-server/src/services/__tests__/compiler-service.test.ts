@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import JSZip from 'jszip';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -26,63 +26,93 @@ function fixture(runtime: string, platforms: string[] = ['local']) {
     export const runtimeModule = new URL('./runtime.js', import.meta.url);
   `);
   writeFileSync(join(plugin, 'runtime.js'), runtime);
-  return new CompilerService(plugins, join(directory, 'output'));
+  const output = join(directory, 'output');
+  return { service: new CompilerService(plugins, output), output, plugin };
 }
 
 const workflow = { id: 'test', name: 'Test', nodes: [{ id: 'n1', pluginId: 'example', pluginVersion: '1.0.0', parameters: {}, position: { x: 0, y: 0 } }], connections: [] };
+const zipEntries = async (file: string) => Object.keys((await JSZip.loadAsync(readFileSync(file))).files);
 
 it('honors plugin target support instead of inventing an AWS generator', async () => {
-  const service = fixture(PASS_THROUGH);
-  await expect(service.compile({ workflow, targetPlatform: 'aws' })).rejects.toMatchObject({ code: 'INCOMPATIBLE_NODES' });
+  const { service } = fixture(PASS_THROUGH);
+  await expect(service.compile({ workflow, targetPlatform: 'aws' })).rejects.toMatchObject({ code: 'INCOMPATIBLE_NODES', status: 400 });
 });
 
 it('treats a plugin whose runtime cannot load as not installed', async () => {
-  const service = fixture(`import { missing } from './missing-module.js';\n${PASS_THROUGH}`);
+  const { service } = fixture(`import { missing } from './missing-module.js';\n${PASS_THROUGH}`);
   await expect(service.compile({ workflow, targetPlatform: 'local' })).rejects.toMatchObject({ code: 'INCOMPATIBLE_NODES' });
 });
 
-it('reports a runtime that cannot be bundled instead of returning a successful download', async () => {
-  const service = fixture(`${PASS_THROUGH}\nexport const later = () => import('./missing-module.js');`);
-  await expect(service.compile({ workflow, targetPlatform: 'local' })).rejects.toMatchObject({ code: 'VALIDATION_ERROR', message: expect.stringContaining('missing-module.js') });
+it('reports a runtime that cannot be bundled as a server error with the compiler code', async () => {
+  const { service } = fixture(`${PASS_THROUGH}\nexport const later = () => import('./missing-module.js');`);
+  await expect(service.compile({ workflow, targetPlatform: 'local' })).rejects.toMatchObject({ code: 'GENERATOR_ERROR', status: 500, message: expect.stringContaining('missing-module.js') });
+});
+
+it.each([
+  [{ workflow: undefined }, 'VALIDATION_ERROR', 'Invalid workflow: workflow: Required'],
+  [{ workflow: { ...workflow, nodes: [{ id: 'n1' }] } }, 'VALIDATION_ERROR', 'Invalid workflow: nodes.0.pluginId: Required; nodes.0.position: Required'],
+  [{ workflow, targetPlatform: 'gcp' }, 'UNSUPPORTED_TARGET', 'Plataforma alvo inválida: "gcp". Suportadas: local, aws.'],
+  [{ workflow: { ...workflow, connections: [{ sourceNodeId: 'n1', targetNodeId: 'ghost' }] } }, 'INVALID_WORKFLOW', 'Connection n1 -> ghost references an unknown node'],
+])('rejects the request %j with a client error', async (request, code, message) => {
+  const { service } = fixture(PASS_THROUGH);
+  await expect(service.compile(request as never)).rejects.toMatchObject({ code, message, status: 400 });
+});
+
+it('keeps the workflow settings, such as its environment variables', async () => {
+  const { service } = fixture(PASS_THROUGH);
+  const result = await service.compile({ workflow: { ...workflow, settings: { envVars: [{ key: 'API_KEY', value: 'k' }] } } as never, targetPlatform: 'local' });
+  expect(readFileSync(join(result.outputDirectory, '.env.example'), 'utf8')).toContain('API_KEY=k');
 });
 
 it('downloads a complete standalone project with dependencies, source and compiled entrypoints', async () => {
-  const service = fixture(PASS_THROUGH);
+  const { service } = fixture(PASS_THROUGH);
   const result = await service.compile({ workflow, targetPlatform: 'local' });
-  const zip = await JSZip.loadAsync(readFileSync(join(result.outputDirectory, result.zipFilename)));
-  expect(Object.keys(zip.files)).toEqual(expect.arrayContaining([
+  expect(await zipEntries(join(result.outputDirectory, result.zipFilename))).toEqual(expect.arrayContaining([
     'package.json', 'README.md', 'src/server.ts', 'src/workflow.json', 'dist/server.mjs', 'runflux-build.json',
     'vendor/runflux-runtime/package.json', 'vendor/runflux-runtime/plugins.js', 'vendor/runflux-runtime/types/index.d.ts',
   ]));
-  const functionZip = await JSZip.loadAsync(readFileSync(join(result.outputDirectory, 'compiled', 'function.zip')));
-  expect(Object.keys(functionZip.files)).toEqual(expect.arrayContaining(['server.mjs', 'run.mjs']));
+  expect(existsSync(join(result.outputDirectory, 'function.zip'))).toBe(false);
+  expect(result.downloadUrl).toBe(`/api/compiler/downloads/${result.compilationId}/Test-local.zip`);
 });
 
-it('recompiles without carrying removed entrypoints and bundles into the new download', async () => {
-  const service = fixture(PASS_THROUGH);
+it('packages the AWS function on its own', async () => {
+  const { service } = fixture(PASS_THROUGH, ['local', 'aws']);
+  const result = await service.compile({ workflow, targetPlatform: 'aws' });
+  expect(await zipEntries(join(result.outputDirectory, 'function.zip'))).toEqual(['handler.mjs']);
+});
+
+it('writes every compilation to a folder of its own and keeps only the latest of a project and target', async () => {
+  const { service, output } = fixture(PASS_THROUGH, ['local', 'aws']);
   const first = await service.compile({ workflow, targetPlatform: 'local' });
-  writeFileSync(join(first.outputDirectory, 'src/run-cron.ts'), 'export const removed = true;');
-  writeFileSync(join(first.outputDirectory, 'dist/removed.mjs'), 'export const removed = true;');
-  const next = await service.compile({ workflow, targetPlatform: 'local' });
-  const zip = await JSZip.loadAsync(readFileSync(join(next.outputDirectory, next.zipFilename)));
-  expect(Object.keys(zip.files)).not.toContain('dist/removed.mjs');
-  expect(Object.keys(zip.files)).not.toContain('dist/run-cron.mjs');
+  writeFileSync(join(first.outputDirectory, 'dist', 'removed.mjs'), 'export const removed = true;');
+  const [second, aws] = await Promise.all([service.compile({ workflow, targetPlatform: 'local' }), service.compile({ workflow, targetPlatform: 'aws' })]);
+  expect(second.outputDirectory).not.toBe(first.outputDirectory);
+  expect(existsSync(first.outputDirectory)).toBe(false);
+  expect(await zipEntries(join(second.outputDirectory, second.zipFilename))).not.toContain('dist/removed.mjs');
+  expect(readdirSync(output).sort()).toEqual([aws.compilationId, second.compilationId].sort());
 });
 
-it('serves the download of the requested target when the same workflow was compiled for local and AWS', async () => {
-  const service = fixture(PASS_THROUGH, ['local', 'aws']);
+it('finds the download of a compilation, or the latest one with that file name, and nothing outside the output folder', async () => {
+  const { service } = fixture(PASS_THROUGH, ['local', 'aws']);
   const aws = await service.compile({ workflow, targetPlatform: 'aws' });
   const local = await service.compile({ workflow, targetPlatform: 'local' });
   expect(local.zipFilename).not.toBe(aws.zipFilename);
-  expect(await service.findZipFile(local.zipFilename)).toBe(join(local.outputDirectory, local.zipFilename));
+  expect(await service.findZipFile(local.zipFilename, local.compilationId)).toBe(join(local.outputDirectory, local.zipFilename));
   expect(await service.findZipFile(aws.zipFilename)).toBe(join(aws.outputDirectory, aws.zipFilename));
+  expect(await service.findZipFile(local.zipFilename, aws.compilationId)).toBeNull();
+  expect(await service.findZipFile('../secret.zip')).toBeNull();
+  expect(await service.findZipFile(local.zipFilename, '..')).toBeNull();
+  expect(await service.findZipFile('function.txt', aws.compilationId)).toBeNull();
 });
 
-it('rejects download paths outside the generated output', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'runflux-download-'));
-  directories.push(directory);
-  const output = join(directory, 'output');
-  mkdirSync(output);
-  writeFileSync(join(directory, 'private.zip'), 'private');
-  expect(await new CompilerService(undefined, output).findZipFile('../private.zip')).toBeNull();
+it('builds with the packages a plugin installs in its own node_modules', async () => {
+  const { service, plugin } = fixture(`import { greeting } from 'plugin-only-package';\nexport default {
+  parseParameters: () => ({}),
+  createHandler: () => ({ execute: () => ({ value: greeting, activeOutput: 'main' }) }),
+};`, ['local', 'aws']);
+  mkdirSync(join(plugin, 'node_modules', 'plugin-only-package'), { recursive: true });
+  writeFileSync(join(plugin, 'node_modules', 'plugin-only-package', 'package.json'), '{"name":"plugin-only-package","type":"module","main":"index.js"}');
+  writeFileSync(join(plugin, 'node_modules', 'plugin-only-package', 'index.js'), "export const greeting = 'hi';");
+  const result = await service.compile({ workflow, targetPlatform: 'aws' });
+  expect(readFileSync(join(result.outputDirectory, 'dist', 'handler.mjs'), 'utf8')).toContain('"hi"');
 });

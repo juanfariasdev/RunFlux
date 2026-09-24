@@ -9,6 +9,7 @@ import { WorkflowGraph } from '../workflow/workflow-graph.js';
 import { StaticNodeCatalog, type NodeCatalog } from './node-catalog.js';
 import { NodeExecutor } from './node-executor.js';
 import { nodeOutputsOf, type NodeRecord } from './node-record.js';
+import { NEVER_ABORTED } from './signals.js';
 import { WorkflowExecution } from './workflow-execution.js';
 import { WorkflowRun } from './workflow-run.js';
 
@@ -26,23 +27,33 @@ export interface RunRequest {
   readonly payload?: unknown;
   /** Start only this trigger; all triggers start when omitted. */
   readonly triggerId?: string;
+  /** Cancels the run: running nodes see their signal abort and no further node starts. */
+  readonly signal?: AbortSignal;
 }
 
-const NEVER_ABORTED = new AbortController().signal;
+export interface NodeRunRequest {
+  /** Earlier records; the node's parents provide its input and its ancestors `$node`. */
+  readonly previous?: Iterable<NodeRecord>;
+  readonly signal?: AbortSignal;
+}
+
+export class EngineDisposedError extends Error {
+  constructor() {
+    super('The workflow engine was disposed');
+    this.name = 'EngineDisposedError';
+  }
+}
 
 /** Runs a workflow, or single nodes of it, with the node types of a catalog. */
 export class WorkflowEngine {
+  readonly workflow: ExecutableWorkflow;
   private readonly graph: WorkflowGraph;
   private readonly executor: NodeExecutor;
   private readonly services: RuntimeServices;
+  private readonly active = new Set<Promise<unknown>>();
+  private disposal?: Promise<void>;
 
-  readonly workflow: ExecutableWorkflow;
-
-  constructor(
-    workflow: ExecutableWorkflow,
-    catalog: NodeCatalog,
-    options: WorkflowEngineOptions = {},
-  ) {
+  constructor(workflow: ExecutableWorkflow, catalog: NodeCatalog, options: WorkflowEngineOptions = {}) {
     this.workflow = workflow;
     this.graph = new WorkflowGraph(workflow);
     this.services = createRuntimeServices(options.services);
@@ -63,28 +74,50 @@ export class WorkflowEngine {
     return new WorkflowEngine(parseExecutableWorkflow(document), catalog, options);
   }
 
-  async run(request: RunRequest = {}): Promise<WorkflowExecution> {
-    const startedAt = this.timestamp();
-    const records = await new WorkflowRun(this.graph, this.executor, this.graph.triggers(request.triggerId), request.payload).execute();
-    return new WorkflowExecution(this.graph, records, startedAt, this.timestamp());
+  run(request: RunRequest = {}): Promise<WorkflowExecution> {
+    return this.track(async () => {
+      const startedAt = this.timestamp();
+      const triggers = this.graph.triggers(request.triggerId);
+      const records = await new WorkflowRun(this.graph, this.executor, triggers, request.payload, request.signal).execute();
+      return new WorkflowExecution(this.graph, records, startedAt, this.timestamp(), request.signal?.aborted ?? false);
+    });
   }
 
   /**
-   * Runs one node with the outputs of earlier runs: its input comes from the records of its parents
-   * (null for a parent without one) and `$node` from all given records.
+   * Runs one node with the records of earlier runs: its input comes from its parents' records
+   * (null for a parent without a successful one) and `$node` from its ancestors' records.
    */
-  async runNode(nodeId: string, previous: Iterable<NodeRecord> = []): Promise<NodeRecord> {
-    const node = this.graph.node(nodeId);
-    const records = new Map([...previous].map((record) => [record.nodeId, record]));
-    const parents = this.graph.incoming(nodeId).map((connection) => records.get(connection.source)?.output ?? null);
-    const input = parents.length === 0 ? undefined : parents.length === 1 ? parents[0] : parents;
-    const outputs = nodeOutputsOf(records.values(), (id) => this.graph.nodes.find((candidate) => candidate.id === id)?.label);
-    return this.executor.execute(node, input, outputs, NEVER_ABORTED);
+  runNode(nodeId: string, request: NodeRunRequest = {}): Promise<NodeRecord> {
+    return this.track(async () => {
+      const node = this.graph.node(nodeId);
+      const records = new Map([...request.previous ?? []].filter((record) => record.error === null).map((record) => [record.nodeId, record]));
+      const parents = this.graph.incoming(nodeId).map((connection) => records.get(connection.source)?.output ?? null);
+      const input = parents.length === 0 ? undefined : parents.length === 1 ? parents[0] : parents;
+      const ancestors = [...this.graph.ancestors(nodeId)].flatMap((id) => records.get(id) ?? []);
+      const outputs = nodeOutputsOf(ancestors, (id) => this.graph.node(id).label);
+      return this.executor.execute(node, input, outputs, request.signal ?? NEVER_ABORTED);
+    });
   }
 
-  /** Releases the resources the node handlers hold, such as database pools. */
+  /**
+   * Waits for the runs in progress, then releases the resources the node handlers hold, such as
+   * database pools. Later runs are refused. The composition root that created the engine owns
+   * this call, not the hosts serving it.
+   */
   dispose(): Promise<void> {
-    return this.executor.dispose();
+    this.disposal ??= (async () => {
+      await Promise.allSettled([...this.active]);
+      await this.executor.dispose();
+    })();
+    return this.disposal;
+  }
+
+  private track<TResult>(work: () => Promise<TResult>): Promise<TResult> {
+    if (this.disposal) return Promise.reject(new EngineDisposedError());
+    const running = work();
+    this.active.add(running);
+    void running.finally(() => this.active.delete(running)).catch(() => {});
+    return running;
   }
 
   private timestamp(): string {

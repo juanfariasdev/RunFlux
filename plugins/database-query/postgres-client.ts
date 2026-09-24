@@ -6,7 +6,6 @@ export type DatabaseRow = Record<string, unknown>;
 /** Runs parameterized SQL against the database a connection string points to. */
 export interface DatabaseClient {
   query(connectionString: string, sql: string, values: readonly unknown[]): Promise<DatabaseRow[]>;
-  close(): Promise<void>;
 }
 
 /** The part of a `pg.Pool` the client uses. */

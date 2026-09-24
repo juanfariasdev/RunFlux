@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { ParameterError, ParameterReader } from '../../parameters/parameter-reader.js';
+import { ParameterError, ObjectParameterReader } from '../../parameters/parameter-reader.js';
 import { readCombinator, readConditionGroups, readConditions } from '../condition-parameters.js';
 
-const reader = (values: Record<string, unknown>) => new ParameterReader(values, 'condition-if');
+const reader = (values: Record<string, unknown>) => new ObjectParameterReader(values, 'condition-if');
 
 describe('readConditions', () => {
   it('reads rows, defaulting a missing operator to equals', () => {

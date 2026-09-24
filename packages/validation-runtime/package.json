@@ -23,7 +23,7 @@
     "@runflux/workflow-model": "*"
   },
   "devDependencies": {
-    "esbuild": "^0.25.0",
+    "esbuild": "^0.28.2",
     "typescript": "^5.5.4",
     "vitest": "^4.1.9",
     "@types/node": "^22.5.0"

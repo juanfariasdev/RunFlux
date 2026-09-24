@@ -31,12 +31,16 @@ describe('set', () => {
     expect((await run({ fields: [], includeOtherFields: true }, ['not', 'an', 'object'])).output).toEqual({});
   });
 
+  it('accepts fields stored as a { name: value } object, resolving their expressions', async () => {
+    expect((await run({ fields: { status: 'active', id: '{{ $json.id }}' } }, { id: 7 })).output).toEqual({ status: 'active', id: 7 });
+  });
+
   it('outputs an empty object without fields', async () => {
     expect((await run({})).output).toEqual({});
   });
 
   it.each([
-    [{ fields: { name: 'status' } }, 'set: parameter "fields" must be a list'],
+    [{ fields: 'status' }, 'set: parameter "fields" must be a list'],
     [{ fields: [{ name: 'count', value: 'many', type: 'number' }] }, 'Field "count" must be a number'],
     [{ fields: [{ name: 'x', type: 'date' }] }, 'set: parameter "fields" row 1 has unknown type "date"'],
     [{ fields: [], includeOtherFields: 'sometimes' }, 'set: parameter "includeOtherFields" must be true or false'],

@@ -1,4 +1,4 @@
-import { CONDITION_ROW_SCHEMA } from '@runflux/plugin-system/condition-row-schema';
+import { COMBINATOR_OPTIONS, CONDITION_ROW_SCHEMA } from '@runflux/plugin-system/condition-row-schema';
 import type { PluginModule } from '@runflux/plugin-system/types';
 
 /**
@@ -11,7 +11,7 @@ export const manifest: PluginModule['manifest'] = {
   category: 'control-flow',
   version: '1.0.0',
   parameters: [
-    { name: 'combinator', label: 'Combinator (and/or)', type: 'string', required: false, default: 'and' },
+    { name: 'combinator', label: 'Combinator', type: 'string', required: false, default: 'and', options: COMBINATOR_OPTIONS },
     { name: 'conditions', label: 'Conditions', type: 'json', required: true, default: [], rowSchema: CONDITION_ROW_SCHEMA },
   ],
   supportedPlatforms: ['local', 'aws'],

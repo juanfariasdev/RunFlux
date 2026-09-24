@@ -1,6 +1,10 @@
 import { Fragment, createContext, useContext, useRef, useState } from 'react';
 import { resolveExpressions } from '@runflux/expression-engine';
+import { CONDITION_ROW_SCHEMA, RULE_ROW_SCHEMA } from '@runflux/plugin-system/condition-row-schema';
+import { FIELDS_ROW_SCHEMA } from '@runflux/plugin-system/fields-row-schema';
 import type { JsonRowFieldSchema } from '@runflux/plugin-system/types';
+import { isRowFieldHidden, isRowFieldHiddenBy } from '@runflux/plugin-system/visibility';
+import { containsExpression } from '@runflux/runtime';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 
@@ -45,53 +49,15 @@ const BOOLEAN_OPTIONS = [
   { value: 'false', label: 'False' },
 ];
 
-const OPERATOR_OPTIONS = [
-  { value: 'equals', label: 'Equals' },
-  { value: 'notEquals', label: 'Not equals' },
-  { value: 'contains', label: 'Contains' },
-  { value: 'greaterThan', label: 'Greater than' },
-  { value: 'lessThan', label: 'Less than' },
-  { value: 'isEmpty', label: 'Is empty' },
-];
-
-const COMBINATOR_OPTIONS = [
-  { value: 'and', label: 'AND' },
-  { value: 'or', label: 'OR' },
-];
-
 /**
- * Fallback row shapes for the conventional `fields`/`conditions`/`rules`
- * parameter names, used only when a plugin's own parameter doesn't declare
- * a `rowSchema` (older manifests, ad-hoc test fixtures). Any plugin can get
- * the same structured-row treatment for a parameter of any name by declaring
- * `rowSchema` itself — see `JsonRowFieldSchema` in `@runflux/plugin-system/types`.
+ * Row shapes for the conventional `fields`/`conditions`/`rules` parameter names, used only when a
+ * plugin's parameter does not declare its own `rowSchema` (older manifests, ad-hoc fixtures). They
+ * are the shared schemas plugins declare, so both paths render the same rows.
  */
 const DEFAULT_ROW_SCHEMAS: Record<string, JsonRowFieldSchema[]> = {
-  fields: [
-    { key: 'name', label: 'Name', kind: 'text', initialValue: '' },
-    { key: 'value', label: 'Value', kind: 'typedValue', typeKey: 'type', initialValue: '' },
-    { key: 'type', label: 'Type', kind: 'text', initialValue: 'string' },
-  ],
-  conditions: [
-    { key: 'leftValue', label: 'Left value', kind: 'text', initialValue: '' },
-    { key: 'operator', label: 'Operator', kind: 'select', options: OPERATOR_OPTIONS, initialValue: 'equals' },
-    {
-      key: 'rightValue',
-      label: 'Right value',
-      kind: 'text',
-      initialValue: '',
-      hideWhen: { key: 'operator', equals: 'isEmpty' },
-    },
-  ],
-  rules: [
-    { key: 'combinator', label: 'Combinator', kind: 'select', options: COMBINATOR_OPTIONS, initialValue: 'and' },
-    {
-      key: 'conditions',
-      label: 'Conditions',
-      kind: 'text',
-      initialValue: [{ leftValue: '', operator: 'equals', rightValue: '' }],
-    },
-  ],
+  fields: FIELDS_ROW_SCHEMA,
+  conditions: CONDITION_ROW_SCHEMA,
+  rules: RULE_ROW_SCHEMA,
 };
 
 /** Explicit rowSchema (from the plugin's own parameter) wins; otherwise fall back by conventional name. */
@@ -262,7 +228,7 @@ function typeKeysOf(schema: JsonRowFieldSchema[]): Set<string> {
 function clearedFieldsFor(schema: JsonRowFieldSchema[], changedKey: string, newValue: unknown): Record<string, unknown> {
   const patch: Record<string, unknown> = {};
   for (const field of schema) {
-    if (field.hideWhen && field.hideWhen.key === changedKey && field.hideWhen.equals === newValue) {
+    if (field.hideWhen?.key === changedKey && isRowFieldHiddenBy(field, newValue)) {
       patch[field.key] = '';
     }
   }
@@ -373,7 +339,7 @@ function ObjectEditor({
       {schema && visibleFields!.map((field) => {
         const ri = rowIndex!;
         const { key, label } = field;
-        const hidden = Boolean(field.hideWhen && obj[field.hideWhen.key] === field.hideWhen.equals);
+        const hidden = isRowFieldHidden(field, obj);
         const typeKey = field.typeKey ?? 'type';
         const typeValue = obj[typeKey];
         const selectedType = isJsonValueType(typeValue) ? typeValue : getJsonValueType(obj[key]);
@@ -615,10 +581,6 @@ function getPrimitiveType(value: Primitive): PrimitiveType {
   return 'undefined';
 }
 
-function hasExpressionSyntax(value: string): boolean {
-  return /\{\{[\s\S]*?\}\}/.test(value);
-}
-
 type ExpressionPreview = { ok: true; value: unknown } | { ok: false; error: string };
 
 function resolveExpressionPreview(
@@ -652,7 +614,7 @@ function formatPreviewValue(value: unknown): string {
 }
 
 function convertValue(value: string, originalType: PrimitiveType): unknown {
-  if (hasExpressionSyntax(value)) return value;
+  if (containsExpression(value)) return value;
   if (originalType === 'number') {
     const numberValue = Number(value);
     return value.trim() !== '' && Number.isFinite(numberValue) ? numberValue : value;
@@ -705,7 +667,7 @@ function ValueInput({
   const inferredType = useRef<PrimitiveType>(getPrimitiveType(value)).current;
   const outputType = conversionType ?? inferredType;
   const text = value === null || value === undefined ? '' : String(value);
-  const preview = hasExpressionSyntax(text) ? resolveExpressionPreview(text, effectiveSampleJson, nodeScope, envScope) : undefined;
+  const preview = containsExpression(text) ? resolveExpressionPreview(text, effectiveSampleJson, nodeScope, envScope) : undefined;
   const previewId = `expression-preview-${ariaLabel.toLowerCase().replaceAll(' ', '-')}`;
 
   return (

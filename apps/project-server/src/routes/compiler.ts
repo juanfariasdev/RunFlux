@@ -1,67 +1,38 @@
-import { Router, type Request, type Response, type NextFunction } from 'express';
-import {
-  CompilerService,
-  IncompatibleNodesError,
-  CompilerValidationError,
-} from '../services/compiler-service.js';
+import { Router, type NextFunction, type Request, type Response } from 'express';
+import { CompilerRequestError, CompilerService } from '../services/compiler-service.js';
 
 export function createCompilerRouter(service = new CompilerService()): Router {
   const router = Router();
 
   router.post('/compile', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { workflow, targetPlatform, target, projectName, skipTests } = req.body;
-      const result = await service.compile({
-        workflow,
-        targetPlatform,
-        target,
-        projectName,
-        skipTests,
-      });
-      return res.status(200).json(result);
+      const { workflow, targetPlatform, target, projectName } = req.body ?? {};
+      return res.status(200).json(await service.compile({ workflow, targetPlatform, target, projectName }));
     } catch (err) {
-      if (err instanceof IncompatibleNodesError) {
-        return res.status(400).json({
-          error: {
-            code: err.code,
-            message: err.message,
-            details: err.incompatibleNodes,
-          },
-        });
-      }
-      if (err instanceof CompilerValidationError) {
-        return res.status(400).json({
-          error: {
-            code: err.code,
-            message: err.message,
-            details: null,
-          },
-        });
+      if (err instanceof CompilerRequestError) {
+        return res.status(err.status).json({ error: { code: err.code, message: err.message, details: err.details } });
       }
       return next(err);
     }
   });
 
-  router.get('/downloads/:filename', async (req: Request, res: Response, next: NextFunction) => {
+  // Express has already decoded the path parameters.
+  const download = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const filename = decodeURIComponent(req.params.filename);
-      const filePath = await service.findZipFile(filename);
-
+      const { compilation, filename } = req.params;
+      const filePath = await service.findZipFile(filename, compilation);
       if (!filePath) {
-        return res.status(404).json({
-          error: {
-            code: 'FILE_NOT_FOUND',
-            message: `Arquivo "${filename}" não encontrado para download.`,
-          },
-        });
+        return res.status(404).json({ error: { code: 'FILE_NOT_FOUND', message: `Arquivo "${filename}" não encontrado para download.` } });
       }
-
       res.setHeader('Content-Type', 'application/zip');
       return res.download(filePath, filename);
     } catch (err) {
       return next(err);
     }
-  });
+  };
+  router.get('/downloads/:compilation/:filename', download);
+  // Earlier download links name only the file; they get the latest compilation that produced it.
+  router.get('/downloads/:filename', download);
 
   return router;
 }

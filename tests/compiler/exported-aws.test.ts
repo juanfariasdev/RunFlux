@@ -1,7 +1,9 @@
 import { App } from 'aws-cdk-lib';
 import { Match, Template } from 'aws-cdk-lib/assertions';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import type { WorkflowInfrastructure } from '@runflux/compiler';
+import { afterAll, afterEach, beforeAll, describe, expect, expectTypeOf, it, vi } from 'vitest';
+import type { WorkflowInfrastructure as StackInfrastructure } from '../../packages/compiler/templates/aws/lib/workflow-stack';
 import { ExportedProject } from '../support/exported-project';
 import { compile, edge, node, workflow } from '../support/workflows';
 
@@ -9,6 +11,7 @@ type Handler = (event: object) => Promise<{ statusCode: number; headers: Record<
 
 const projects: ExportedProject[] = [];
 afterAll(() => Promise.all(projects.map((project) => project.dispose())));
+afterEach(() => vi.unstubAllEnvs());
 
 async function exported(definition: Parameters<typeof compile>[0]): Promise<ExportedProject> {
   const project = await ExportedProject.write(await compile(definition, 'aws', "Customer's backend"));
@@ -17,6 +20,10 @@ async function exported(definition: Parameters<typeof compile>[0]): Promise<Expo
 }
 
 const http = (rawPath: string, method: string, extra: object = {}) => ({ rawPath, requestContext: { http: { method } }, ...extra });
+
+it('keeps the infrastructure settings the compiler writes and the exported stack reads identical', () => {
+  expectTypeOf<WorkflowInfrastructure>().toEqualTypeOf<StackInfrastructure>();
+});
 
 describe('exported AWS Lambda function', () => {
   let handler: Handler;
@@ -39,13 +46,11 @@ describe('exported AWS Lambda function', () => {
   it('requires the secret of a webhook, even when its variable is absent', async () => {
     vi.stubEnv('ORDERS_KEY', '');
     expect((await handler(http('/orders', 'POST', { headers: {}, body: '{}' }))).statusCode).toBe(401);
-    vi.unstubAllEnvs();
   });
 
   it('routes a request to its trigger with the lower-cased headers and the query', async () => {
     vi.stubEnv('ORDERS_KEY', 'correct');
     const response = await handler(http('/orders', 'POST', { headers: { 'X-Orders-Key': 'correct' }, queryStringParameters: { page: '2' }, body: '{"amount":21}' }));
-    vi.unstubAllEnvs();
     expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.body);
     expect(body).toMatchObject({ success: true, result: { total: 42 }, nodeOutputs: { orders: { amount: 21, _query: { page: '2' } } } });
@@ -59,7 +64,6 @@ describe('exported AWS Lambda function', () => {
     expect((await handler({ ...event, requestContext: { http: { method: 'GET' } } })).statusCode).toBe(405);
     vi.stubEnv('ORDERS_KEY', 'k');
     expect((await handler(http('/orders', 'POST', { headers: { 'x-orders-key': 'k' }, body: '{broken' }))).statusCode).toBe(400);
-    vi.unstubAllEnvs();
   });
 
   it('starts the trigger an EventBridge schedule names', async () => {
@@ -98,12 +102,27 @@ describe('exported AWS CDK stack', () => {
     template.hasOutput('FunctionUrl', {});
   });
 
+  it('gives a workflow without HTTP triggers no public URL', async () => {
+    const project = await exported(workflow([node('nightly', 'trigger-cron', { expression: '0 3 * * *' })]));
+    const { WorkflowStack } = await project.import('lib/workflow-stack.ts');
+    const template = Template.fromStack(new WorkflowStack(new App(), 'Stack', project.json('infrastructure.json'), { code: lambda.Code.fromInline('x') }));
+    template.resourceCountIs('AWS::Lambda::Url', 0);
+    expect(Object.keys(template.findOutputs('*'))).not.toContain('FunctionUrl');
+    template.resourceCountIs('AWS::Scheduler::Schedule', 1);
+  });
+
+  it('deploys dist/ as the function code by default', async () => {
+    const project = await (await exported(workflow([node('hook', 'trigger-webhook')]))).build();
+    const { WorkflowStack } = await project.import('lib/workflow-stack.ts');
+    const template = Template.fromStack(new WorkflowStack(new App({ outdir: `${project.directory}/cdk.out` }), 'Stack', project.json('infrastructure.json')));
+    template.hasResourceProperties('AWS::Lambda::Function', { Code: Match.objectLike({ S3Key: Match.stringLikeRegexp('\\.zip$') }) });
+  });
+
   it('lets the deploying shell override the default of a variable', async () => {
     const project = await exported(workflow([node('hook', 'trigger-webhook')], [], { settings: { envVars: [{ key: 'API_KEY', value: 'default' }] } }));
     const { WorkflowStack } = await project.import('lib/workflow-stack.ts');
     vi.stubEnv('API_KEY', 'from-shell');
     const template = Template.fromStack(new WorkflowStack(new App(), 'Stack', project.json('infrastructure.json'), { code: lambda.Code.fromInline('x') }));
-    vi.unstubAllEnvs();
     template.hasResourceProperties('AWS::Lambda::Function', { Environment: { Variables: Match.objectLike({ API_KEY: 'from-shell' }) } });
     template.resourceCountIs('AWS::Scheduler::Schedule', 0);
   });

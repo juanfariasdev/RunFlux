@@ -1,96 +1,103 @@
 import type { HttpTrigger } from '@runflux/runtime';
 import type { EnvironmentVariableDeclaration } from '@runflux/plugin-system';
-import { RUNTIME_ENTRIES, VENDOR_DIRECTORY } from '../bundling/runtime-bundler.js';
+import { RUNTIME_ENTRIES } from '../bundling/runtime-bundler.js';
 import type { DeploymentPlan } from '../deployment/deployment-plan.js';
 import { BuildProfile } from '../project/build-profile.js';
+import { EnvFile, EnvFileError } from '../project/env-file.js';
 import { code, MarkdownDocument } from '../project/markdown.js';
+import { packageManifest } from '../project/package-manifest.js';
 import { toPackageName } from '../project/package-name.js';
 import { ProjectFiles } from '../project/project-files.js';
-import { sortedRecord } from '../project/records.js';
 import { TemplateDirectory } from '../project/template-directory.js';
 import { toYaml, type YamlValue } from '../project/yaml.js';
-import type { GeneratedFile } from '../types.js';
+import { CompilationError, type GeneratedFile } from '../types.js';
 import type { DeploymentTarget, TargetContext } from './deployment-target.js';
 
 const DEFAULT_PORT = 3000;
 const CRON_WORKER = 'src/run-cron.ts';
+const CRON_PACKAGE = 'node-cron';
 
 /** A Node.js backend: Express server, CLI, optional cron worker, Dockerfile and Compose. */
 export class LocalTarget implements DeploymentTarget {
   readonly platform = 'local' as const;
   readonly entrypoint = 'src/server.ts';
   readonly runtimeEntries = [RUNTIME_ENTRIES.core, RUNTIME_ENTRIES.express, RUNTIME_ENTRIES.cron, RUNTIME_ENTRIES.cli];
-  readonly hostDependencies = { cors: '^2.8.5', express: '^4.21.0', 'node-cron': '^4.6.0' };
+  readonly hostPackages = ['cors', 'express', CRON_PACKAGE];
+  private readonly templates: TemplateDirectory;
 
-  constructor(private readonly templates = new TemplateDirectory()) {}
+  constructor(templates = new TemplateDirectory()) {
+    this.templates = templates;
+  }
 
   buildProfile(plan: DeploymentPlan): BuildProfile {
     return BuildProfile.server(['src/server.ts', 'src/run.ts', ...(hasSchedules(plan) ? [CRON_WORKER] : [])]);
   }
 
-  async files({ plan, projectName, options }: TargetContext): Promise<GeneratedFile[]> {
+  async files({ plan, projectName, options, hostDependencies }: TargetContext): Promise<GeneratedFile[]> {
     const port = options.port ?? DEFAULT_PORT;
     const packageName = toPackageName(projectName, 'runflux-app');
     return new ProjectFiles()
       .addAll(await this.templates.files(['shared', 'local'], (file) => hasSchedules(plan) || file !== CRON_WORKER))
       .json('src/workflow.json', plan.workflow, 'source')
-      .json('package.json', this.packageJson(plan, packageName))
+      .json('package.json', this.packageJson(plan, packageName, hostDependencies))
       .text('.env.example', environmentFile(port, hasSchedules(plan), plan.environment), 'config')
       .text('docker-compose.yml', toYaml(this.compose(plan, port)), 'infrastructure')
       .text('README.md', this.readme(plan, projectName, packageName, port), 'asset')
       .list();
   }
 
-  private packageJson(plan: DeploymentPlan, name: string) {
-    const scripts: Record<string, string> = {
-      clean: 'rm -rf dist compiled',
-      build: `npm run clean && ${this.buildProfile(plan).command()}`,
-      start: 'node dist/server.mjs',
-      run: 'node dist/run.mjs',
-      dev: 'tsx watch src/server.ts',
-      ...(hasSchedules(plan) ? { cron: 'node dist/run-cron.mjs' } : {}),
-      'docker:build': `docker build -t ${name} .`,
-      'docker:up': 'docker compose up -d',
-      'docker:down': 'docker compose down',
-    };
-    return {
+  private packageJson(plan: DeploymentPlan, name: string, hostDependencies: Readonly<Record<string, string>>) {
+    const { [CRON_PACKAGE]: cron, ...alwaysNeeded } = hostDependencies;
+    return packageManifest({
       name,
-      version: '1.0.0',
-      private: true,
-      type: 'module',
-      scripts,
-      dependencies: sortedRecord({
-        '@runflux/runtime': `file:./${VENDOR_DIRECTORY}`,
-        cors: this.hostDependencies.cors,
+      scripts: {
+        clean: 'rm -rf dist',
+        build: `npm run clean && ${this.buildProfile(plan).command()}`,
+        start: 'node dist/server.mjs',
+        run: 'node dist/run.mjs',
+        dev: 'tsx watch src/server.ts',
+        ...(hasSchedules(plan) ? { cron: 'node dist/run-cron.mjs' } : {}),
+        'docker:build': `docker build -t ${name} .`,
+        'docker:up': 'docker compose up -d',
+        'docker:down': 'docker compose down',
+      },
+      dependencies: {
+        ...alwaysNeeded,
         dotenv: '^16.4.5',
-        express: this.hostDependencies.express,
-        ...(hasSchedules(plan) ? { 'node-cron': this.hostDependencies['node-cron'] } : {}),
+        ...(hasSchedules(plan) && cron ? { [CRON_PACKAGE]: cron } : {}),
         ...plan.dependencies,
-      }),
-      devDependencies: sortedRecord({
-        '@types/cors': '^2.8.17',
-        '@types/express': '^4.17.21',
-        '@types/node': '^22.5.0',
-        esbuild: '^0.28.2',
-        tsx: '^4.19.0',
-        typescript: '^5.5.4',
-        ...plan.devDependencies,
-      }),
-    };
+      },
+      devDependencies: { '@types/cors': '^2.8.17', '@types/express': '^4.17.21', ...plan.devDependencies },
+    });
   }
 
+  /** The backend (`app`), its cron worker (`cron`) when the workflow has schedules, and the plugins' services. */
   private compose(plan: DeploymentPlan, port: number): YamlValue {
     const companions = Object.keys(plan.composeServices);
+    const dependsOn = companions.length > 0 ? companions : undefined;
     const services: Record<string, YamlValue> = {
       app: {
         build: '.',
         restart: 'unless-stopped',
         ports: [`\${PORT:-${port}}:${port}`],
         env_file: ['.env'],
-        environment: [`PORT=${port}`, 'NODE_ENV=production'],
-        depends_on: companions.length > 0 ? companions : undefined,
+        // With schedules, the `cron` service runs them; the server must not run them too.
+        environment: [`PORT=${port}`, 'NODE_ENV=production', ...(hasSchedules(plan) ? ['ENABLE_INLINE_CRON=false'] : [])],
+        depends_on: dependsOn,
       },
     };
+    if (hasSchedules(plan)) {
+      services.cron = {
+        build: '.',
+        restart: 'unless-stopped',
+        command: ['node', 'dist/run-cron.mjs'],
+        env_file: ['.env'],
+        environment: ['NODE_ENV=production'],
+        // The image's health check probes the HTTP server, which this process does not run.
+        healthcheck: { disable: true },
+        depends_on: dependsOn,
+      };
+    }
     for (const [name, service] of Object.entries(plan.composeServices)) {
       services[name] = { image: service.image, restart: 'unless-stopped', environment: service.environment, ports: service.ports, volumes: service.volumes };
     }
@@ -120,7 +127,7 @@ export class LocalTarget implements DeploymentTarget {
         .heading(3, 'Scheduled worker')
         .code('bash', ['npm run cron'])
         .list(schedules.map((schedule) => `${code(schedule.expression)} (timezone ${schedule.timezone}, trigger ${code(schedule.nodeId)})`))
-        .paragraph('Set `ENABLE_INLINE_CRON=true` to run the schedules inside the HTTP server instead.');
+        .paragraph('Set `ENABLE_INLINE_CRON=true` to run the schedules inside the HTTP server instead. Docker Compose runs the worker as the `cron` service.');
     }
     return readme
       .heading(2, 'Docker')
@@ -143,10 +150,18 @@ function endpoints(triggers: readonly HttpTrigger[], port: number): string[] {
 }
 
 function environmentFile(port: number, cron: boolean, variables: readonly EnvironmentVariableDeclaration[]): string {
-  const lines = [`PORT=${port}`, 'NODE_ENV=production', ...(cron ? ['ENABLE_INLINE_CRON=false'] : [])];
-  if (variables.length > 0) {
-    lines.push('', '# Project Environment Variables');
-    for (const variable of variables) lines.push(...(variable.description ? [`# ${variable.description}`] : []), `${variable.key}=${variable.value ?? ''}`);
+  const file = new EnvFile().variable('PORT', String(port)).variable('NODE_ENV', 'production');
+  if (cron) file.variable('ENABLE_INLINE_CRON', 'false');
+  if (variables.length === 0) return file.toString();
+  file.blank().comment('Project Environment Variables');
+  try {
+    for (const variable of variables) {
+      if (variable.description) file.comment(variable.description);
+      file.variable(variable.key, variable.value ?? '');
+    }
+  } catch (error) {
+    if (error instanceof EnvFileError) throw new CompilationError('INVALID_WORKFLOW', error.message);
+    throw error;
   }
-  return `${lines.join('\n')}\n`;
+  return file.toString();
 }

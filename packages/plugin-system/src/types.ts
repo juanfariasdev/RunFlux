@@ -33,8 +33,11 @@ export interface JsonRowFieldSchema {
   allowCustomOptions?: boolean;
   /** kind: 'typedValue' only — which row key stores the JSON value type. Default 'type'. */
   typeKey?: string;
-  /** Hide this field, and clear its value, whenever another field's value equals this. */
-  hideWhen?: { key: string; equals?: unknown };
+  /**
+   * Hide this field, and clear its value, while another field of the row equals `equals` or one of
+   * `oneOf`. See isRowFieldHidden.
+   */
+  hideWhen?: { key: string; equals?: unknown; oneOf?: readonly unknown[] };
 }
 
 export interface ParameterSchema {
@@ -48,6 +51,14 @@ export interface ParameterSchema {
   expressions?: boolean;
   /** Row shape for a `type: 'json'` array-of-objects parameter. See JsonRowFieldSchema. */
   rowSchema?: JsonRowFieldSchema[];
+  /** Choices of a `type: 'string'` parameter; the editor shows them as a select. */
+  options?: JsonRowOption[];
+  /** With `options`: they are suggestions and any other value may be typed. */
+  allowCustomOptions?: boolean;
+  /** Show the parameter only while another parameter holds one of these values. */
+  showWhen?: { parameter: string; oneOf: readonly unknown[] };
+  /** A `type: 'string'` parameter holding source code in this language. */
+  language?: 'javascript' | 'sql';
 }
 
 /**

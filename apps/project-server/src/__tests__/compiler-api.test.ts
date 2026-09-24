@@ -49,7 +49,7 @@ describe('Compiler REST API', () => {
     expect(res.body.status).toBe('success');
     expect(res.body.targetPlatform).toBe('local');
     expect(res.body.zipFilename).toBe('Backend Test API-local.zip');
-    expect(res.body.downloadUrl).toBe('/api/compiler/downloads/Backend%20Test%20API-local.zip');
+    expect(res.body.downloadUrl).toBe(`/api/compiler/downloads/${res.body.compilationId}/Backend%20Test%20API-local.zip`);
 
     const outputDir = res.body.outputDirectory;
     expect(fs.existsSync(outputDir)).toBe(true);
@@ -64,6 +64,24 @@ describe('Compiler REST API', () => {
 
     expect(downloadRes.status).toBe(200);
     expect(downloadRes.headers['content-type']).toContain('application/zip');
+
+    const legacy = await request(app).get('/api/compiler/downloads/Backend%20Test%20API-local.zip').responseType('blob');
+    expect(legacy.status).toBe(200);
+    const percent = await request(app).get(`/api/compiler/downloads/${res.body.compilationId}/100%25.zip`);
+    expect(percent.status).toBe(404);
+    expect(percent.body.error.message).toContain('"100%.zip"');
+  });
+
+  it('answers with the compiler error code and a status telling client and server errors apart', async () => {
+    const invalid = await request(app).post('/api/compiler/compile').send({ workflow: { nodes: 'none' } });
+    expect(invalid.status).toBe(400);
+    expect(invalid.body.error.code).toBe('VALIDATION_ERROR');
+    const cyclic = await request(app).post('/api/compiler/compile').send({
+      workflow: { ...validWorkflow, connections: [...validWorkflow.connections, { sourceNodeId: 'n2', sourceOutput: 'main', targetNodeId: 'n1', targetInput: 'main' }] },
+      targetPlatform: 'local',
+    });
+    expect(cyclic.status).toBe(400);
+    expect(cyclic.body.error.code).toBe('CYCLE_DETECTED');
   });
 
   it('returns 400 when an incompatible node is present for target platform', async () => {

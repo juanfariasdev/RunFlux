@@ -11,24 +11,37 @@ export class ParameterError extends Error {
  * Typed access to a node's parameters. A missing value (undefined, null or blank text) falls back
  * to the given default; a value of the wrong type raises a ParameterError that names the node type.
  */
-export class ParameterReader {
+export interface ParameterReader {
+  /** The value exactly as configured, for parameters that accept any JSON. */
+  raw(name: string): unknown;
+  /** Every parameter exactly as configured, for nodes that accept arbitrary parameters. */
+  all(): Readonly<Record<string, unknown>>;
+  string(name: string, fallback: string): string;
+  requiredString(name: string): string;
+  optionalString(name: string): string | undefined;
+  boolean(name: string, fallback: boolean): boolean;
+  choice<TOption extends string>(name: string, options: readonly TOption[], fallback: TOption): TOption;
+  list(name: string): unknown[];
+  record(name: string): Record<string, unknown>;
+  /** A ParameterError for a problem found while interpreting a parameter's value. */
+  error(name: string, problem: string): ParameterError;
+}
+
+/** Reads the parameters of one node from a plain object. */
+export class ObjectParameterReader implements ParameterReader {
   private readonly values: Readonly<Record<string, unknown>>;
   private readonly owner: string;
 
-  constructor(
-    values: Readonly<Record<string, unknown>>,
-    owner: string,
-  ) {
+  /** `owner` names the node type in error messages. */
+  constructor(values: Readonly<Record<string, unknown>>, owner: string) {
     this.values = values;
     this.owner = owner;
   }
 
-  /** The value exactly as configured, for parameters that accept any JSON. */
   raw(name: string): unknown {
     return this.values[name];
   }
 
-  /** Every parameter exactly as configured, for nodes that accept arbitrary parameters. */
   all(): Readonly<Record<string, unknown>> {
     return this.values;
   }
@@ -80,7 +93,6 @@ export class ParameterReader {
     return value;
   }
 
-  /** Raises a ParameterError for a problem found while interpreting a parameter's value. */
   error(name: string, problem: string): ParameterError {
     return new ParameterError(`${this.owner}: parameter "${name}" ${problem}`);
   }

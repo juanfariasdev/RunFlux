@@ -1,5 +1,4 @@
 import { execFile } from 'node:child_process';
-import { createServer } from 'node:net';
 import { promisify } from 'node:util';
 import request from 'supertest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -23,15 +22,6 @@ async function exported(...args: Parameters<typeof compile>): Promise<ExportedPr
 async function app(project: ExportedProject) {
   const { ExpressHost } = await project.runtime('express');
   return new ExpressHost(await project.engine()).app;
-}
-
-function freePort(): Promise<number> {
-  return new Promise((resolve) => {
-    const server = createServer().listen(0, () => {
-      const { port } = server.address() as { port: number };
-      server.close(() => resolve(port));
-    });
-  });
 }
 
 describe('exported local backend over HTTP', () => {
@@ -124,16 +114,28 @@ describe('exported local backend execution semantics', () => {
 });
 
 describe('exported local backend processes', () => {
-  it('serves HTTP with node dist/server.mjs and stops on SIGTERM', async () => {
+  it('serves HTTP on the port it reports with node dist/server.mjs and shuts down cleanly on SIGTERM', async () => {
     const project = await (await exported(workflow([node('hook', 'trigger-webhook', { path: '/orders' })]))).build();
-    const port = await freePort();
-    const server = await project.start('dist/server.mjs', { PORT: String(port) }, /Listening on port/);
+    const { child: server, ready } = await project.start('dist/server.mjs', { PORT: '0' }, /Listening on port (\d+)/);
+    const port = Number(ready[1]);
+    expect(port).toBeGreaterThan(0);
     const health = await fetch(`http://127.0.0.1:${port}/health`);
     expect(await health.json()).toMatchObject({ status: 'ok', workflowId: 'test-workflow' });
     const order = await fetch(`http://127.0.0.1:${port}/orders`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"id":5}' });
     expect(await order.json()).toMatchObject({ success: true, result: { id: 5 } });
+    const output: string[] = [];
+    server.stdout!.on('data', (chunk: Buffer) => output.push(String(chunk)));
     const exited = new Promise<number | null>((resolve) => server.once('exit', resolve));
     server.kill('SIGTERM');
+    expect(await exited).toBe(0);
+    expect(output.join('')).toContain('[RunFlux] SIGTERM received, shutting down');
+  });
+
+  it('runs its schedules in the cron worker until SIGINT', async () => {
+    const project = await (await exported(workflow([node('nightly', 'trigger-cron', { expression: '0 3 * * *' })]))).build();
+    const { child: worker } = await project.start('dist/run-cron.mjs', {}, /1 schedule\(s\) started/);
+    const exited = new Promise<number | null>((resolve) => worker.once('exit', resolve));
+    worker.kill('SIGINT');
     expect(await exited).toBe(0);
   });
 

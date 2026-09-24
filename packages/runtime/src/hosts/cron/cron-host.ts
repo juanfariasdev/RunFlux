@@ -33,19 +33,19 @@ export interface CronHostOptions {
   readonly clock?: Clock;
 }
 
-/** Starts each schedule's trigger when it fires. Failures are logged; they never stop the schedule. */
+/**
+ * Starts each schedule's trigger when it fires. Failures are logged; they never stop the schedule.
+ * Disposing the engine is up to its owner.
+ */
 export class CronHost {
+  private readonly engine: WorkflowEngine;
   private readonly scheduler: Scheduler;
   private readonly logger: Logger;
   private readonly clock: Clock;
-  private tasks: ScheduledTask[] = [];
+  private readonly tasks: ScheduledTask[] = [];
+  private starting?: Promise<readonly ScheduledTask[]>;
 
-  private readonly engine: WorkflowEngine;
-
-  constructor(
-    engine: WorkflowEngine,
-    options: CronHostOptions = {},
-  ) {
+  constructor(engine: WorkflowEngine, options: CronHostOptions = {}) {
     this.engine = engine;
     this.scheduler = options.scheduler ?? new NodeCronScheduler();
     this.logger = options.logger ?? new ConsoleLogger();
@@ -56,18 +56,19 @@ export class CronHost {
     return this.engine.workflow.triggers.schedules;
   }
 
-  async start(): Promise<readonly ScheduledTask[]> {
-    const started = await Promise.all(
-      this.schedules.map((schedule) => this.scheduler.schedule(schedule.expression, schedule.timezone, () => this.fire(schedule))),
-    );
-    this.tasks.push(...started);
-    return started;
+  /**
+   * Registers every schedule once; calling it again returns the same tasks. When one schedule
+   * cannot be registered, those already registered are stopped and the error is rethrown.
+   */
+  start(): Promise<readonly ScheduledTask[]> {
+    this.starting ??= this.register();
+    return this.starting;
   }
 
-  /** Stops every schedule and releases the engine's resources. */
-  async stop(): Promise<void> {
+  /** Stops every schedule. */
+  stop(): void {
     for (const task of this.tasks.splice(0)) task.stop();
-    await this.engine.dispose();
+    this.starting = undefined;
   }
 
   /** Runs the schedule's trigger once, as if it had fired now. */
@@ -82,6 +83,18 @@ export class CronHost {
       if (!execution.succeeded) this.logger.error('[RunFlux Cron]', execution.error);
     } catch (error) {
       this.logger.error('[RunFlux Cron]', error);
+    }
+  }
+
+  private async register(): Promise<readonly ScheduledTask[]> {
+    try {
+      for (const schedule of this.schedules) {
+        this.tasks.push(await this.scheduler.schedule(schedule.expression, schedule.timezone, () => this.fire(schedule)));
+      }
+      return [...this.tasks];
+    } catch (error) {
+      this.stop();
+      throw error;
     }
   }
 }

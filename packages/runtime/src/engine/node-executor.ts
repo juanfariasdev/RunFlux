@@ -3,7 +3,7 @@ import type { RuntimeServices } from '../contracts/services.js';
 import type { EnvironmentVariables } from '../environment.js';
 import { createNodeScope } from '../expressions/node-scope.js';
 import type { ParameterResolver } from '../expressions/parameter-resolver.js';
-import { ParameterReader } from '../parameters/parameter-reader.js';
+import { ObjectParameterReader } from '../parameters/parameter-reader.js';
 import type { ExecutableNode } from '../workflow/executable-workflow.js';
 import type { NodeCatalog } from './node-catalog.js';
 import type { NodeOutputsById, NodeRecord } from './node-record.js';
@@ -75,7 +75,7 @@ export class NodeExecutor {
     if (!definition) throw new UnknownNodeTypeError(node.pluginId);
     const { environment } = this.settings;
     const resolved = this.parameters.resolve(node.parameters, new Set(node.literalParameters), { $json: input, $node: outputs, $env: environment });
-    const parameters = definition.parseParameters(new ParameterReader(resolved, node.pluginId));
+    const parameters = definition.parseParameters(new ObjectParameterReader(resolved, node.pluginId));
     const context: NodeContext = {
       workflowId: this.settings.workflowId,
       nodeId: node.id,

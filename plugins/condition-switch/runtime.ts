@@ -7,10 +7,7 @@ import {
   type NodeHandler,
   type NodeInvocation,
 } from '@runflux/runtime';
-
-/** One output per rule, in rule order. Rules beyond these can never be taken. */
-export const RULE_OUTPUTS = ['output1', 'output2', 'output3', 'output4', 'output5'] as const;
-export const FALLBACK_OUTPUT = 'fallback';
+import { FALLBACK_OUTPUT, RULE_OUTPUTS } from './outputs.js';
 
 export interface SwitchParameters {
   readonly rules: readonly ConditionGroup[];

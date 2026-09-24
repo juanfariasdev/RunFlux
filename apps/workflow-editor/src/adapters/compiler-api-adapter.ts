@@ -6,12 +6,13 @@ export interface CompileParams {
   workflow: WorkflowDefinition;
   targetPlatform: TargetPlatform;
   projectName?: string;
-  skipTests?: boolean;
 }
 
 export interface CompileResult {
   status: 'success';
   targetPlatform: TargetPlatform;
+  /** Identifies the compilation whose files `downloadUrl` serves. */
+  compilationId: string;
   zipFilename: string;
   downloadUrl: string;
   outputDirectory: string;
@@ -21,7 +22,7 @@ export interface CompileResult {
 
 export interface CompilerApi {
   compile(params: CompileParams): Promise<CompileResult>;
-  getDownloadUrl(filename: string): string;
+  getDownloadUrl(filename: string, compilationId?: string): string;
 }
 
 export class HttpCompilerApiAdapter implements CompilerApi {
@@ -41,7 +42,6 @@ export class HttpCompilerApiAdapter implements CompilerApi {
         workflow: params.workflow,
         targetPlatform: params.targetPlatform,
         projectName: params.projectName,
-        skipTests: params.skipTests ?? true,
       }),
     });
 
@@ -57,7 +57,9 @@ export class HttpCompilerApiAdapter implements CompilerApi {
     return (await res.json()) as CompileResult;
   }
 
-  getDownloadUrl(filename: string): string {
-    return `${this.baseUrl}/api/compiler/downloads/${encodeURIComponent(filename)}`;
+  /** The download of `filename` from one compilation, or from the latest one that produced it. */
+  getDownloadUrl(filename: string, compilationId?: string): string {
+    const compilation = compilationId ? `${encodeURIComponent(compilationId)}/` : '';
+    return `${this.baseUrl}/api/compiler/downloads/${compilation}${encodeURIComponent(filename)}`;
   }
 }

@@ -1,5 +1,5 @@
 import { validateManifest } from '@runflux/plugin-system/manifest-validator';
-import { HttpClient, type HttpTransport } from '@runflux/runtime';
+import { FetchHttpClient, type HttpClient, type HttpTransport } from '@runflux/runtime';
 import { executeNode } from '@runflux/runtime/testing';
 import { describe, expect, it } from 'vitest';
 import { manifest } from '../index';
@@ -11,7 +11,7 @@ function client(respond: () => Response = () => Response.json({ accepted: true }
     requests.push({ url, init });
     return respond();
   };
-  return { requests, services: { http: new HttpClient(transport) } };
+  return { requests, services: { http: new FetchHttpClient(transport) } };
 }
 
 const run = (parameters: Record<string, unknown>, services: { http: HttpClient }, input: unknown = {}) =>
@@ -51,7 +51,7 @@ describe('http-output', () => {
   it('reports unsuccessful responses and transport failures', async () => {
     const failing = client(() => new Response('unavailable', { status: 503 }));
     expect((await run({ url: 'https://example.test/down' }, failing.services)).error).toBe('http-output: request to https://example.test/down failed with status 503: unavailable');
-    const offline = { http: new HttpClient(async () => { throw new TypeError('fetch failed'); }) };
+    const offline = { http: new FetchHttpClient(async () => { throw new TypeError('fetch failed'); }) };
     expect((await run({ url: 'https://example.test' }, offline)).error).toBe('http-output: fetch failed');
   });
 

@@ -43,3 +43,19 @@ export interface WebhookRequest {
 }
 
 export const NO_TRIGGERS: WorkflowTriggers = { http: [], schedules: [] };
+
+// RFC 9110 token characters.
+const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
+
+/** Whether `name` is a valid HTTP header field name. */
+export function isHttpHeaderName(name: string): boolean {
+  return HEADER_NAME.test(name);
+}
+
+/**
+ * The form every component compares webhook paths in: one leading slash, no trailing or repeated
+ * slashes. `orders/`, `//orders` and `/orders` are the same route.
+ */
+export function normalizeRoutePath(path: string): string {
+  return `/${path.split('/').filter(Boolean).join('/')}`;
+}

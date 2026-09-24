@@ -1,5 +1,7 @@
+import { isEnvironmentVariableName } from '../environment.js';
+import { CronExpression, isTimeZone } from '../schedules/cron-expression.js';
 import { isRecord } from '../values.js';
-import { HTTP_METHODS, type HttpTrigger, type ScheduleTrigger, type WorkflowTriggers } from './triggers.js';
+import { HTTP_METHODS, isHttpHeaderName, type HttpTrigger, type ScheduleTrigger, type WorkflowTriggers } from './triggers.js';
 
 export const WORKFLOW_SCHEMA_VERSION = 1;
 
@@ -47,7 +49,7 @@ export function parseExecutableWorkflow(document: unknown): ExecutableWorkflow {
     throw new WorkflowDocumentError(`unsupported schemaVersion ${JSON.stringify(root.schemaVersion)}`);
   }
   const triggers = record(root.triggers, 'triggers');
-  return {
+  const workflow: ExecutableWorkflow = {
     schemaVersion: WORKFLOW_SCHEMA_VERSION,
     id: text(root.id, 'id'),
     name: text(root.name, 'name'),
@@ -58,6 +60,25 @@ export function parseExecutableWorkflow(document: unknown): ExecutableWorkflow {
       schedules: list(triggers.schedules, 'triggers.schedules').map((value, index) => parseSchedule(value, `triggers.schedules[${index}]`)),
     },
   };
+  checkReferences(workflow);
+  return workflow;
+}
+
+/** Every id is unique, and every connection and trigger refers to a node that can take it. */
+function checkReferences(workflow: ExecutableWorkflow): void {
+  const nodes = new Map<string, ExecutableNode>();
+  for (const node of workflow.nodes) {
+    if (nodes.has(node.id)) fail(`node id "${node.id}" is used twice`);
+    nodes.set(node.id, node);
+  }
+  for (const connection of workflow.connections) {
+    const source = nodes.get(connection.source);
+    if (!source || !nodes.has(connection.target)) fail(`connection ${connection.source} -> ${connection.target} refers to an unknown node`);
+    if (!source.outputs.includes(connection.sourceOutput)) fail(`connection from "${source.id}" uses unknown output "${connection.sourceOutput}"`);
+  }
+  for (const trigger of [...workflow.triggers.http, ...workflow.triggers.schedules]) {
+    if (!nodes.get(trigger.nodeId)?.trigger) fail(`trigger "${trigger.nodeId}" is not a trigger node of the workflow`);
+  }
 }
 
 function parseNode(value: unknown, path: string): ExecutableNode {
@@ -99,8 +120,8 @@ function parseHttpTrigger(value: unknown, path: string): HttpTrigger {
       : authentication.type === 'header'
         ? {
             type: 'header',
-            headerName: text(authentication.headerName, `${path}.authentication.headerName`),
-            secretEnvVar: text(authentication.secretEnvVar, `${path}.authentication.secretEnvVar`),
+            headerName: checked(text(authentication.headerName, `${path}.authentication.headerName`), isHttpHeaderName, `${path}.authentication.headerName`, 'is not an HTTP header name'),
+            secretEnvVar: checked(text(authentication.secretEnvVar, `${path}.authentication.secretEnvVar`), isEnvironmentVariableName, `${path}.authentication.secretEnvVar`, 'is not an environment variable name'),
           }
         : fail(`${path}.authentication.type must be "none" or "header"`),
     rawBody: flag(trigger.rawBody, `${path}.rawBody`),
@@ -111,9 +132,13 @@ function parseSchedule(value: unknown, path: string): ScheduleTrigger {
   const schedule = record(value, path);
   return {
     nodeId: text(schedule.nodeId, `${path}.nodeId`),
-    expression: text(schedule.expression, `${path}.expression`),
-    timezone: text(schedule.timezone, `${path}.timezone`),
+    expression: checked(text(schedule.expression, `${path}.expression`), CronExpression.isValid, `${path}.expression`, 'is not a five-field cron expression'),
+    timezone: checked(text(schedule.timezone, `${path}.timezone`), isTimeZone, `${path}.timezone`, 'is not a known timezone'),
   };
+}
+
+function checked(value: string, valid: (value: string) => boolean, path: string, problem: string): string {
+  return valid(value) ? value : fail(`${path} "${value}" ${problem}`);
 }
 
 function record(value: unknown, path: string): Record<string, unknown> {

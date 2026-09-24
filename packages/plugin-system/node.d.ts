@@ -21,6 +21,10 @@ export interface ParameterSchema {
   default?: unknown;
   sensitive?: boolean;
   expressions?: boolean;
+  options?: Array<{ value: string; label: string }>;
+  allowCustomOptions?: boolean;
+  showWhen?: { parameter: string; oneOf: readonly unknown[] };
+  language?: 'javascript' | 'sql';
 }
 
 export interface PluginManifest {
@@ -48,6 +52,7 @@ export interface DiscoverSummary {
 export class PluginRegistry {
   discover(options?: DiscoverOptions): Promise<DiscoverSummary>;
   listManifests(): PluginManifest[];
+  getManifest(pluginId: string): PluginManifest | undefined;
 }
 
 export function listPlugins(registry: PluginRegistry): Record<string, PluginManifest[]>;

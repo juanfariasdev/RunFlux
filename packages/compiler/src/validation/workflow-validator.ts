@@ -7,9 +7,14 @@ import { CompilationError, type IncompatibleNode, type PluginResolver, type Targ
  * cycles.
  */
 export class WorkflowValidator {
-  constructor(private readonly plugins: PluginResolver) {}
+  private readonly plugins: PluginResolver;
+
+  constructor(plugins: PluginResolver) {
+    this.plugins = plugins;
+  }
 
   validate(workflow: WorkflowDefinition, target: TargetPlatform): void {
+    this.checkShape(workflow);
     this.checkCompatibility(workflow, target);
     this.checkReferences(workflow);
     try {
@@ -24,6 +29,20 @@ export class WorkflowValidator {
     return workflow.nodes
       .filter((node) => !this.plugins(node.pluginId)?.manifest.supportedPlatforms.includes(target))
       .map((node) => ({ nodeId: node.id, pluginId: node.pluginId, targetPlatform: target }));
+  }
+
+  /** Requests arrive as JSON: the lists must be lists of objects before anything reads them. */
+  private checkShape(workflow: WorkflowDefinition): void {
+    const isObjectList = (value: unknown) => Array.isArray(value) && value.every((item) => item !== null && typeof item === 'object');
+    if (!isObjectList(workflow?.nodes) || !isObjectList(workflow?.connections)) {
+      throw new CompilationError('INVALID_WORKFLOW', 'The workflow must have a list of nodes and a list of connections');
+    }
+    for (const node of workflow.nodes) {
+      if (typeof node.pluginId !== 'string' || node.pluginId === '') throw new CompilationError('INVALID_WORKFLOW', `Node "${String(node.id)}" has no plugin`);
+      if (node.parameters !== undefined && (node.parameters === null || typeof node.parameters !== 'object' || Array.isArray(node.parameters))) {
+        throw new CompilationError('INVALID_WORKFLOW', `The parameters of node "${node.id}" must be an object`);
+      }
+    }
   }
 
   private checkCompatibility(workflow: WorkflowDefinition, target: TargetPlatform): void {

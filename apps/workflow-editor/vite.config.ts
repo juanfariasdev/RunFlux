@@ -1,11 +1,14 @@
 import react from '@vitejs/plugin-react';
 import { configDefaults, defineConfig } from 'vitest/config';
 import { runfluxPluginCatalogPlugin } from './vite-plugin-plugin-catalog.ts';
+import { PluginRegistryCache } from './vite-plugin-registry.ts';
 import { runfluxValidationPlugin } from './vite-plugin-validation-runtime.ts';
+
+const plugins = new PluginRegistryCache(['../../plugins']);
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), runfluxPluginCatalogPlugin(['../../plugins']), runfluxValidationPlugin(['../../plugins'])],
+  plugins: [react(), runfluxPluginCatalogPlugin(plugins), runfluxValidationPlugin(plugins)],
   server: {
     proxy: {
       '/api': {

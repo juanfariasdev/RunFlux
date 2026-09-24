@@ -17,5 +17,3 @@ export async function createZipPackage(files: Array<{ path: string; content: str
 
   return buffer;
 }
-
-export const createZipArchive = createZipPackage;

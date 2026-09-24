@@ -1,19 +1,11 @@
-import { defineNode, isRecord, NodeOutput, type Clock, type NodeHandler, type NodeInvocation, type ParameterReader } from '@runflux/runtime';
-
-export interface CronParameters {
-  readonly expression: string;
-  readonly timezone: string;
-}
-
-export function readCronParameters(parameters: ParameterReader): CronParameters {
-  return { expression: parameters.string('expression', '*/15 * * * *'), timezone: parameters.string('timezone', 'UTC') };
-}
+import { defineNode, isRecord, NodeOutput, type Clock, type NodeHandler, type NodeInvocation } from '@runflux/runtime';
+import { readCronSchedule, type CronSchedule } from './schedule.js';
 
 /** Starts a run on its schedule, stamping the payload with the firing time and the schedule. */
-export class CronTriggerNode implements NodeHandler<CronParameters> {
+export class CronTriggerNode implements NodeHandler<CronSchedule> {
   constructor(private readonly clock: Clock) {}
 
-  execute({ parameters, input }: NodeInvocation<CronParameters>): NodeOutput {
+  execute({ parameters, input }: NodeInvocation<CronSchedule>): NodeOutput {
     return NodeOutput.main({
       ...(isRecord(input) ? input : {}),
       triggeredAt: this.clock.now().toISOString(),
@@ -23,7 +15,7 @@ export class CronTriggerNode implements NodeHandler<CronParameters> {
   }
 }
 
-export default defineNode<CronParameters>({
-  parseParameters: readCronParameters,
+export default defineNode<CronSchedule>({
+  parseParameters: readCronSchedule,
   createHandler: ({ clock }) => new CronTriggerNode(clock),
 });

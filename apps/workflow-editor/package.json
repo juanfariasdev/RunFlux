@@ -15,6 +15,7 @@
     "@hookform/resolvers": "^3.9.0",
     "@runflux/expression-engine": "*",
     "@runflux/plugin-system": "*",
+    "@runflux/runtime": "*",
     "@runflux/validation-runtime": "*",
     "@runflux/workflow-model": "*",
     "@xyflow/react": "^12.3.5",

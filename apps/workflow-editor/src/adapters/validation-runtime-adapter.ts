@@ -5,6 +5,8 @@ export type { NodeResult, PluginExecutionMode };
 
 export interface ValidationRunOptions {
   mode: PluginExecutionMode;
+  /** Aborting it closes the request, which cancels the run on the server. */
+  signal?: AbortSignal;
 }
 
 /**
@@ -22,19 +24,16 @@ export interface ValidationRuntimeAdapter {
 
 export interface ValidationRunResult {
   status: 'success' | 'error' | 'partial';
+  /** Whether the run was stopped before every node ran. */
+  cancelled?: boolean;
   message?: string;
   nodeResults: NodeResult[];
 }
 
-/**
- * Default no-op implementation: reports success without actually running
- * anything. Lets `workflow-editor` be built and tested end-to-end before
- * `validation-runtime` exists. Kept around as a lightweight stand-in for
- * tests that don't care about real execution.
- */
+/** Reports success without running anything: a stand-in for tests that do not execute nodes. */
 export class NoopValidationRuntimeAdapter implements ValidationRuntimeAdapter {
   async run(_workflow: WorkflowDefinition, _options: ValidationRunOptions): Promise<ValidationRunResult> {
-    return { status: 'success', message: 'validation-runtime not yet implemented (no-op)', nodeResults: [] };
+    return { status: 'success', message: 'No-op validation: nothing was executed', nodeResults: [] };
   }
 
   async runNode(_workflow: WorkflowDefinition, nodeId: string, _options: ValidationRunOptions): Promise<NodeResult> {
@@ -44,13 +43,10 @@ export class NoopValidationRuntimeAdapter implements ValidationRuntimeAdapter {
 }
 
 /**
- * Browser-safe implementation (D-08, extended by a discovery made while
- * wiring this up): a plugin's `execute` is real JS, not JSON, so it can only
- * run in the Node process that actually loaded the plugin module — the same
- * constraint `HttpPluginCatalogAdapter` already works around for plugin
- * manifests (see plugin-catalog-adapter.ts). This adapter posts the
- * workflow to `vite-plugin-validation-runtime.ts`'s dev-only endpoint,
- * which runs it for real and returns the result as JSON.
+ * Runs workflows on the editor's dev server. Plugin runtimes can only run in the Node process that
+ * loaded them, so this adapter posts the workflow to the endpoint of
+ * `vite-plugin-validation-runtime.ts`, which runs it with @runflux/validation-runtime (the engine
+ * exported backends use) and answers with the result.
  */
 export class HttpValidationRuntimeAdapter implements ValidationRuntimeAdapter {
   private readonly url: string;
@@ -60,18 +56,19 @@ export class HttpValidationRuntimeAdapter implements ValidationRuntimeAdapter {
   }
 
   async run(workflow: WorkflowDefinition, options: ValidationRunOptions): Promise<ValidationRunResult> {
-    return this.post<ValidationRunResult>({ workflow, mode: options.mode });
+    return this.post<ValidationRunResult>({ workflow, mode: options.mode }, options.signal);
   }
 
   async runNode(workflow: WorkflowDefinition, nodeId: string, options: ValidationRunOptions, cachedResults: NodeResult[] = []): Promise<NodeResult> {
-    return this.post<NodeResult>({ workflow, nodeId, mode: options.mode, cachedResults });
+    return this.post<NodeResult>({ workflow, nodeId, mode: options.mode, cachedResults }, options.signal);
   }
 
-  private async post<T>(body: Record<string, unknown>): Promise<T> {
+  private async post<T>(body: Record<string, unknown>, signal?: AbortSignal): Promise<T> {
     const response = await fetch(this.url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      signal,
     });
     if (!response.ok) {
       const payload = (await response.json().catch(() => ({}))) as { error?: string };

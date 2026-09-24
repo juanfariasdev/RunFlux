@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { defineNode, NodeOutput } from '../../contracts/node.js';
 import type { Clock, Logger } from '../../contracts/services.js';
-import { ServiceKey, ServiceRegistry } from '../../services/service-registry.js';
+import { ServiceKey, ServiceRegistry, type ServiceLookup } from '../../services/service-registry.js';
 import { WorkflowDocumentError } from '../../workflow/executable-workflow.js';
 import { CyclicWorkflowError } from '../../workflow/workflow-graph.js';
 import { StaticNodeCatalog } from '../node-catalog.js';
-import { WorkflowEngine, type WorkflowEngineOptions } from '../workflow-engine.js';
+import { EngineDisposedError, WorkflowEngine, type WorkflowEngineOptions } from '../workflow-engine.js';
 import { definitions, workflow } from './fixtures.js';
 
 const catalog = new StaticNodeCatalog(definitions);
@@ -69,14 +69,12 @@ describe('WorkflowEngine.run', () => {
     expect(execution.toResponse()).toEqual({ success: false, result: null, nodeOutputs: { start: undefined, other: 'ok' }, error: 'database down' });
   });
 
-  it('reports "error" when the first node to finish failed', async () => {
-    const execution = await engine(workflow([{ id: 'start', pluginId: 'fail' }], [])).run();
-    expect(execution.status).toBe('success');
-    const failing = await engine(workflow([{ id: 'start', pluginId: 'start' }, { id: 'x', pluginId: 'fail' }], [['start', 'x']])).run();
-    expect(failing.status).toBe('partial');
+  it('reports "error" when the first node to finish failed and "partial" when a later one did', async () => {
     const first = await new WorkflowEngine(workflow([{ id: 'start', pluginId: 'start' }], []), new StaticNodeCatalog({ start: definitions.fail })).run();
     expect(first.status).toBe('error');
     expect(first.error).toBe('boom');
+    const later = await engine(workflow([{ id: 'start', pluginId: 'start' }, { id: 'x', pluginId: 'fail' }], [['start', 'x']])).run();
+    expect(later.status).toBe('partial');
   });
 
   it('runs only nodes reachable from the started triggers', async () => {
@@ -106,7 +104,24 @@ describe('WorkflowEngine.run', () => {
       }) }),
     ).run();
     expect(execution.record('fires')?.output).toBe('fired');
-    expect(execution.record('waits')?.error).toBe('cancelled');
+    expect(execution.record('waits')).toBeUndefined();
+    expect(execution.status).toBe('success');
+  });
+
+  it('runs a merge of racing triggers with the trigger that fired', async () => {
+    const racing = defineNode({
+      parseParameters: (parameters) => ({ fires: parameters.boolean('fires', false) }),
+      createHandler: () => ({
+        execute: ({ parameters, context }) => parameters.fires
+          ? NodeOutput.main('fired')
+          : new Promise<NodeOutput>((_resolve, reject) => context.signal.addEventListener('abort', () => reject(new Error('cancelled')))),
+      }),
+    });
+    const execution = await new WorkflowEngine(
+      workflow([{ id: 'a', pluginId: 'start', parameters: { fires: true } }, { id: 'b', pluginId: 'start' }, { id: 'merge', pluginId: 'emit' }], [['a', 'merge'], ['b', 'merge']]),
+      new StaticNodeCatalog({ start: racing, emit: definitions.emit }),
+    ).run();
+    expect(execution.toResponse()).toEqual({ success: true, result: 'fired', nodeOutputs: { a: 'fired', merge: 'fired' } });
   });
 
   it('never cancels triggers of other plugins', async () => {
@@ -163,6 +178,78 @@ describe('WorkflowEngine.run', () => {
   });
 });
 
+describe('WorkflowEngine $node', () => {
+  it('holds the outputs of ancestors only, so parallel branches never see each other', async () => {
+    const execution = await engine(workflow(
+      [{ id: 'start', pluginId: 'start' }, { id: 'first', pluginId: 'emit', parameters: { value: 'ancestor' } }, { id: 'sibling', pluginId: 'emit', parameters: { value: 'sibling' } }, { id: 'inspect', pluginId: 'inspect', parameters: { expression: '{{ $node.sibling.json }}' } }],
+      [['start', 'first'], ['start', 'sibling'], ['first', 'inspect']],
+    )).run();
+    expect(execution.record('inspect')?.output).toMatchObject({ previous: 'ancestor', parameters: { expression: undefined } });
+  });
+
+  it('lets a node id win over a label equal to it, and keeps __proto__ an ordinary name', async () => {
+    const execution = await engine(workflow(
+      [{ id: 'start', pluginId: 'start', label: 'first' }, { id: 'first', pluginId: 'emit', parameters: { value: 'by id' }, label: '__proto__' }, { id: 'inspect', pluginId: 'inspect', parameters: { expression: '{{ $node["__proto__"].json }}' } }],
+      [['start', 'first'], ['first', 'inspect']],
+    )).run({ payload: 'payload' });
+    expect(execution.record('inspect')?.output).toMatchObject({ previous: 'by id', parameters: { expression: 'by id' } });
+  });
+});
+
+describe('WorkflowEngine cancellation and lifecycle', () => {
+  const blocking = () => {
+    let release!: () => void;
+    const started = new Promise<void>((resolve) => { release = resolve; });
+    let unblock!: () => void;
+    const definition = defineNode({
+      parseParameters: () => ({}),
+      createHandler: () => ({
+        execute: ({ context }) => new Promise<NodeOutput>((resolve) => {
+          release();
+          unblock = () => resolve(NodeOutput.main('done'));
+          context.signal.addEventListener('abort', () => resolve(NodeOutput.main('aborted')));
+        }),
+      }),
+    });
+    return { definition, started, unblock: () => unblock() };
+  };
+
+  it('stops starting nodes once the run is cancelled and passes the signal to running ones', async () => {
+    const node = blocking();
+    const controller = new AbortController();
+    const running = new WorkflowEngine(
+      workflow([{ id: 'start', pluginId: 'start' }, { id: 'slow', pluginId: 'slow' }, { id: 'after', pluginId: 'emit' }], [['start', 'slow'], ['slow', 'after']]),
+      new StaticNodeCatalog({ start: definitions.start, slow: node.definition, emit: definitions.emit }),
+    ).run({ signal: controller.signal });
+    await node.started;
+    controller.abort();
+    const execution = await running;
+    expect(execution.record('slow')?.output).toBe('aborted');
+    expect(execution.record('after')).toBeUndefined();
+    expect(execution.cancelled).toBe(true);
+    expect(execution.toResponse()).toMatchObject({ success: false, error: 'The workflow run was cancelled' });
+  });
+
+  it('waits for runs in progress before disposing, then refuses new runs', async () => {
+    const node = blocking();
+    const dispose = vi.fn(async () => {});
+    const run = new WorkflowEngine(workflow([{ id: 'slow', pluginId: 'start' }], []), new StaticNodeCatalog({
+      start: { ...node.definition, createHandler: (services) => ({ ...node.definition.createHandler(services), dispose }) },
+    }));
+    const running = run.run();
+    await node.started;
+    const disposed = run.dispose();
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(dispose).not.toHaveBeenCalled();
+    node.unblock();
+    expect((await running).record('slow')?.output).toBe('done');
+    await disposed;
+    expect(dispose).toHaveBeenCalledOnce();
+    await expect(run.run()).rejects.toThrow(EngineDisposedError);
+    await expect(run.runNode('slow')).rejects.toThrow('The workflow engine was disposed');
+  });
+});
+
 describe('WorkflowEngine.runNode', () => {
   const document = workflow(
     [{ id: 'first', pluginId: 'start', label: 'First' }, { id: 'second', pluginId: 'emit' }, { id: 'inspect', pluginId: 'inspect' }],
@@ -171,13 +258,19 @@ describe('WorkflowEngine.runNode', () => {
   const record = (nodeId: string, output: unknown) => ({ nodeId, input: null, output, activeOutput: 'main', error: null, startedAt: 't', finishedAt: 't' });
 
   it('uses the outputs of earlier records as input and $node', async () => {
-    const result = await engine(document).runNode('inspect', [record('first', 'a'), record('second', 'b')]);
+    const result = await engine(document).runNode('inspect', { previous: [record('first', 'a'), record('second', 'b')] });
     expect(result.output).toMatchObject({ input: ['a', 'b'], previous: 'a', labelled: 'a' });
   });
 
   it('passes null for parents without a record and undefined to nodes without parents', async () => {
-    expect((await engine(document).runNode('inspect', [record('second', 'b')])).input).toEqual([null, 'b']);
+    expect((await engine(document).runNode('inspect', { previous: [record('second', 'b')] })).input).toEqual([null, 'b']);
     expect((await engine(document).runNode('first')).input).toBeUndefined();
+  });
+
+  it('ignores failed records', async () => {
+    const failed = { ...record('first', 'stale'), error: 'boom' };
+    const result = await engine(document).runNode('inspect', { previous: [failed, record('second', 'b')] });
+    expect(result.output).toMatchObject({ input: [null, 'b'], previous: undefined });
   });
 
   it('rejects unknown nodes', async () => {
@@ -190,7 +283,7 @@ describe('WorkflowEngine services and lifecycle', () => {
     const logger: Logger = { info: vi.fn(), error: vi.fn() };
     const clock: Clock = { now: () => new Date('2026-01-01T00:00:00.000Z') };
     const key = new ServiceKey<string>('greeting');
-    const createHandler = vi.fn(({ logger, extensions }: { logger: Logger; extensions: ServiceRegistry }) => ({
+    const createHandler = vi.fn(({ logger, extensions }: { logger: Logger; extensions: ServiceLookup }) => ({
       execute: () => {
         logger.info('ran');
         return NodeOutput.main(extensions.get(key));
@@ -224,8 +317,7 @@ describe('WorkflowEngine services and lifecycle', () => {
       start: defineNode({ parseParameters: () => ({}), createHandler: () => ({ execute: () => NodeOutput.main(1), dispose }) }),
     }));
     await run.run();
-    await run.dispose();
-    await run.dispose();
+    await Promise.all([run.dispose(), run.dispose()]);
     expect(dispose).toHaveBeenCalledOnce();
   });
 });

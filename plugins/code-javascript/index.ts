@@ -16,6 +16,7 @@ export const manifest: PluginModule['manifest'] = {
       type: 'string',
       required: true,
       expressions: false,
+      language: 'javascript',
       default: `// JavaScript Code Node
 // Available variables: $json (input payload), $node (earlier nodes), $env (environment variables)
 return {

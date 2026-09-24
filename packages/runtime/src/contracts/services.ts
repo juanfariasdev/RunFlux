@@ -1,5 +1,5 @@
 import type { HttpClient } from '../http/http-client.js';
-import type { ServiceRegistry } from '../services/service-registry.js';
+import type { ServiceLookup } from '../services/service-registry.js';
 
 export interface Logger {
   info(message: string, ...details: unknown[]): void;
@@ -18,12 +18,15 @@ export interface TriggerEventSource {
   waitFor(channel: string, signal: AbortSignal): Promise<unknown>;
 }
 
-/** Everything a node handler may depend on. Hosts and tests replace any of them. */
+/**
+ * Everything a node handler may depend on. Every member is an interface, so hosts and tests can
+ * replace any of them and plugins built against another copy of this package still type-check.
+ */
 export interface RuntimeServices {
   readonly http: HttpClient;
   readonly logger: Logger;
   readonly clock: Clock;
   readonly triggerEvents?: TriggerEventSource;
   /** Plugin-specific services, e.g. a database client replaced in tests. */
-  readonly extensions: ServiceRegistry;
+  readonly extensions: ServiceLookup;
 }

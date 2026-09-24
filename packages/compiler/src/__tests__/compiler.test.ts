@@ -52,11 +52,14 @@ describe('WorkflowCompiler', () => {
 
   it.each<[string, Partial<CompilationRequest>, string]>([
     ['incompatible nodes', { targetPlatform: 'aws', workflow: workflow([node('a', 'localOnly')]) }, 'INCOMPATIBLE_NODES'],
-    ['an unsupported target', { targetPlatform: 'gcp' as never }, 'INCOMPATIBLE_NODES'],
+    ['an unsupported target', { targetPlatform: 'gcp' as never }, 'UNSUPPORTED_TARGET'],
+    ['a workflow without node list', { workflow: { ...workflow([]), nodes: 'none' as never } }, 'INVALID_WORKFLOW'],
+    ['a node with list parameters', { workflow: workflow([{ ...node('a', 'echo'), parameters: [] as never }]) }, 'INVALID_WORKFLOW'],
     ['cycles', { workflow: workflow([node('a', 'echo'), node('b', 'echo')], [edge('a', 'b'), edge('b', 'a')]) }, 'CYCLE_DETECTED'],
     ['invalid references', { workflow: workflow([node('a', 'echo')], [edge('a', 'ghost')]) }, 'INVALID_WORKFLOW'],
     ['invalid trigger configuration', { workflow: workflow([node('a', 'failingDeployment')]) }, 'INVALID_WORKFLOW'],
-    ['schedules AWS cannot express', { targetPlatform: 'aws', workflow: workflow([node('a', 'schedule', { expression: '0 0 * * 7' })]) }, 'INVALID_WORKFLOW'],
+    ['schedules AWS cannot express', { targetPlatform: 'aws', workflow: workflow([node('a', 'schedule', { expression: '0 0 1 * 1' })]) }, 'INVALID_WORKFLOW'],
+    ['plugins contradicting the hosts dependencies', { workflow: workflow([node('a', 'expressPinned')]) }, 'INVALID_WORKFLOW'],
     ['runtimes that cannot be bundled', { workflow: workflow([node('a', 'broken')]) }, 'GENERATOR_ERROR'],
     ['runtimes importing editor packages', { workflow: workflow([node('a', 'editorOnly')]) }, 'GENERATOR_ERROR'],
   ])('reports %s as a failed result', async (_case, overrides, code) => {
@@ -68,7 +71,7 @@ describe('WorkflowCompiler', () => {
       platform: 'local',
       entrypoint: 'custom.txt',
       runtimeEntries: [],
-      hostDependencies: {},
+      hostPackages: [],
       buildProfile: () => BuildProfile.server(['custom.txt']),
       files: async () => [{ path: 'custom.txt', content: 'custom', type: 'asset' }],
     };

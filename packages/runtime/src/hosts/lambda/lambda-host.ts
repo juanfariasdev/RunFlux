@@ -1,4 +1,4 @@
-import type { WorkflowEngine, RunRequest } from '../../engine/workflow-engine.js';
+import type { RunRequest, WorkflowEngine } from '../../engine/workflow-engine.js';
 import type { WebhookRequest } from '../../workflow/triggers.js';
 import { HttpTriggerAuthenticator } from '../http/http-trigger-authenticator.js';
 import { HttpTriggerRouter } from '../http/http-trigger-router.js';
@@ -28,19 +28,17 @@ export interface LambdaHostOptions {
 class BadRequest extends Error {}
 
 /**
- * Runs a workflow inside AWS Lambda. HTTP requests are routed to their trigger like the Express
- * host does; other invocations (schedules) start the trigger named by `runfluxTriggerId`.
+ * Runs a workflow inside AWS Lambda. Function URL requests are routed and authenticated like the
+ * Express host does; a workflow without HTTP triggers answers every request with 404, since the
+ * function URL is public. Scheduled invocations start the trigger named by `runfluxTriggerId`; any
+ * other event is rejected.
  */
 export class LambdaHost {
+  private readonly engine: WorkflowEngine;
   private readonly router: HttpTriggerRouter;
   private readonly authenticator: HttpTriggerAuthenticator;
 
-  private readonly engine: WorkflowEngine;
-
-  constructor(
-    engine: WorkflowEngine,
-    options: LambdaHostOptions = {},
-  ) {
+  constructor(engine: WorkflowEngine, options: LambdaHostOptions = {}) {
     this.engine = engine;
     this.router = new HttpTriggerRouter(engine.workflow.triggers.http);
     this.authenticator = options.authenticator ?? new HttpTriggerAuthenticator();
@@ -49,7 +47,7 @@ export class LambdaHost {
   /** The Lambda handler, bound to this host. */
   readonly handler = async (event: LambdaEvent): Promise<LambdaResponse> => {
     try {
-      const request = isHttp(event) ? this.httpRequest(event) : { payload: event, triggerId: event.runfluxTriggerId };
+      const request = isHttp(event) ? this.httpRequest(event) : scheduledRequest(event);
       if ('statusCode' in request) return request;
       const execution = await this.engine.run(request);
       return respond(execution.succeeded ? 200 : 500, execution.toResponse());
@@ -60,9 +58,8 @@ export class LambdaHost {
   };
 
   private httpRequest(event: LambdaEvent): RunRequest | LambdaResponse {
-    if (this.engine.workflow.triggers.http.length === 0) return { payload: parseJson(bodyText(event) || '{}') };
     const match = this.router.match(event.rawPath ?? '/', event.requestContext?.http?.method ?? 'POST');
-    if (match.kind === 'not-found') return respond(404, { error: 'Webhook not found' });
+    if (match.kind === 'not-found') return respond(404, { error: 'Not found' });
     if (match.kind === 'method-not-allowed') return respond(405, { error: 'Method not allowed' });
     const { trigger } = match;
     const headers = Object.fromEntries(Object.entries(event.headers ?? {}).map(([name, value]) => [name.toLowerCase(), value]));
@@ -70,11 +67,16 @@ export class LambdaHost {
     const text = bodyText(event);
     const payload: WebhookRequest = {
       body: trigger.rawBody ? text : text ? parseJson(text) : {},
-      headers,
+      headers: this.authenticator.visibleHeaders(trigger, headers),
       query: event.queryStringParameters ?? {},
     };
     return { payload, triggerId: trigger.nodeId };
   }
+}
+
+function scheduledRequest(event: LambdaEvent): RunRequest | LambdaResponse {
+  if (!event.runfluxTriggerId) return respond(400, { error: 'Unsupported event: expected a function URL request or a runfluxTriggerId' });
+  return { payload: event, triggerId: event.runfluxTriggerId };
 }
 
 function isHttp(event: LambdaEvent): boolean {

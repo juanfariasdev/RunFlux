@@ -2,7 +2,8 @@ import { validateManifest } from '@runflux/plugin-system/manifest-validator';
 import { executeNode } from '@runflux/runtime/testing';
 import { describe, expect, it } from 'vitest';
 import { manifest } from '../index';
-import condition, { RULE_OUTPUTS } from '../runtime';
+import { RULE_OUTPUTS } from '../outputs';
+import condition from '../runtime';
 
 const run = (parameters: Record<string, unknown>, input: unknown = {}) =>
   executeNode(condition, { parameters, input, outputs: manifest.outputs, pluginId: 'condition-switch' });

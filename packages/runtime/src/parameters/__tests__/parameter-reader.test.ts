@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { ParameterError, ParameterReader } from '../parameter-reader.js';
+import { ObjectParameterReader, ParameterError, type ParameterReader } from '../parameter-reader.js';
 
-const reader = (values: Record<string, unknown>) => new ParameterReader(values, 'example');
+const reader = (values: Record<string, unknown>) => new ObjectParameterReader(values, 'example');
 
 describe('ParameterReader', () => {
   it.each([undefined, null, '', '   '])('treats %j as missing and uses the default', (value) => {

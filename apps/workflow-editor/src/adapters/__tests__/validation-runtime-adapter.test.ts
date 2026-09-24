@@ -8,7 +8,7 @@ describe('NoopValidationRuntimeAdapter', () => {
   it('run() always resolves with status "success" and an empty nodeResults', async () => {
     const adapter = new NoopValidationRuntimeAdapter();
     const result = await adapter.run(workflow, { mode: 'sandbox' });
-    expect(result).toEqual({ status: 'success', message: 'validation-runtime not yet implemented (no-op)', nodeResults: [] });
+    expect(result).toEqual({ status: 'success', message: 'No-op validation: nothing was executed', nodeResults: [] });
   });
 
   it('runNode() always resolves with a result carrying no error', async () => {
@@ -63,6 +63,15 @@ describe('HttpValidationRuntimeAdapter (browser-safe — posts to vite-plugin-va
     await new HttpValidationRuntimeAdapter().runNode(workflow, 'n1', { mode: 'sandbox' }, [upstream]);
 
     expect(JSON.parse(vi.mocked(fetch).mock.calls[0][1]!.body as string).cachedResults).toEqual([upstream]);
+  });
+
+  it('passes the abort signal to the request, so aborting cancels the run on the server', async () => {
+    vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => ({ status: 'success', nodeResults: [] }) } as Response);
+    const controller = new AbortController();
+    const adapter = new HttpValidationRuntimeAdapter();
+    await adapter.run(workflow, { mode: 'sandbox', signal: controller.signal });
+    await adapter.runNode(workflow, 'n1', { mode: 'sandbox', signal: controller.signal });
+    expect(vi.mocked(fetch).mock.calls.map(([, init]) => init?.signal)).toEqual([controller.signal, controller.signal]);
   });
 
   it('accepts a custom URL', async () => {

@@ -1,23 +1,24 @@
 import type { ExecutableNode } from '../workflow/executable-workflow.js';
 import type { WorkflowGraph } from '../workflow/workflow-graph.js';
 import type { NodeExecutor } from './node-executor.js';
-import { addNodeOutput, type NodeOutputsById, type NodeRecord } from './node-record.js';
-
-const NEVER_ABORTED = new AbortController().signal;
+import { nodeOutputsOf, type NodeRecord } from './node-record.js';
+import { anySignal } from './signals.js';
 
 /**
  * The state of one workflow run. Every node waits only for its own parents, so independent
  * branches run concurrently. A node runs when at least one parent activated the connection to it;
  * it is skipped when a parent failed or none did. With no parents it receives the run's payload,
- * with one its parent's output, with several the list of the active parents' outputs.
+ * with one its parent's output, with several the list of the active parents' outputs. `$node`
+ * holds the outputs of the node's ancestors only, so it never depends on the timing of parallel
+ * branches.
  *
- * Triggers of the same plugin race each other: once one settles, the others' signal aborts, so a
- * run started for several webhooks finishes when any one of them is called.
+ * Triggers of the same plugin race each other: once one settles, the others are cancelled and left
+ * out of the run, so a run started for several webhooks finishes when any one of them is called.
+ * Once the run's own signal aborts, no further node starts.
  */
 export class WorkflowRun {
   private readonly records = new Map<string, NodeRecord>();
   private readonly pending = new Map<string, Promise<void>>();
-  private readonly outputs: NodeOutputsById = {};
   private readonly races = new Map<string, AbortController>();
   private readonly reachable: ReadonlySet<string>;
 
@@ -25,17 +26,14 @@ export class WorkflowRun {
   private readonly executor: NodeExecutor;
   private readonly triggers: readonly ExecutableNode[];
   private readonly payload: unknown;
+  private readonly signal: AbortSignal | undefined;
 
-  constructor(
-    graph: WorkflowGraph,
-    executor: NodeExecutor,
-    triggers: readonly ExecutableNode[],
-    payload: unknown,
-  ) {
+  constructor(graph: WorkflowGraph, executor: NodeExecutor, triggers: readonly ExecutableNode[], payload: unknown, signal?: AbortSignal) {
     this.graph = graph;
     this.executor = executor;
     this.triggers = triggers;
     this.payload = payload;
+    this.signal = signal;
     this.reachable = graph.reachableFrom(triggers.map((trigger) => trigger.id));
   }
 
@@ -73,6 +71,7 @@ export class WorkflowRun {
   private async runOnce(nodeId: string): Promise<void> {
     const parents = this.graph.incoming(nodeId);
     await Promise.all(parents.map((connection) => this.run(connection.source)));
+    if (this.signal?.aborted) return;
     if (parents.some((connection) => this.failed(connection.source))) return;
     const active = parents.filter((connection) => this.records.get(connection.source)?.activeOutput === connection.sourceOutput);
     if (parents.length > 0 && active.length === 0) return;
@@ -80,10 +79,16 @@ export class WorkflowRun {
     const node = this.graph.node(nodeId);
     const outputs = active.map((connection) => this.records.get(connection.source)!.output);
     const input = parents.length === 0 ? this.payload : outputs.length === 1 ? outputs[0] : outputs;
-    const signal = this.races.get(nodeId)?.signal ?? NEVER_ABORTED;
-    const record = await this.executor.execute(node, input, { ...this.outputs }, signal);
+    const race = this.races.get(nodeId)?.signal;
+    const record = await this.executor.execute(node, input, this.ancestorOutputs(nodeId), anySignal([this.signal, race]));
+    // A trigger that lost its race did not start this run: leave it out instead of failing it.
+    if (record.error !== null && race?.aborted) return;
     this.records.set(nodeId, record);
-    if (record.error === null) addNodeOutput(this.outputs, record, node.label);
+  }
+
+  private ancestorOutputs(nodeId: string) {
+    const ancestors = [...this.graph.ancestors(nodeId)].flatMap((id) => this.records.get(id) ?? []);
+    return nodeOutputsOf(ancestors, (id) => this.graph.node(id).label);
   }
 
   private failed(nodeId: string): boolean {

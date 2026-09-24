@@ -2,6 +2,10 @@ import request from 'supertest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ExpressHost } from '../express/express-host.js';
 import { HttpTriggerAuthenticator } from '../http/http-trigger-authenticator.js';
+import { defineNode, NodeOutput } from '../../contracts/node.js';
+import { StaticNodeCatalog } from '../../engine/node-catalog.js';
+import { WorkflowEngine } from '../../engine/workflow-engine.js';
+import { ExecutableWorkflowBuilder } from '../../workflow/workflow-builder.js';
 import { hostEngine, httpTrigger } from './fixtures.js';
 
 afterEach(() => vi.unstubAllEnvs());
@@ -65,7 +69,7 @@ describe('ExpressHost', () => {
     expect(response.body).toMatchObject({ success: false, error: 'node failed' });
   });
 
-  it('listens on a port and closes, releasing the engine', async () => {
+  it('listens on a port and closes without disposing the engine it does not own', async () => {
     const engine = hostEngine();
     const dispose = vi.spyOn(engine, 'dispose');
     const host = new ExpressHost(engine);
@@ -75,6 +79,45 @@ describe('ExpressHost', () => {
     expect((await fetch(`http://127.0.0.1:${port}/health`)).status).toBe(200);
     await host.close();
     expect(server.listening).toBe(false);
-    expect(dispose).toHaveBeenCalledOnce();
+    expect(dispose).not.toHaveBeenCalled();
+  });
+
+  it('never passes the secret header to the workflow', async () => {
+    vi.stubEnv('ORDERS_KEY', 'correct');
+    const response = await request(new ExpressHost(hostEngine({ http: [secured] })).app).post('/orders').set('X-Orders-Key', 'correct').set('X-Other', 'kept').send({});
+    expect(response.body.result.headers).toMatchObject({ 'x-other': 'kept' });
+    expect(response.body.result.headers['x-orders-key']).toBeUndefined();
+  });
+
+  it('parses any body as JSON like the Lambda host, answers 404 as JSON and HEAD like GET', async () => {
+    const app = new ExpressHost(hostEngine({ http: [httpTrigger('orders'), httpTrigger('status', { method: 'GET' })] })).app;
+    expect((await request(app).post('/orders').set('Content-Type', 'text/plain').send('{"id":1}')).body.result.body).toEqual({ id: 1 });
+    expect((await request(app).post('/orders').set('Content-Type', 'text/plain').send('not json')).status).toBe(400);
+    const missing = await request(app).get('/missing');
+    expect(missing.status).toBe(404);
+    expect(missing.body).toEqual({ error: 'Not found' });
+    expect((await request(app).head('/status')).status).toBe(200);
+    expect((await request(app).post('//orders/').send({})).status).toBe(200);
+  });
+
+  it('cancels the run of a client that disconnects', async () => {
+    let aborted!: () => void;
+    const sawAbort = new Promise<void>((resolve) => { aborted = resolve; });
+    const engine = new WorkflowEngine(new ExecutableWorkflowBuilder(() => ({ category: 'trigger', parameters: [] })).build(
+      { id: 'w', name: 'W', nodes: [{ id: 'hook', pluginId: 'waiting' }], connections: [] },
+      { http: [httpTrigger('hook')], schedules: [] },
+    ), new StaticNodeCatalog({ waiting: defineNode({ parseParameters: () => ({}), createHandler: () => ({
+      execute: ({ context }) => new Promise<NodeOutput>((resolve) => context.signal.addEventListener('abort', () => { aborted(); resolve(NodeOutput.main('aborted')); })),
+    }) }) }));
+    const host = new ExpressHost(engine);
+    const server = await host.listen(0);
+    const { port } = server.address() as { port: number };
+    const client = new AbortController();
+    const call = fetch(`http://127.0.0.1:${port}/hook`, { method: 'POST', body: '{}', signal: client.signal }).catch(() => undefined);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    client.abort();
+    await call;
+    await sawAbort;
+    await host.close();
   });
 });

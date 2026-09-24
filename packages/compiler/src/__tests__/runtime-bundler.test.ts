@@ -70,6 +70,43 @@ describe('RuntimeBundler', () => {
       .rejects.toThrow(/missing-module\.js/);
   });
 
+  describe('with a copy of the runtime package', () => {
+    const runtimePackage = path.resolve(new URL('../../../runtime', import.meta.url).pathname);
+    async function copyRuntime(): Promise<string> {
+      const copy = await fs.mkdtemp(path.join(os.tmpdir(), 'runflux-runtime-package-'));
+      directories.push(copy);
+      for (const entry of ['src', 'dist', 'package.json', 'tsconfig.tsbuildinfo']) {
+        await fs.cp(path.join(runtimePackage, entry), path.join(copy, entry), { recursive: true, preserveTimestamps: true });
+      }
+      return copy;
+    }
+    const typesOf = async (runtime: string) => (await new RuntimeBundler(runtime).bundle({ entries: [RUNTIME_ENTRIES.core], plugins: [], external: [] }))
+      .filter((file) => file.path.includes('/types/'))
+      .map((file) => file.path.slice(`${VENDOR_DIRECTORY}/types/`.length));
+
+    it('ships no declaration left over from a source that was deleted', async () => {
+      const runtime = await copyRuntime();
+      await fs.writeFile(path.join(runtime, 'dist', 'removed-module.d.ts'), 'export declare const gone: true;\n');
+      const types = await typesOf(runtime);
+      expect(types).toContain('index.d.ts');
+      expect(types).not.toContain('removed-module.d.ts');
+    });
+
+    it('asks for a build when a declaration is older than its source', async () => {
+      const runtime = await copyRuntime();
+      const later = new Date(Date.now() + 60_000);
+      await fs.utimes(path.join(runtime, 'src', 'values.ts'), later, later);
+      await expect(typesOf(runtime)).rejects.toThrow('Runtime type declarations are older than src/values.ts; run "npm run build:node -w @runflux/runtime"');
+    });
+
+    it('reads the dependency versions the runtime declares', async () => {
+      const runtime = await copyRuntime();
+      const manifest = JSON.parse(await fs.readFile(path.join(runtime, 'package.json'), 'utf8'));
+      expect(new RuntimeBundler(runtime).dependencyVersions(['express', 'node-cron'])).toEqual({ express: manifest.dependencies.express, 'node-cron': manifest.dependencies['node-cron'] });
+      expect(() => new RuntimeBundler(runtime).dependencyVersions(['left-pad'])).toThrow('@runflux/runtime does not declare the dependency "left-pad"');
+    });
+  });
+
   it('asks for a build when the type declarations are missing', async () => {
     const empty = await fs.mkdtemp(path.join(os.tmpdir(), 'runflux-runtime-package-'));
     directories.push(empty);

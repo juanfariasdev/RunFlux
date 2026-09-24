@@ -3,6 +3,7 @@ import request from 'supertest';
 import { resolve } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import { WebhookTestHub } from '@runflux/plugin-system/webhook-test-hub';
+import { PluginRegistryCache } from '../../apps/workflow-editor/vite-plugin-registry';
 import { runfluxValidationPlugin } from '../../apps/workflow-editor/vite-plugin-validation-runtime';
 import { createServer } from '../../apps/project-server/src/server';
 
@@ -12,7 +13,7 @@ afterEach(() => {
 });
 
 it.each(['editor', 'server'])('%s delivers test webhooks only to the trigger waiting on that path', async (target) => {
-  const vite = target === 'editor' ? await createViteServer({ configFile: false, server: { middlewareMode: true }, plugins: [runfluxValidationPlugin([])] }) : undefined;
+  const vite = target === 'editor' ? await createViteServer({ configFile: false, server: { middlewareMode: true }, plugins: [runfluxValidationPlugin(new PluginRegistryCache([]))] }) : undefined;
   const app = vite?.middlewares ?? createServer();
   if (target === 'server') vi.spyOn(process, 'cwd').mockReturnValue(resolve('apps/project-server'));
   const waiting = WebhookTestHub.shared().waitFor('/orders', new AbortController().signal);
@@ -28,7 +29,7 @@ it.each(['editor', 'server'])('%s delivers test webhooks only to the trigger wai
 });
 
 it('lets the editor cancel every waiting test webhook', async () => {
-  const vite = await createViteServer({ configFile: false, server: { middlewareMode: true }, plugins: [runfluxValidationPlugin([])] });
+  const vite = await createViteServer({ configFile: false, server: { middlewareMode: true }, plugins: [runfluxValidationPlugin(new PluginRegistryCache([]))] });
   const waiting = WebhookTestHub.shared().waitFor('/orders', new AbortController().signal);
   const observed = waiting.catch((error: Error) => error.message);
   try {
@@ -40,7 +41,7 @@ it('lets the editor cancel every waiting test webhook', async () => {
 });
 
 it('runs a whole workflow whose webhook waits for the test request (editor)', async () => {
-  const vite = await createViteServer({ configFile: false, server: { middlewareMode: true }, plugins: [runfluxValidationPlugin([resolve('plugins')])] });
+  const vite = await createViteServer({ configFile: false, server: { middlewareMode: true }, plugins: [runfluxValidationPlugin(new PluginRegistryCache([resolve('plugins')]))] });
   const definition = {
     id: 'wf', name: 'Waiting webhook', connections: [{ sourceNodeId: 'hook', sourceOutput: 'main', targetNodeId: 'total', targetInput: 'main' }],
     nodes: [

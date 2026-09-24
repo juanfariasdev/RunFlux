@@ -56,13 +56,13 @@ describe('database-query', () => {
 
   it('never queries another database when its connection variable is missing', async () => {
     vi.stubEnv('DATABASE_URL', 'postgres://unrelated/database');
-    const run = await runWorkflow(lookup({ connectionEnvVar: 'MISSING_CONTRACT_URL' }), await editorRegistry(), { mode: 'production' });
+    const run = await runWorkflow(lookup({ query: 'SELECT 1', connectionEnvVar: 'MISSING_CONTRACT_URL' }), await editorRegistry(), { mode: 'production' });
     expect(run.nodeResults.find((result) => result.nodeId === 'db')?.error).toBe('database-query: environment variable "MISSING_CONTRACT_URL" is required');
     expect(driver.query).not.toHaveBeenCalled();
   });
 
   it('rejects unsupported engines before connecting', async () => {
-    const run = await runWorkflow(lookup({ databaseType: 'sqlite' }), await editorRegistry(), { mode: 'production' });
+    const run = await runWorkflow(lookup({ query: 'SELECT 1', databaseType: 'sqlite' }), await editorRegistry(), { mode: 'production' });
     expect(run.nodeResults.find((result) => result.nodeId === 'db')?.error).toBe('database-query: parameter "databaseType" must be one of "postgres"');
   });
 });

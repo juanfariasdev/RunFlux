@@ -32,7 +32,10 @@ export class BuildProfile {
     return new BuildProfile(manifest.build.entryPoints, manifest.build.bundleDependencies);
   }
 
-  /** The esbuild command of the project's `build` script. */
+  /**
+   * The esbuild command of the project's `build` script. Like the programmatic build, it takes the
+   * runtime from `vendor/`, whether or not `npm install` linked it into node_modules.
+   */
   command(): string {
     return ['esbuild', ...this.entryPoints, ...this.flags()].join(' ');
   }
@@ -71,6 +74,7 @@ export class BuildProfile {
       `--format=${options.format}`,
       ...(options.splitting ? ['--splitting'] : []),
       ...(options.packages === 'external' ? ['--packages=external'] : []),
+      `--alias:@runflux/runtime=./${VENDOR_DIRECTORY}`,
       '--out-extension:.js=.mjs',
       `--platform=${options.platform}`,
       `--target=${options.target}`,

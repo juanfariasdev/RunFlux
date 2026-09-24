@@ -16,7 +16,6 @@ export function CompilerModal({ isOpen, onClose, onCompile, projectName }: Compi
   const workflow = useWorkflowStore((s) => s.workflow);
 
   const [targetPlatform, setTargetPlatform] = useState<TargetPlatform>('local');
-  const [skipTests, setSkipTests] = useState(true);
   const [status, setStatus] = useState<'idle' | 'compiling' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [errorDetails, setErrorDetails] = useState<any[] | null>(null);
@@ -47,7 +46,6 @@ export function CompilerModal({ isOpen, onClose, onCompile, projectName }: Compi
           workflow: workflowWithSettings,
           targetPlatform,
           projectName: effectiveProjectName,
-          skipTests,
         });
       }
       setResultData(res);
@@ -171,18 +169,6 @@ export function CompilerModal({ isOpen, onClose, onCompile, projectName }: Compi
             <div className="text-xs text-slate-300 flex items-center justify-between">
               <span className="text-slate-400">Workflow nodes:</span>
               <span className="font-semibold text-white">{workflow.nodes.length} nodes</span>
-            </div>
-            <div className="pt-2 border-t border-slate-800/60 flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="skip-tests-checkbox"
-                checked={skipTests}
-                onChange={(e) => setSkipTests(e.target.checked)}
-                className="h-3.5 w-3.5 rounded border-slate-700 text-indigo-600 focus:ring-indigo-500"
-              />
-              <label htmlFor="skip-tests-checkbox" className="text-xs text-slate-300 cursor-pointer">
-                Compile even without running prior tests
-              </label>
             </div>
           </div>
 

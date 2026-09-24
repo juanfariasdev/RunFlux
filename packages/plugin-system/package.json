@@ -13,6 +13,7 @@
     "./deployment": "./src/deployment.ts",
     "./condition-row-schema": "./src/condition-row-schema.ts",
     "./fields-row-schema": "./src/fields-row-schema.ts",
+    "./visibility": "./src/visibility.ts",
     "./manifest-validator": "./src/manifest-validator.ts",
     "./manifest-serializer": "./src/manifest-serializer.ts",
     "./plugin-registry": "./src/plugin-registry.ts",

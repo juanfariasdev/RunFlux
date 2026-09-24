@@ -61,6 +61,38 @@ describe('DeploymentPlanner', () => {
     expect(() => planner.plan(workflow(nodes))).toThrow(message);
   });
 
+  it('reads the node parameters as the backend runs them, with the manifest defaults', () => {
+    const plan = planner.plan(workflow([node('hook', 'defaulted')]));
+    expect(plan.workflow.nodes[0].parameters).toEqual({ path: '/from-manifest' });
+    expect(plan.workflow.triggers.http[0].path).toBe('/from-manifest');
+  });
+
+  it.each([
+    [[node('a', 'webhook', { path: '/orders' }), node('b', 'webhook', { path: '//orders/' })], 'Webhooks "a" and "b" both answer POST /orders'],
+    [[node('a', 'webhook', { path: '/health' })], 'Webhook "a" cannot use /health, which the backend serves itself'],
+    [[node('a', 'webhook', { path: '/api/execute/' })], 'Webhook "a" cannot use /api/execute, which the backend serves itself'],
+  ])('compares webhook paths as the hosts route them and keeps the backend routes free', (nodes, message) => {
+    expect(() => planner.plan(workflow(nodes))).toThrow(new CompilationError('INVALID_WORKFLOW', message));
+  });
+
+  it.each([
+    [[node('a', 'store'), node('b', 'storeV2')], 'Plugin "store" and Plugin "storeV2" need different versions of "fixture-driver": ^1.0.0 and ^2.0.0'],
+    [[node('a', 'store'), node('b', 'otherStore')], 'Plugin "store" and Plugin "otherStore" declare different compose services named "store"'],
+    [[node('a', 'appService')], 'Plugin "appService" declares the compose service "app", which the generated backend uses'],
+    [[node('a', 'badVariable')], 'Node "a": "NOT VALID" is not an environment variable name'],
+  ])('rejects contributions that contradict each other or the backend', (nodes, message) => {
+    expect(() => planner.plan(workflow(nodes))).toThrow(new CompilationError('INVALID_WORKFLOW', message));
+  });
+
+  it('accepts the same compose service declared identically by two plugins', () => {
+    expect(Object.keys(planner.plan(workflow([node('a', 'store'), node('b', 'sameStore')])).composeServices)).toEqual(['store']);
+  });
+
+  it('rejects invalid variable names in the workflow settings', () => {
+    expect(() => planner.plan(workflow([node('a', 'echo')], [], { settings: { envVars: [{ key: '1ST' }] } })))
+      .toThrow(new CompilationError('INVALID_WORKFLOW', 'The workflow settings: "1ST" is not an environment variable name'));
+  });
+
   it('reports invalid trigger configuration with its node and missing plugins', () => {
     expect(() => planner.plan(workflow([node('bad', 'failingDeployment')]))).toThrow(new CompilationError('INVALID_WORKFLOW', 'Node "bad": failingDeployment: parameter "path" is not valid'));
     expect(() => planner.plan(workflow([node('x', 'absent')]))).toThrow('Plugin "absent" is not installed');

@@ -20,5 +20,5 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["vite.config.ts", "vite-plugin-plugin-catalog.ts", "vite-plugin-validation-runtime.ts"]
+  "include": ["vite.config.ts", "vite-plugin-registry.ts", "vite-plugin-plugin-catalog.ts", "vite-plugin-validation-runtime.ts"]
 }

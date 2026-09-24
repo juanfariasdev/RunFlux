@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ConditionEvaluator, type Condition } from '../condition-evaluator.js';
-import type { ConditionOperator } from '../condition-operators.js';
+import { UNARY_CONDITION_OPERATORS, type ConditionOperator } from '../condition-operators.js';
 
 const strict = new ConditionEvaluator();
 const loose = new ConditionEvaluator({ strict: false });
@@ -113,6 +113,16 @@ describe('ConditionEvaluator.test', () => {
     ['42', 42, false],
   ])('matches %j against pattern %j: %s', (left, pattern, expected) => {
     expect(test(left, 'regex', pattern)).toBe(expected);
+  });
+});
+
+describe('UNARY_CONDITION_OPERATORS', () => {
+  it.each(UNARY_CONDITION_OPERATORS)('%s ignores the right value', (operator) => {
+    const evaluator = new ConditionEvaluator();
+    for (const left of ['', 'text', [], [1], null, 0]) {
+      const results = [undefined, '', 'other', 42].map((rightValue) => evaluator.test({ leftValue: left, operator, rightValue }));
+      expect(new Set(results).size).toBe(1);
+    }
   });
 });
 

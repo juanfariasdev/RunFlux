@@ -56,10 +56,15 @@ export class FieldComposer {
     return type && Object.hasOwn(NORMALIZERS, type) ? NORMALIZERS[type as FieldType](field.value, field.name) : field.value;
   }
 
-  /** Composes `fields` over a copy of `base`; later fields replace earlier ones and base keys. */
+  /**
+   * Composes `fields` over a copy of `base`; later fields replace earlier ones and base keys. Every
+   * name becomes an own property, including `__proto__`, which never changes the prototype.
+   */
   compose(fields: readonly FieldDefinition[], base: Readonly<Record<string, unknown>> = {}): Record<string, unknown> {
     const result: Record<string, unknown> = { ...base };
-    for (const field of fields) result[field.name] = this.normalize(field);
+    for (const field of fields) {
+      Object.defineProperty(result, field.name, { value: this.normalize(field), enumerable: true, writable: true, configurable: true });
+    }
     return result;
   }
 }

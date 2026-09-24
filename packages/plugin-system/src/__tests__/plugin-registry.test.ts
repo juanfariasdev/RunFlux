@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ParameterReader } from '@runflux/runtime';
+import { ObjectParameterReader } from '@runflux/runtime';
 import { describe, expect, it } from 'vitest';
 import { DuplicatePluginIdError, PluginRegistry } from '../plugin-registry';
 import { passThroughDefinition, testPlugin } from '../testing';
@@ -40,7 +40,7 @@ describe('PluginRegistry.registerModule', () => {
     const registry = new PluginRegistry();
     const plugin = await registry.registerModule(await import('./fixtures/discovery-mixed/good-plugin/index'), '/fixtures/good');
     const handler = plugin.definition.createHandler({} as never) as { execute: (invocation: object) => unknown };
-    expect(plugin.definition.parseParameters(new ParameterReader({}, 'good'))).toEqual({});
+    expect(plugin.definition.parseParameters(new ObjectParameterReader({}, 'good'))).toEqual({});
     expect(handler.execute({ input: 1 })).toMatchObject({ value: { received: 1 }, activeOutput: 'main' });
     expect(registry.getManifest('fixture-good-plugin')).toBeDefined();
   });

@@ -105,8 +105,9 @@ describe('plugins behave the same in the editor and in exported backends', () =>
     await expectParity(cron, { output: { triggeredAt: '2026-01-01T12:00:00.000Z', cronExpression: '0 * * * *', timezone: 'UTC' } });
     const manual = workflow([node('under-test', 'trigger-manual-example', { label: 'Import' })]);
     await expectParity(manual, { output: { label: 'Import', triggeredAt: '2026-01-01T12:00:00.000Z' } });
+    // A production run without a request gets an empty one, never the editor's sample.
     const webhook = workflow([node('under-test', 'trigger-webhook', { sampleBody: [{ name: 'id', value: '42', type: 'number' }] })]);
-    await expectParity(webhook, { output: { id: 42, _headers: {}, _query: {} } });
+    await expectParity(webhook, { output: { data: undefined, _headers: {}, _query: {} } });
   });
 
   it('invalid configuration fails with the same message', async () => {

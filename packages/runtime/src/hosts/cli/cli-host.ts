@@ -9,16 +9,13 @@ export interface CliOutput {
 
 /**
  * Runs a workflow once from the command line. The first argument is the payload: JSON, or any
- * other text passed as `{ raw: text }`.
+ * other text passed as `{ raw: text }`. Disposing the engine is up to its owner.
  */
 export class CliHost {
   private readonly engine: WorkflowEngine;
   private readonly output: CliOutput;
 
-  constructor(
-    engine: WorkflowEngine,
-    output: CliOutput = console,
-  ) {
+  constructor(engine: WorkflowEngine, output: CliOutput = console) {
     this.engine = engine;
     this.output = output;
   }
@@ -39,8 +36,6 @@ export class CliHost {
     } catch (error) {
       this.output.error('[RunFlux CLI] Execution error:', error);
       return 1;
-    } finally {
-      await this.engine.dispose();
     }
   }
 }

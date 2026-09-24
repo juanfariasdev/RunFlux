@@ -7,6 +7,7 @@ import {
   type FieldDefinition,
   type NodeHandler,
   type NodeInvocation,
+  type ParameterReader,
 } from '@runflux/runtime';
 
 export interface SetParameters {
@@ -24,9 +25,16 @@ export class SetNode implements NodeHandler<SetParameters> {
   }
 }
 
+/** Field rows, or the `{ name: value }` object the editor's map view stores. */
+function readSetFields(parameters: ParameterReader): FieldDefinition[] {
+  const fields = parameters.raw('fields');
+  if (isRecord(fields)) return Object.entries(fields).map(([name, value]) => ({ name, value }));
+  return readFields(parameters, 'fields');
+}
+
 export default defineNode<SetParameters>({
   parseParameters: (parameters) => ({
-    fields: readFields(parameters, 'fields'),
+    fields: readSetFields(parameters),
     includeOtherFields: parameters.boolean('includeOtherFields', false),
   }),
   createHandler: () => new SetNode(),

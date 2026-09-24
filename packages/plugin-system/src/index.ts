@@ -28,4 +28,5 @@ export { WebhookTestHub } from './webhook-test-hub.js';
 export type { WebhookTestRequest } from './webhook-test-hub.js';
 
 export { FIELDS_ROW_SCHEMA } from './fields-row-schema.js';
+export { isParameterVisible, isRowFieldHidden, isRowFieldHiddenBy } from './visibility.js';
 export { CONDITION_ROW_SCHEMA, COMBINATOR_OPTIONS, OPERATOR_OPTIONS, RULE_ROW_SCHEMA } from './condition-row-schema.js';

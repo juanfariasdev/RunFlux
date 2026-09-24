@@ -1,4 +1,4 @@
-import type { TriggerEventSource } from '@runflux/runtime';
+import { normalizeRoutePath, type TriggerEventSource } from '@runflux/runtime';
 
 /** A request sent to a webhook's test URL while the editor waits for it. */
 export interface WebhookTestRequest {
@@ -44,7 +44,7 @@ export class WebhookTestHub implements TriggerEventSource {
   }
 
   waitFor(path: string, signal: AbortSignal): Promise<WebhookTestRequest> {
-    const normalized = normalizePath(path);
+    const normalized = normalizeRoutePath(path);
     return new Promise((resolve, reject) => {
       if (signal.aborted) return reject(new Error('Cancelled: another trigger in this test run already fired'));
       const settle = () => {
@@ -69,7 +69,7 @@ export class WebhookTestHub implements TriggerEventSource {
 
   /** Delivers `request` to the oldest waiter on `path`. Returns whether one was waiting. */
   deliver(path: string, request: WebhookTestRequest): boolean {
-    const waiter = this.waiters.find((candidate) => candidate.path === normalizePath(path));
+    const waiter = this.waiters.find((candidate) => candidate.path === normalizeRoutePath(path));
     waiter?.resolve(request);
     return waiter !== undefined;
   }
@@ -78,8 +78,4 @@ export class WebhookTestHub implements TriggerEventSource {
   cancelAll(): void {
     for (const waiter of [...this.waiters]) waiter.reject(new Error('Webhook listener cancelled'));
   }
-}
-
-function normalizePath(path: string): string {
-  return `/${path.replace(/^\/+|\/+$/g, '')}`;
 }

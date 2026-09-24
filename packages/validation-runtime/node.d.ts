@@ -44,6 +44,8 @@ export interface TriggerEventSource {
 export interface ValidationRunOptions {
   mode: PluginExecutionMode;
   services?: { triggerEvents?: TriggerEventSource };
+  /** Cancels the run, for instance when the request that started it is closed. */
+  signal?: AbortSignal;
 }
 
 export interface NodeResult {
@@ -62,6 +64,7 @@ export interface ValidationRun {
   startedAt: string;
   finishedAt: string;
   status: 'success' | 'error' | 'partial';
+  cancelled: boolean;
 }
 
 export function runWorkflow(

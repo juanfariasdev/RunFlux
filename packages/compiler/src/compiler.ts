@@ -1,4 +1,5 @@
 import { RuntimeBundleError, RuntimeBundler } from './bundling/runtime-bundler.js';
+import { PackageRequirements } from './deployment/contributions.js';
 import { DeploymentPlanner, type DeploymentPlan } from './deployment/deployment-plan.js';
 import { createZipPackage } from './packager.js';
 import { AwsTarget } from './targets/aws-target.js';
@@ -56,10 +57,11 @@ export class WorkflowCompiler {
   private async compileProject(request: CompilationRequest): Promise<CompilationResult> {
     const { workflow, targetPlatform, projectName, options = {} } = request;
     const target = this.targets[targetPlatform];
-    if (!target) throw new CompilationError('INCOMPATIBLE_NODES', `Target platform '${targetPlatform}' is not supported.`);
+    if (!target) throw new CompilationError('UNSUPPORTED_TARGET', `Target platform '${targetPlatform}' is not supported.`);
     this.validator.validate(workflow, targetPlatform);
     const plan = this.planner.plan(workflow, options);
-    const projectFiles = await target.files({ plan, projectName, options });
+    const hostDependencies = this.hostDependencies(target, plan);
+    const projectFiles = await target.files({ plan, projectName, options, hostDependencies });
     const runtimeFiles = await this.bundleRuntime(target, plan);
     const generated = [...projectFiles, ...runtimeFiles];
     const manifest = this.buildManifest(request, target, plan, generated);
@@ -67,12 +69,27 @@ export class WorkflowCompiler {
     return { status: 'success', projectName, targetPlatform, files, manifest, zipBuffer: await createZipPackage(files) };
   }
 
+  /** The versions of the packages the target's hosts import, which the plugins must not contradict. */
+  private hostDependencies(target: DeploymentTarget, plan: DeploymentPlan): Record<string, string> {
+    let versions: Record<string, string>;
+    try {
+      versions = this.bundler.dependencyVersions(target.hostPackages);
+    } catch (error) {
+      if (error instanceof RuntimeBundleError) throw new CompilationError('GENERATOR_ERROR', error.message);
+      throw error;
+    }
+    const requirements = new PackageRequirements();
+    requirements.add(`The ${target.platform} runtime hosts`, versions);
+    requirements.add('the workflow plugins', plan.dependencies);
+    return versions;
+  }
+
   private async bundleRuntime(target: DeploymentTarget, plan: DeploymentPlan): Promise<GeneratedFile[]> {
     try {
       return await this.bundler.bundle({
         entries: target.runtimeEntries,
         plugins: plan.plugins,
-        external: [...Object.keys(target.hostDependencies), ...Object.keys(plan.dependencies)],
+        external: [...target.hostPackages, ...Object.keys(plan.dependencies)],
       });
     } catch (error) {
       if (error instanceof RuntimeBundleError) throw new CompilationError('GENERATOR_ERROR', error.message);

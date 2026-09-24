@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { ExportedProject } from '../support/exported-project';
 import { compile, node, PLUGIN_IDS, workflow } from '../support/workflows';
@@ -17,7 +17,7 @@ function attempt(command: string, args: string[], cwd: string): string {
 
 it.each(['local', 'aws'] as const)('exports a %s backend with every plugin that builds with its own script and passes strict TypeScript', async (targetPlatform) => {
   const ids = PLUGIN_IDS.filter((id) => targetPlatform === 'local' || id !== 'trigger-manual-example');
-  const project = await ExportedProject.write(await compile(workflow(ids.map((id) => node(id, id))), targetPlatform, "Customer's backend"));
+  const project = await ExportedProject.write(await compile(workflow(ids.map((id) => node(id, id))), targetPlatform, "Customer's backend"), { dependencies: 'declared' });
   try {
     expect(attempt('npm', ['run', 'build'], project.directory)).toBe('');
     const script = targetPlatform === 'local'
@@ -25,7 +25,7 @@ it.each(['local', 'aws'] as const)('exports a %s backend with every plugin that 
       : "import { handler } from './dist/handler.mjs'; const response = await handler({ rawPath: '/webhook', requestContext: { http: { method: 'POST' } }, body: '{\"id\":42}' }); console.log(response.body);";
     const executed = JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', script], { cwd: project.directory, encoding: 'utf8' }));
     expect(executed).toMatchObject({ success: true, result: { id: 42 } });
-    expect(attempt(process.execPath, [resolve('node_modules/typescript/bin/tsc'), '--noEmit', '--project', join(project.directory, 'tsconfig.json')], project.directory)).toBe('');
+    expect(attempt('npx', ['--no-install', 'tsc', '--noEmit', '--project', join(project.directory, 'tsconfig.json')], project.directory)).toBe('');
   } finally {
     await project.dispose();
   }

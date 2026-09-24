@@ -14,11 +14,19 @@ export class UnknownNodeError extends Error {
   }
 }
 
+export class NotATriggerError extends Error {
+  constructor(nodeId: string) {
+    super(`Node "${nodeId}" is not a trigger`);
+    this.name = 'NotATriggerError';
+  }
+}
+
 /** Indexed, acyclic view of a workflow's nodes and connections. */
 export class WorkflowGraph {
   private readonly byId = new Map<string, ExecutableNode>();
   private readonly incomingById = new Map<string, ExecutableConnection[]>();
   private readonly outgoingById = new Map<string, ExecutableConnection[]>();
+  private readonly ancestorsById = new Map<string, ReadonlySet<string>>();
 
   readonly workflow: ExecutableWorkflow;
 
@@ -55,7 +63,7 @@ export class WorkflowGraph {
   triggers(triggerId?: string): ExecutableNode[] {
     if (triggerId === undefined) return this.workflow.nodes.filter((node) => node.trigger);
     const trigger = this.node(triggerId);
-    if (!trigger.trigger) throw new Error(`Node "${triggerId}" is not a trigger`);
+    if (!trigger.trigger) throw new NotATriggerError(triggerId);
     return [trigger];
   }
 
@@ -72,6 +80,21 @@ export class WorkflowGraph {
       }
     }
     return reachable;
+  }
+
+  /** Every node with a path to `id`: the only nodes whose outputs `id` can depend on. */
+  ancestors(id: string): ReadonlySet<string> {
+    let ancestors = this.ancestorsById.get(id);
+    if (!ancestors) {
+      const found = new Set<string>();
+      for (const connection of this.incoming(id)) {
+        found.add(connection.source);
+        for (const ancestor of this.ancestors(connection.source)) found.add(ancestor);
+      }
+      ancestors = found;
+      this.ancestorsById.set(id, ancestors);
+    }
+    return ancestors;
   }
 
   private assertAcyclic(): void {

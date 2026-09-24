@@ -14,7 +14,7 @@ const jsonRowFieldSchema = z.object({
   options: z.array(jsonRowOptionSchema).optional(),
   allowCustomOptions: z.boolean().optional(),
   typeKey: z.string().optional(),
-  hideWhen: z.object({ key: z.string(), equals: z.unknown() }).optional(),
+  hideWhen: z.object({ key: z.string(), equals: z.unknown(), oneOf: z.array(z.unknown()).optional() }).optional(),
 });
 
 const parameterSchema = z.object({
@@ -26,6 +26,18 @@ const parameterSchema = z.object({
   sensitive: z.boolean().optional(),
   expressions: z.boolean().optional(),
   rowSchema: z.array(jsonRowFieldSchema).optional(),
+  options: z.array(jsonRowOptionSchema).min(1).optional(),
+  allowCustomOptions: z.boolean().optional(),
+  showWhen: z.object({ parameter: z.string().min(1), oneOf: z.array(z.unknown()).min(1) }).optional(),
+  language: z.enum(['javascript', 'sql']).optional(),
+}).superRefine((parameter, context) => {
+  if (parameter.language && parameter.type !== 'string') context.addIssue({ code: z.ZodIssueCode.custom, message: 'language is only supported on string parameters', path: ['language'] });
+  if (!parameter.options) return;
+  if (parameter.type !== 'string') context.addIssue({ code: z.ZodIssueCode.custom, message: 'options are only supported on string parameters', path: ['options'] });
+  const values = parameter.options.map((option) => option.value);
+  if (!parameter.allowCustomOptions && parameter.default !== undefined && !values.includes(parameter.default as string)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: `default "${String(parameter.default)}" is not one of the options`, path: ['default'] });
+  }
 });
 
 const manifestSchema = z.object({
@@ -33,7 +45,16 @@ const manifestSchema = z.object({
   name: z.string().min(1),
   category: z.enum(['trigger', 'action', 'output', 'control-flow', 'subworkflow']),
   version: z.string().min(1),
-  parameters: z.array(parameterSchema),
+  parameters: z.array(parameterSchema).superRefine((parameters, context) => {
+    const names = parameters.map((parameter) => parameter.name);
+    parameters.forEach((parameter, index) => {
+      if (names.indexOf(parameter.name) !== index) context.addIssue({ code: z.ZodIssueCode.custom, message: `parameter "${parameter.name}" is declared twice`, path: [index, 'name'] });
+      const condition = parameter.showWhen?.parameter;
+      if (condition !== undefined && (condition === parameter.name || !names.includes(condition))) {
+        context.addIssue({ code: z.ZodIssueCode.custom, message: `showWhen refers to unknown parameter "${condition}"`, path: [index, 'showWhen', 'parameter'] });
+      }
+    });
+  }),
   supportedPlatforms: z.array(z.string().min(1)).min(1),
   outputs: z.array(z.string().min(1)).optional(),
 });

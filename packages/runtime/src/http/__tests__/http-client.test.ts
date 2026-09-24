@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { HttpClient, HttpRequestError, type HttpTransport } from '../http-client.js';
+import { FetchHttpClient, HttpRequestError, type HttpTransport } from '../http-client.js';
 
 function recordingTransport(response: () => Response) {
   const calls: Array<{ url: string; init: RequestInit }> = [];
@@ -7,7 +7,7 @@ function recordingTransport(response: () => Response) {
     calls.push({ url, init });
     return response();
   };
-  return { calls, client: new HttpClient(transport) };
+  return { calls, client: new FetchHttpClient(transport) };
 }
 
 const json = (value: unknown, status = 200) => () => new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json' } });
@@ -54,7 +54,7 @@ describe('HttpClient', () => {
 
   it('uses the global fetch at call time by default', async () => {
     const fetch = vi.fn(async () => json({ ok: true })());
-    const client = new HttpClient();
+    const client = new FetchHttpClient();
     vi.stubGlobal('fetch', fetch);
     expect((await client.send({ method: 'GET', url: 'https://example.test' })).body).toEqual({ ok: true });
     expect(fetch).toHaveBeenCalledOnce();

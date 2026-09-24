@@ -16,6 +16,13 @@ describe('WebhookTestHub', () => {
     expect(hub.deliver('/orders', {})).toBe(false);
   });
 
+  it('compares paths like the exported backends route them', async () => {
+    const hub = new WebhookTestHub();
+    const waiting = hub.waitFor('hooks//orders', never());
+    expect(hub.deliver('//hooks/orders/', { body: 'same route' })).toBe(true);
+    await expect(waiting).resolves.toEqual({ body: 'same route' });
+  });
+
   it('serves concurrent waiters on one path in the order they started waiting', async () => {
     const hub = new WebhookTestHub();
     const first = hub.waitFor('/a', never());

@@ -1,5 +1,4 @@
-import fs from 'node:fs/promises';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { pathToFileURL } from 'node:url';
 import type { NodeDefinition } from '@runflux/runtime';
 import { validateManifest } from '../manifest-validator.js';
 import type { DiscoveredPlugin, PluginModule } from '../types.js';
@@ -13,14 +12,14 @@ export class PluginLoadError extends Error {
 }
 
 /**
- * Validates a plugin module and imports its runtime definition. Every import carries the file's
- * modification stamp, so a plugin edited while the editor runs is loaded again.
+ * Validates a plugin module and imports its runtime definition. A plugin edited while the editor
+ * runs is loaded again on the next discovery (see importPlugin).
  */
 export async function loadPlugin(module: Partial<PluginModule>, sourcePath: string): Promise<DiscoveredPlugin> {
   if (!module.manifest || !module.runtimeModule) throw new PluginLoadError('module must export "manifest" and "runtimeModule"');
   const validation = validateManifest(module.manifest);
   if (!validation.success) throw new PluginLoadError(validation.error);
-  const runtime = await importPlugin<{ default?: unknown }>(await versioned(toUrl(module.runtimeModule)));
+  const runtime = await importPlugin<{ default?: unknown }>(toUrl(module.runtimeModule));
   const definition = runtime.default;
   if (!isNodeDefinition(definition)) {
     throw new PluginLoadError('runtime module must export a node definition (parseParameters and createHandler) as default');
@@ -30,15 +29,7 @@ export async function loadPlugin(module: Partial<PluginModule>, sourcePath: stri
 
 /** Imports a plugin entry file and loads the plugin it exports. */
 export async function loadPluginFile(entryFile: string, sourcePath: string): Promise<DiscoveredPlugin> {
-  return loadPlugin(await importPlugin<Partial<PluginModule>>(await versioned(pathToFileURL(entryFile))), sourcePath);
-}
-
-async function versioned(url: URL): Promise<URL> {
-  if (url.protocol !== 'file:') return url;
-  const { mtimeNs, size } = await fs.stat(fileURLToPath(url), { bigint: true });
-  const stamped = new URL(url);
-  stamped.searchParams.set('runflux-version', `${mtimeNs}-${size}`);
-  return stamped;
+  return loadPlugin(await importPlugin<Partial<PluginModule>>(pathToFileURL(entryFile)), sourcePath);
 }
 
 function toUrl(location: URL | string): URL {

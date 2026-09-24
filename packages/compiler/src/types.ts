@@ -41,7 +41,6 @@ export type ProjectEnvVar = WorkflowEnvVar;
 export interface CompilationOptions {
   /** Port of the local server. Defaults to 3000. */
   port?: number;
-  skipTests?: boolean;
   /** Replace the workflow's own environment variables. */
   envVars?: ProjectEnvVar[];
 }
@@ -69,7 +68,15 @@ export interface CompilationSuccess {
   zipBuffer: Uint8Array;
 }
 
-export type CompilationErrorCode = 'INCOMPATIBLE_NODES' | 'CYCLE_DETECTED' | 'GENERATOR_ERROR' | 'INVALID_WORKFLOW';
+export type CompilationErrorCode =
+  /** Nodes whose plugin does not support the target platform. */
+  | 'INCOMPATIBLE_NODES'
+  | 'CYCLE_DETECTED'
+  /** The workflow, its parameters or its plugins' contributions cannot form a backend. */
+  | 'INVALID_WORKFLOW'
+  | 'UNSUPPORTED_TARGET'
+  /** The runtime or a plugin runtime could not be bundled: a problem of the installation, not of the workflow. */
+  | 'GENERATOR_ERROR';
 
 export interface CompilationFailure {
   status: 'failed';

@@ -8,4 +8,4 @@ export { LocalTarget } from './targets/local-target.js';
 export { AwsTarget, type WorkflowInfrastructure } from './targets/aws-target.js';
 export { toAwsCron } from './targets/aws-schedule.js';
 export type { DeploymentTarget, TargetContext } from './targets/deployment-target.js';
-export { createZipPackage, createZipArchive } from './packager.js';
+export { createZipPackage } from './packager.js';

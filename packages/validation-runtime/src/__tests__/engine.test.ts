@@ -176,7 +176,7 @@ describe('runWorkflow (RF-01, RF-02)', () => {
   // still-pending trigger gets `context.signal` fired so it can abandon its own wait
   // (trigger-webhook does exactly this) instead of the caller having to satisfy all of
   // them, or the run sitting there for up to that trigger's own timeout.
-  it('races multiple triggers of the SAME plugin type — the moment any one settles, its siblings abandon their wait (RN-08)', async () => {
+  it('races multiple triggers of the SAME plugin type — the moment any one settles, its siblings abandon their wait and leave no result (RN-08)', async () => {
     // One plugin, registered once — two node instances of it, mirroring two real
     // Webhook Trigger nodes. `fast-node` settles right away (like a payload that
     // already arrived); `waiting-node` only settles via the abort signal.
@@ -198,7 +198,8 @@ describe('runWorkflow (RF-01, RF-02)', () => {
     const run = await runWorkflow(wf, registry, { mode: 'sandbox' });
 
     expect(run.nodeResults.find((r) => r.nodeId === 'fast-node')).toMatchObject({ output: 'fired', error: null });
-    expect(run.nodeResults.find((r) => r.nodeId === 'waiting-node')?.error).toMatch(/cancelled/i);
+    expect(run.nodeResults.find((r) => r.nodeId === 'waiting-node')).toBeUndefined();
+    expect(run.status).toBe('success');
   });
 
   // The bug this guards against: an instant trigger of a DIFFERENT type (e.g. Manual

@@ -25,6 +25,11 @@ describe('HttpTriggerRouter', () => {
     expect(new HttpTriggerRouter([fallback, exact]).match('/same', 'PUT')).toEqual({ kind: 'matched', trigger: exact });
   });
 
+  it('answers HEAD like GET and compares paths in normalized form', () => {
+    expect(router.match('/orders', 'HEAD')).toEqual({ kind: 'matched', trigger: ordersGet });
+    expect(router.match('//orders//', 'POST')).toEqual({ kind: 'matched', trigger: orders });
+  });
+
   it('distinguishes unknown paths from unsupported methods', () => {
     expect(router.match('/missing', 'POST')).toEqual({ kind: 'not-found' });
     expect(router.match('/Orders', 'POST')).toEqual({ kind: 'not-found' });
@@ -50,6 +55,11 @@ describe('HttpTriggerAuthenticator', () => {
     ['', '', false],
   ])('with secret %j accepts header %j: %s', (secret, provided, accepted) => {
     expect(authenticator({ ORDERS_KEY: secret }).authorize(secured, headers(provided))).toBe(accepted);
+  });
+
+  it('hides the secret header from the workflow, in any letter case', () => {
+    expect(authenticator({}).visibleHeaders(secured, { 'x-key': 'secret', 'X-KEY': 'secret', other: '1' })).toEqual({ other: '1' });
+    expect(authenticator({}).visibleHeaders(httpTrigger('open'), { 'x-key': 'kept' })).toEqual({ 'x-key': 'kept' });
   });
 
   it('reads the secret on every request', () => {

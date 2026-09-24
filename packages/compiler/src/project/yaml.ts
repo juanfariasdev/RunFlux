@@ -37,7 +37,9 @@ function scalar(value: Scalar): string {
 function needsQuotes(text: string): boolean {
   return text === ''
     || /^[\s-?:,[\]{}#&*!|>'"%@`]/.test(text)
-    || /[:#]\s|\s$|:$/.test(text)
+    || /[:#]\s|\s#|\s$|:$/.test(text)
+    // Line breaks and other control characters only survive in a double-quoted (JSON) string.
+    || /[\u0000-\u001f\u007f]/.test(text)
     || /^(true|false|yes|no|y|n|on|off|null|~)$/i.test(text)
     || !Number.isNaN(Number(text))
     // YAML 1.1 reads digits separated by colons as a base-60 number, e.g. port mappings.

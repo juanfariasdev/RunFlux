@@ -10,6 +10,8 @@ export interface WorkflowInfrastructure {
   readonly stackName: string;
   readonly description: string;
   readonly workflowName: string;
+  /** Whether the function gets a public URL: only workflows with HTTP triggers need one. */
+  readonly functionUrl: boolean;
   /** Function variables. A variable set in the shell that deploys the stack wins over `value`. */
   readonly environment: ReadonlyArray<{ readonly key: string; readonly value?: string }>;
   /** EventBridge Scheduler expressions, each starting one cron trigger. */
@@ -17,11 +19,14 @@ export interface WorkflowInfrastructure {
 }
 
 export interface WorkflowStackProps extends cdk.StackProps {
-  /** The function package. Defaults to compiled/function.zip, produced by `npm run package`. */
+  /** The function code. Defaults to dist/, produced by `npm run build`. */
   readonly code?: lambda.Code;
 }
 
-/** One Lambda function behind a public function URL, plus one EventBridge schedule per cron trigger. */
+/**
+ * One Lambda function, behind a public function URL when the workflow has HTTP triggers, plus one
+ * EventBridge schedule per cron trigger.
+ */
 export class WorkflowStack extends cdk.Stack {
   readonly function: lambda.Function;
 
@@ -30,7 +35,7 @@ export class WorkflowStack extends cdk.Stack {
     this.function = new lambda.Function(this, 'WorkflowFunction', {
       runtime: lambda.Runtime.NODEJS_22_X,
       handler: 'handler.handler',
-      code: props.code ?? lambda.Code.fromAsset(fileURLToPath(new URL('../compiled/function.zip', import.meta.url))),
+      code: props.code ?? lambda.Code.fromAsset(fileURLToPath(new URL('../dist', import.meta.url))),
       timeout: cdk.Duration.seconds(30),
       memorySize: 512,
       environment: {
@@ -40,13 +45,17 @@ export class WorkflowStack extends cdk.Stack {
       },
     });
 
+    if (infrastructure.functionUrl) this.addFunctionUrl();
+    if (infrastructure.schedules.length > 0) this.addSchedules(infrastructure.schedules);
+  }
+
+  /** Webhooks authenticate themselves (see the triggers' header secrets), so the URL is public. */
+  private addFunctionUrl(): void {
     const functionUrl = this.function.addFunctionUrl({
       authType: lambda.FunctionUrlAuthType.NONE,
       cors: { allowedOrigins: ['*'], allowedMethods: [lambda.HttpMethod.ALL], allowedHeaders: ['*'] },
     });
-    new cdk.CfnOutput(this, 'FunctionUrl', { value: functionUrl.url, description: 'Public endpoint to invoke the compiled workflow' });
-
-    if (infrastructure.schedules.length > 0) this.addSchedules(infrastructure.schedules);
+    new cdk.CfnOutput(this, 'FunctionUrl', { value: functionUrl.url, description: 'Public endpoint of the workflow webhooks' });
   }
 
   private addSchedules(schedules: WorkflowInfrastructure['schedules']): void {

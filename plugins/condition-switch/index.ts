@@ -1,6 +1,6 @@
 import { RULE_ROW_SCHEMA } from '@runflux/plugin-system/condition-row-schema';
 import type { PluginModule } from '@runflux/plugin-system/types';
-import { FALLBACK_OUTPUT, RULE_OUTPUTS } from './runtime.js';
+import { FALLBACK_OUTPUT, RULE_OUTPUTS } from './outputs.js';
 
 /**
  * Switch (004-core-nodes-catalog, RF-02): evaluates its rules in order, routing to the first one

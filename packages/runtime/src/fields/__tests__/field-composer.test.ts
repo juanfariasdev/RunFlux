@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ParameterReader } from '../../parameters/parameter-reader.js';
+import { ObjectParameterReader } from '../../parameters/parameter-reader.js';
 import { FieldComposer, FieldTypeError, readFields, type FieldDefinition } from '../field-composer.js';
 
 const composer = new FieldComposer();
@@ -54,7 +54,7 @@ describe('FieldComposer.compose', () => {
 });
 
 describe('readFields', () => {
-  const reader = (fields: unknown) => new ParameterReader({ fields }, 'set');
+  const reader = (fields: unknown) => new ObjectParameterReader({ fields }, 'set');
 
   it('reads typed rows and skips rows without a name', () => {
     expect(readFields(reader([{ name: 'a', value: '1', type: 'number' }, { value: 'unnamed' }, { name: 'b', value: 'x' }]), 'fields'))

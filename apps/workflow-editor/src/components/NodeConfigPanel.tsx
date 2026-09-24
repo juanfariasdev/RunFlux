@@ -3,7 +3,8 @@ import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { resolveExpressions } from '@runflux/expression-engine';
 import type { PluginManifest } from '@runflux/plugin-system/types';
-import { FieldComposer, type FieldDefinition } from '@runflux/runtime';
+import { isParameterVisible } from '@runflux/plugin-system/visibility';
+import { containsExpression, FieldComposer, ObjectParameterReader, readFields } from '@runflux/runtime';
 import type { NodeResult } from '@runflux/validation-runtime';
 import type { WorkflowNodeAppearance, WorkflowNodeShape } from '@runflux/workflow-model/types';
 import { buildZodSchema } from '../forms/build-zod-schema';
@@ -21,44 +22,18 @@ const SHAPES: { value: WorkflowNodeShape; label: string }[] = [
   { value: 'diamond', label: 'Decision' },
 ];
 
-const HTTP_METHOD_OPTIONS = [
-  { value: 'POST', label: 'POST' },
-  { value: 'GET', label: 'GET' },
-  { value: 'PUT', label: 'PUT' },
-  { value: 'DELETE', label: 'DELETE' },
-  { value: 'PATCH', label: 'PATCH' },
-  { value: 'HEAD', label: 'HEAD' },
-  { value: 'OPTIONS', label: 'OPTIONS' },
-];
-
-const AUTHENTICATION_OPTIONS = [
-  { value: 'none', label: 'None' },
-  { value: 'headerAuth', label: 'Header Auth' },
-  { value: 'basicAuth', label: 'Basic Auth' },
-];
-
-const CRON_PRESET_OPTIONS = [
-  { value: 'every15Minutes', label: 'Every 15 Minutes (* /15 * * * *)' },
-  { value: 'every5Minutes', label: 'Every 5 Minutes (* /5 * * * *)' },
-  { value: 'everyHour', label: 'Every Hour (0 * * * *)' },
-  { value: 'everyDay', label: 'Every Day at Midnight (0 0 * * *)' },
-  { value: 'custom', label: 'Custom Expression' },
-];
-
-const COMBINATOR_OPTIONS = [
-  { value: 'and', label: 'AND' },
-  { value: 'or', label: 'OR' },
-];
-
-/** Does this string contain at least one `{{ }}` marker (004-core-nodes-catalog, E003)? */
-function hasExpressionSyntax(text: string): boolean {
-  return /\{\{[\s\S]*?\}\}/.test(text);
-}
-
-/** `sampleBody` is a `FIELDS_ROW_SCHEMA` array (see trigger-webhook's manifest) — compose it into the flat body a real request would carry. */
+/**
+ * The body a test request built from a webhook's `sampleBody` carries: its field rows composed
+ * the way the trigger composes them, or `{}` while a row is still invalid (e.g. a number field
+ * holding text), since the user is still editing it.
+ */
 export function resolveSampleBodyForTest(sampleBody: unknown): unknown {
-  if (Array.isArray(sampleBody)) return new FieldComposer().compose(sampleBody as FieldDefinition[]);
-  return sampleBody || { message: 'Sample test payload' };
+  if (!Array.isArray(sampleBody)) return sampleBody || { message: 'Sample test payload' };
+  try {
+    return new FieldComposer().compose(readFields(new ObjectParameterReader({ sampleBody }, 'trigger-webhook'), 'sampleBody'));
+  } catch {
+    return {};
+  }
 }
 
 type ExpressionPreview = { ok: true; value: unknown } | { ok: false; error: string };
@@ -269,37 +244,36 @@ export function NodeConfigPanel({
           </div>
           <form className="grid gap-3.5" onSubmit={(event) => event.preventDefault()}>
             {parameters.map((param) => {
-              const currentAuth = watch('authentication') ?? watch('auth') ?? 'none';
-              if ((param.name === 'headerName' || param.name === 'secretEnvVar') && currentAuth !== 'headerAuth') {
-                return null;
-              }
+              if (!isParameterVisible(param, watch(), parameters)) return null;
               const liveValue = param.type === 'string' ? watch(param.name) : undefined;
               const preview =
-                typeof liveValue === 'string' && hasExpressionSyntax(liveValue) ? resolveExpressionPreview(liveValue, displayedTestInput, nodeScope, envScope) : undefined;
+                typeof liveValue === 'string' && containsExpression(liveValue) ? resolveExpressionPreview(liveValue, displayedTestInput, nodeScope, envScope) : undefined;
 
               return (
                 <div key={param.name}>
                   <Label className="mb-1 block" htmlFor={param.name}>{param.label}{param.required && <span className="ml-0.5 text-red-500">*</span>}</Label>
                   {param.type === 'boolean' ? (
                     <Checkbox id={param.name} disabled={isTesting} {...register(param.name)} />
-                  ) : param.type === 'string' && (param.name === 'combinator' || param.name === 'httpMethod' || param.name === 'authentication' || param.name === 'auth' || param.name === 'preset') ? (
+                  ) : param.type === 'string' && param.options && !param.allowCustomOptions ? (
                     <select
                       id={param.name}
                       disabled={isTesting}
                       className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-700 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 disabled:cursor-not-allowed disabled:opacity-50"
                       {...register(param.name)}
                     >
-                      {(param.name === 'httpMethod'
-                        ? HTTP_METHOD_OPTIONS
-                        : param.name === 'authentication' || param.name === 'auth'
-                        ? AUTHENTICATION_OPTIONS
-                        : param.name === 'preset'
-                        ? CRON_PRESET_OPTIONS
-                        : COMBINATOR_OPTIONS
-                      ).map((option) => (
+                      {param.options.map((option) => (
                         <option key={option.value} value={option.value}>{option.label}</option>
                       ))}
                     </select>
+                  ) : param.type === 'string' && param.options ? (
+                    <>
+                      <Input id={param.name} list={`${param.name}-suggestions`} autoComplete="off" disabled={isTesting} {...register(param.name)} />
+                      <datalist id={`${param.name}-suggestions`} data-testid={`suggestions-${param.name}`}>
+                        {param.options.map((option) => (
+                          <option key={option.value} value={option.value} label={option.label} />
+                        ))}
+                      </datalist>
+                    </>
                   ) : param.type === 'json' ? (
                     <Controller
                       name={param.name}
@@ -313,13 +287,14 @@ export function NodeConfigPanel({
                         {revealed[param.name] ? <UnlockIcon /> : <LockIcon />}
                       </button>
                     </div>
-                  ) : param.name === 'code' ? (
+                  ) : param.language ? (
                     <textarea
                       id={param.name}
                       rows={8}
                       disabled={isTesting}
                       className="w-full font-mono text-xs rounded-lg border border-slate-200 bg-slate-900 text-emerald-400 p-3 shadow-inner focus:outline-none focus:ring-2 focus:ring-indigo-400 disabled:opacity-50"
-                      placeholder="// return $json;"
+                      placeholder={param.language === 'sql' ? 'SELECT * FROM users WHERE id = $1;' : '// return $json;'}
+                      spellCheck={false}
                       {...register(param.name)}
                     />
                   ) : (

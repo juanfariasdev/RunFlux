@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { isEnvironmentVariableName } from '../../environment.js';
+import { isHttpHeaderName } from '../triggers.js';
 import { parseExecutableWorkflow, WorkflowDocumentError, type ExecutableWorkflow } from '../executable-workflow.js';
 import { ExecutableWorkflowBuilder, type NodeTypeDescription } from '../workflow-builder.js';
 import { CyclicWorkflowError, UnknownNodeError, WorkflowGraph } from '../workflow-graph.js';
@@ -36,6 +38,17 @@ describe('ExecutableWorkflowBuilder', () => {
     ]);
   });
 
+  it('gives parameters a node does not set the default of its type, as copies', () => {
+    const defaults: NodeTypeDescription = { category: 'action', parameters: [{ name: 'limit', default: 10 }, { name: 'tags', default: ['a'] }, { name: 'free' }] };
+    const built = new ExecutableWorkflowBuilder(() => defaults).build({
+      id: 'w', name: 'W', connections: [],
+      nodes: [{ id: 'unset', pluginId: 'x' }, { id: 'set', pluginId: 'x', parameters: { limit: 0, tags: [] } }, { id: 'other', pluginId: 'x' }],
+    });
+    expect(built.nodes.map((node) => node.parameters)).toEqual([{ limit: 10, tags: ['a'] }, { limit: 0, tags: [] }, { limit: 10, tags: ['a'] }]);
+    expect(built.nodes[0].parameters.tags).not.toBe(built.nodes[2].parameters.tags);
+    expect(built.nodes[0].parameters.tags).not.toBe(defaults.parameters[1].default);
+  });
+
   it('defaults connection ports to main and drops connections to missing nodes', () => {
     expect(document.connections).toEqual([
       { source: 'hook', sourceOutput: 'main', target: 'check', targetInput: 'main' },
@@ -58,6 +71,14 @@ describe('parseExecutableWorkflow', () => {
     ['an unknown authentication', (value) => { value.triggers.http[0].authentication = { type: 'basic' }; }, 'authentication.type must be "none" or "header"'],
     ['missing schedules', (value) => { delete value.triggers.schedules; }, 'triggers.schedules must be a list'],
     ['a label that is not text', (value) => { value.nodes[1].label = 1; }, 'nodes[1].label must be text'],
+    ['a node id used twice', (value) => { value.nodes[1].id = 'hook'; }, 'node id "hook" is used twice'],
+    ['a connection to a missing node', (value) => { value.connections[0].target = 'ghost'; }, 'connection hook -> ghost refers to an unknown node'],
+    ['a connection from an undeclared output', (value) => { value.connections[1].sourceOutput = 'maybe'; }, 'connection from "check" uses unknown output "maybe"'],
+    ['a trigger bound to an action', (value) => { value.triggers.http[0].nodeId = 'run'; }, 'trigger "run" is not a trigger node of the workflow'],
+    ['a header name with a space', (value) => { value.triggers.http[0].authentication.headerName = 'X Key'; }, 'triggers.http[0].authentication.headerName "X Key" is not an HTTP header name'],
+    ['a secret variable name with a dash', (value) => { value.triggers.http[0].authentication.secretEnvVar = 'MY-KEY'; }, 'triggers.http[0].authentication.secretEnvVar "MY-KEY" is not an environment variable name'],
+    ['an invalid cron expression', (value) => { value.triggers.schedules = [{ nodeId: 'hook', expression: '61 * * * *', timezone: 'UTC' }]; }, 'triggers.schedules[0].expression "61 * * * *" is not a five-field cron expression'],
+    ['an unknown timezone', (value) => { value.triggers.schedules = [{ nodeId: 'hook', expression: '0 * * * *', timezone: 'Mars/Base' }]; }, 'triggers.schedules[0].timezone "Mars/Base" is not a known timezone'],
   ])('rejects %s', (_case, corrupt, message) => {
     const value = JSON.parse(JSON.stringify(document));
     corrupt(value);
@@ -98,5 +119,15 @@ describe('WorkflowGraph', () => {
     expect(() => new WorkflowGraph(cyclic)).toThrow(CyclicWorkflowError);
     const selfLoop = { ...document, connections: [{ source: 'run', sourceOutput: 'main', target: 'run', targetInput: 'main' }] };
     expect(() => new WorkflowGraph(selfLoop)).toThrow(CyclicWorkflowError);
+  });
+});
+
+describe('isHttpHeaderName and isEnvironmentVariableName', () => {
+  it.each([['X-Webhook-Secret', true], ['x_key.1', true], ['X Key', false], ['', false], ['X:Key', false], ['Ключ', false]])('header %j: %s', (name, valid) => {
+    expect(isHttpHeaderName(name)).toBe(valid);
+  });
+
+  it.each([['DATABASE_URL', true], ['_private', true], ['a1', true], ['1A', false], ['MY-KEY', false], ['', false], ['A B', false]])('variable %j: %s', (name, valid) => {
+    expect(isEnvironmentVariableName(name)).toBe(valid);
   });
 });

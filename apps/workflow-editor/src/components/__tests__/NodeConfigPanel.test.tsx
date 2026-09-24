@@ -1,7 +1,9 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { NodeConfigPanel } from '../NodeConfigPanel';
+import { NodeConfigPanel, resolveSampleBodyForTest } from '../NodeConfigPanel';
+import { COMBINATOR_OPTIONS, OPERATOR_OPTIONS } from '@runflux/plugin-system/condition-row-schema';
 import type { PluginManifest } from '@runflux/plugin-system/types';
+import { CONDITION_OPERATORS } from '@runflux/runtime';
 
 const manifest: PluginManifest = {
   id: 'trigger-manual-example',
@@ -309,7 +311,7 @@ describe('NodeConfigPanel — Fields mode expressions and free-text values (004-
 });
 
 describe('NodeConfigPanel — condition operator and combinator dropdowns', () => {
-  it('uses the supported operations as the condition Operator options', async () => {
+  it('offers every operator the runtime implements as the condition Operator options', async () => {
     const onChange = vi.fn();
     render(
       <NodeConfigPanel
@@ -322,14 +324,8 @@ describe('NodeConfigPanel — condition operator and combinator dropdowns', () =
 
     const operator = screen.getByLabelText('Row 1 Operator');
     expect(operator.tagName).toBe('SELECT');
-    expect(Array.from((operator as HTMLSelectElement).options).map((option) => option.value)).toEqual([
-      'equals',
-      'notEquals',
-      'contains',
-      'greaterThan',
-      'lessThan',
-      'isEmpty',
-    ]);
+    expect(Array.from((operator as HTMLSelectElement).options).map((option) => option.value)).toEqual(Object.keys(CONDITION_OPERATORS));
+    expect(Array.from((operator as HTMLSelectElement).options).map((option) => option.label)).toEqual(OPERATOR_OPTIONS.map((option) => option.label));
 
     fireEvent.change(operator, { target: { value: 'greaterThan' } });
     await vi.waitFor(() => {
@@ -339,10 +335,23 @@ describe('NodeConfigPanel — condition operator and combinator dropdowns', () =
     });
   });
 
+  it('hides the right value for operators that only test the left one', () => {
+    render(
+      <NodeConfigPanel
+        manifest={jsonManifest}
+        values={{ conditions: [{ leftValue: 'a', operator: 'isNotEmpty' }, { leftValue: 'b', operator: 'equals', rightValue: 'c' }] }}
+        onChange={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.queryByLabelText('Row 1 Right value')).toBeNull();
+    expect(screen.getByLabelText('Row 2 Right value')).toBeInTheDocument();
+  });
+
   it('uses AND/OR dropdowns for top-level and nested Combinator fields', async () => {
     const topLevelManifest: PluginManifest = {
       ...manifest,
-      parameters: [{ name: 'combinator', label: 'Combinator (and/or)', type: 'string', required: false, default: 'and' }],
+      parameters: [{ name: 'combinator', label: 'Combinator (and/or)', type: 'string', required: false, default: 'and', options: COMBINATOR_OPTIONS }],
     };
     const { unmount } = render(
       <NodeConfigPanel manifest={topLevelManifest} values={{ combinator: 'and' }} onChange={vi.fn()} onClose={vi.fn()} />,
@@ -419,5 +428,60 @@ describe('NodeConfigPanel — test this node in isolation (003-validation-runtim
     const testResult = { nodeId: 'n1', input: null, output: null, error: 'boom', startedAt: 't0', finishedAt: 't1' };
     render(<NodeConfigPanel manifest={manifest} values={{ label: '' }} onChange={vi.fn()} onClose={vi.fn()} onTest={vi.fn()} testResult={testResult} />);
     expect(screen.getByRole('alert')).toHaveTextContent('boom');
+  });
+});
+
+describe('NodeConfigPanel — parameters described by their manifest', () => {
+  const described: PluginManifest = {
+    ...manifest,
+    parameters: [
+      { name: 'mode', label: 'Mode', type: 'string', required: false, default: 'none', options: [{ value: 'none', label: 'None' }, { value: 'header', label: 'Header' }] },
+      { name: 'secret', label: 'Secret', type: 'string', required: false, showWhen: { parameter: 'mode', oneOf: ['header'] } },
+      { name: 'schedule', label: 'Schedule', type: 'string', required: false, options: [{ value: '0 * * * *', label: 'Every hour' }], allowCustomOptions: true },
+      { name: 'source', label: 'Source', type: 'string', required: false, language: 'sql' },
+      { name: 'code', label: 'Plain code name', type: 'string', required: false },
+    ],
+  };
+
+  it('renders options as a select, and suggestions as a free text input with a list', () => {
+    render(<NodeConfigPanel manifest={described} values={{ mode: 'none' }} onChange={vi.fn()} onClose={vi.fn()} />);
+    const mode = screen.getByLabelText('Mode') as HTMLSelectElement;
+    expect(mode.tagName).toBe('SELECT');
+    expect(Array.from(mode.options).map((option) => option.label)).toEqual(['None', 'Header']);
+    const schedule = screen.getByLabelText('Schedule');
+    expect(schedule.tagName).toBe('INPUT');
+    expect(schedule).toHaveAttribute('list', 'schedule-suggestions');
+    expect(Array.from(screen.getByTestId('suggestions-schedule').querySelectorAll('option')).map((option) => option.value)).toEqual(['0 * * * *']);
+  });
+
+  it('shows a conditional parameter only while its condition holds', async () => {
+    render(<NodeConfigPanel manifest={described} values={{ mode: 'none' }} onChange={vi.fn()} onClose={vi.fn()} />);
+    expect(screen.queryByLabelText('Secret')).toBeNull();
+    fireEvent.change(screen.getByLabelText('Mode'), { target: { value: 'header' } });
+    expect(await screen.findByLabelText('Secret')).toBeInTheDocument();
+  });
+
+  it('edits source code parameters in a code area, recognized by their language and not their name', () => {
+    render(<NodeConfigPanel manifest={described} values={{}} onChange={vi.fn()} onClose={vi.fn()} />);
+    expect(screen.getByLabelText('Source').tagName).toBe('TEXTAREA');
+    expect(screen.getByLabelText('Plain code name').tagName).toBe('INPUT');
+  });
+});
+
+describe('resolveSampleBodyForTest', () => {
+  it('composes sample field rows the way the webhook trigger does', () => {
+    expect(resolveSampleBodyForTest([{ name: 'id', value: '42', type: 'number' }, { name: 'active', value: 'true', type: 'boolean' }, { value: 'unnamed' }]))
+      .toEqual({ id: 42, active: true });
+  });
+
+  it('sends an empty body while a row is still invalid instead of failing', () => {
+    expect(resolveSampleBodyForTest([{ name: 'id', value: 'forty-two', type: 'number' }])).toEqual({});
+    expect(resolveSampleBodyForTest([{ name: 'when', value: 'now', type: 'date' }])).toEqual({});
+    expect(resolveSampleBodyForTest(['not a row'])).toEqual({});
+  });
+
+  it('keeps an object sample and falls back to a default one', () => {
+    expect(resolveSampleBodyForTest({ literal: true })).toEqual({ literal: true });
+    expect(resolveSampleBodyForTest(undefined)).toEqual({ message: 'Sample test payload' });
   });
 });

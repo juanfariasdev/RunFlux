@@ -24,14 +24,21 @@ export interface WorkflowSource {
 export interface NodeTypeDescription {
   readonly category: string;
   readonly outputs?: readonly string[];
-  readonly parameters: readonly { readonly name: string; readonly expressions?: boolean }[];
+  readonly parameters: readonly {
+    readonly name: string;
+    readonly expressions?: boolean;
+    /** Used when the node does not set the parameter. */
+    readonly default?: unknown;
+  }[];
 }
 
 export type NodeTypeLookup = (pluginId: string) => NodeTypeDescription | undefined;
 
 /**
- * Turns an editor workflow into the document the engine runs. Connections to nodes that do not
- * exist are dropped; nodes of unknown types are kept so the engine can report them when they run.
+ * Turns an editor workflow into the document the engine runs. Parameters a node does not set take
+ * their type's default, so the document runs as the editor showed it. Connections to nodes that
+ * do not exist are dropped; nodes of unknown types are kept so the engine can report them when
+ * they run.
  */
 export class ExecutableWorkflowBuilder {
   private readonly describe: NodeTypeLookup;
@@ -67,8 +74,13 @@ export class ExecutableWorkflowBuilder {
       pluginId: node.pluginId,
       trigger: type?.category === 'trigger',
       outputs: type?.outputs?.length ? [...type.outputs] : [MAIN_OUTPUT],
-      parameters: node.parameters ?? {},
+      parameters: { ...defaultParameters(type), ...node.parameters },
       literalParameters: (type?.parameters ?? []).filter((parameter) => parameter.expressions === false).map((parameter) => parameter.name),
     };
   }
+}
+
+function defaultParameters(type: NodeTypeDescription | undefined): Record<string, unknown> {
+  const defaults = (type?.parameters ?? []).filter((parameter) => parameter.default !== undefined);
+  return Object.fromEntries(defaults.map((parameter) => [parameter.name, structuredClone(parameter.default)]));
 }

@@ -107,3 +107,51 @@ describe('validateManifest — rejections (RF-04)', () => {
     expect(validateManifest(undefined).success).toBe(false);
   });
 });
+
+describe('validateManifest — parameter options', () => {
+  const withParameter = (parameter: Record<string, unknown>) => validateManifest({
+    ...validManifest,
+    parameters: [{ name: 'mode', label: 'Mode', type: 'string', required: false, ...parameter }],
+  });
+  const options = [{ value: 'fast', label: 'Fast' }, { value: 'safe', label: 'Safe' }];
+
+  it('accepts choices whose default is one of them', () => {
+    const result = withParameter({ options, default: 'safe' });
+    expect(result.success && result.manifest.parameters[0].options).toEqual(options);
+  });
+
+  it('accepts any default when the choices are only suggestions', () => {
+    expect(withParameter({ options, allowCustomOptions: true, default: 'custom' }).success).toBe(true);
+  });
+
+  it.each([
+    [{ options, default: 'other' }, 'parameters.0.default: default "other" is not one of the options'],
+    [{ options, type: 'number' }, 'parameters.0.options: options are only supported on string parameters'],
+    [{ options: [] }, 'parameters.0.options: Array must contain at least 1 element(s)'],
+    [{ options: [{ value: 1, label: 'One' }] }, 'parameters.0.options.0.value: Expected string, received number'],
+  ])('rejects %j', (parameter, error) => {
+    expect(withParameter(parameter)).toEqual({ success: false, error });
+  });
+});
+
+describe('validateManifest — conditional and code parameters', () => {
+  const parameters = (...extra: Record<string, unknown>[]) => validateManifest({
+    ...validManifest,
+    parameters: [{ name: 'mode', label: 'Mode', type: 'string', required: false }, ...extra.map((parameter) => ({ label: 'X', type: 'string', required: false, ...parameter }))],
+  });
+
+  it('accepts a parameter shown while another one holds some values, and a code parameter', () => {
+    expect(parameters({ name: 'secret', showWhen: { parameter: 'mode', oneOf: ['header'] } }, { name: 'source', language: 'sql' }).success).toBe(true);
+  });
+
+  it.each([
+    [{ name: 'secret', showWhen: { parameter: 'missing', oneOf: ['x'] } }, 'parameters.1.showWhen.parameter: showWhen refers to unknown parameter "missing"'],
+    [{ name: 'secret', showWhen: { parameter: 'secret', oneOf: ['x'] } }, 'parameters.1.showWhen.parameter: showWhen refers to unknown parameter "secret"'],
+    [{ name: 'secret', showWhen: { parameter: 'mode', oneOf: [] } }, 'parameters.1.showWhen.oneOf: Array must contain at least 1 element(s)'],
+    [{ name: 'mode' }, 'parameters.1.name: parameter "mode" is declared twice'],
+    [{ name: 'script', type: 'json', language: 'javascript' }, 'parameters.1.language: language is only supported on string parameters'],
+    [{ name: 'script', language: 'python' }, "parameters.1.language: Invalid enum value. Expected 'javascript' | 'sql', received 'python'"],
+  ])('rejects %j', (parameter, error) => {
+    expect(parameters(parameter)).toEqual({ success: false, error });
+  });
+});

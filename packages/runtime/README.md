@@ -6,7 +6,7 @@ from source; the compiler bundles it, with the plugins a workflow uses, into the
 
 | Entry | Contents | Environment |
 | --- | --- | --- |
-| `@runflux/runtime` | Node contracts, `WorkflowEngine`, expressions, conditions, fields, HTTP client, workflow document | Browser and Node |
+| `@runflux/runtime` | Node contracts, `WorkflowEngine`, expressions, conditions, fields, `CronExpression`, HTTP client, workflow document | Browser and Node |
 | `@runflux/runtime/express` | `ExpressHost`: one endpoint per HTTP trigger | Node |
 | `@runflux/runtime/lambda` | `LambdaHost`: function URL requests and scheduled invocations | Node |
 | `@runflux/runtime/cron` | `CronHost`: node-cron schedules, loaded only when needed | Node |
@@ -41,6 +41,13 @@ const record = await executeNode(greet, { parameters: { name: '{{ $json.first }}
 
 Handlers receive their dependencies in `createHandler(services)`: replace `http`, `logger`, `clock`
 or a plugin-specific service in `extensions` instead of mocking modules.
+
+## Lifecycle
+
+`engine.run({ payload, triggerId, signal })` runs the workflow; aborting `signal` stops it.
+`engine.dispose()` waits for the runs in progress, then releases what the handlers hold. Whoever
+creates an engine disposes it: the hosts (`ExpressHost`, `LambdaHost`, `CronHost`, `CliHost`) only
+serve the engine they are given.
 
 ## Rules
 

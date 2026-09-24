@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { containsExpression } from '../expression-template.js';
 import { ExpressionError, ExpressionEvaluator } from '../expression-evaluator.js';
 import { createNodeScope } from '../node-scope.js';
 import { ParameterResolver } from '../parameter-resolver.js';
@@ -48,6 +49,29 @@ describe('ExpressionEvaluator.resolve', () => {
     expect(expressions.resolve('Hello, {{ $json.name }}! Welcome to {{ $env.PLATFORM }}.', scope)).toBe('Hello, Bob! Welcome to Cloud.');
     expect(expressions.resolve('[{{ $json.none }}|{{ $json.absent }}]', scope)).toBe('[|]');
     expect(expressions.resolve('{{ 1 }} and {{ 2 }}', scope)).toBe('1 and 2');
+  });
+
+  it.each([
+    ['{{ "}}" }}', '}}'],
+    ['{{ { a: { b: 1 }} }}', { a: { b: 1 } }],
+    ['{{ `a}}b` }}', 'a}}b'],
+    ["[{{ 'x' + \"}}\" }}]", '[x}}]'],
+    ['{{ $json.a }} and {{ $json.b }}', '1 and 2'],
+  ])('ends %s at the braces that close the expression', (template, expected) => {
+    expect(expressions.resolve(template, { $json: { a: 1, b: 2 } })).toEqual(expected);
+  });
+
+  it('tells texts with expressions from plain ones', () => {
+    expect(containsExpression('Hello {{ $json.name }}')).toBe(true);
+    expect(containsExpression('{{ "}}" }}')).toBe(true);
+    expect(containsExpression('{{ never closed')).toBe(false);
+    expect(containsExpression('plain {text}')).toBe(false);
+  });
+
+  it('keeps text without a closed block as it is and reports unbalanced JavaScript', () => {
+    expect(expressions.resolve('{{ not closed', {})).toBe('{{ not closed');
+    expect(expressions.resolve('a {{ b', {})).toBe('a {{ b');
+    expect(() => expressions.resolve('{{ "open }}', {})).toThrow('Expression ""open" failed');
   });
 
   it('passes other values through and resolves arrays and objects recursively', () => {

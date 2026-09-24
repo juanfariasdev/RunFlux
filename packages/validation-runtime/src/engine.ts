@@ -19,6 +19,8 @@ export interface ValidationRunOptions {
    * triggers wait for a real test request instead of using their sample payload.
    */
   services?: Partial<RuntimeServices>;
+  /** Cancels the run, for instance when the editor closes the request that started it. */
+  signal?: AbortSignal;
 }
 
 /** What the editor shows for one node after a test run. */
@@ -37,12 +39,25 @@ export interface ValidationRun {
   nodeResults: NodeResult[];
   startedAt: string;
   finishedAt: string;
+  /** Status of the nodes that ran; see `cancelled` for whether the run was stopped early. */
   status: ExecutionStatus;
+  cancelled: boolean;
 }
 
-function createEngine(workflow: WorkflowDefinition, registry: PluginRegistry, options: ValidationRunOptions): WorkflowEngine {
+/** Runs `work` with an engine for this one run, releasing the handlers' resources afterwards. */
+async function withEngine<TResult>(
+  workflow: WorkflowDefinition,
+  registry: PluginRegistry,
+  options: ValidationRunOptions,
+  work: (engine: WorkflowEngine) => Promise<TResult>,
+): Promise<TResult> {
   const document = new ExecutableWorkflowBuilder(registry.describe).build(workflow);
-  return new WorkflowEngine(document, registry, { mode: options.mode, services: options.services });
+  const engine = new WorkflowEngine(document, registry, { mode: options.mode, services: options.services });
+  try {
+    return await work(engine);
+  } finally {
+    await engine.dispose();
+  }
 }
 
 function toNodeResult(record: NodeRecord): NodeResult {
@@ -66,7 +81,7 @@ function toNodeRecord(result: NodeResult): NodeRecord {
  * of the same plugin race each other (RN-08). Nothing is compiled or deployed (RN-01).
  */
 export async function runWorkflow(workflow: WorkflowDefinition, registry: PluginRegistry, options: ValidationRunOptions): Promise<ValidationRun> {
-  const execution = await createEngine(workflow, registry, options).run();
+  const execution = await withEngine(workflow, registry, options, (engine) => engine.run({ signal: options.signal }));
   return {
     workflowId: workflow.id,
     mode: options.mode,
@@ -74,6 +89,7 @@ export async function runWorkflow(workflow: WorkflowDefinition, registry: Plugin
     startedAt: execution.startedAt,
     finishedAt: execution.finishedAt,
     status: execution.status,
+    cancelled: execution.cancelled,
   };
 }
 
@@ -88,6 +104,7 @@ export async function runNode(
   options: ValidationRunOptions,
   cache: Map<string, NodeResult> = new Map(),
 ): Promise<NodeResult> {
-  const record = await createEngine(workflow, registry, options).runNode(nodeId, [...cache.values()].map(toNodeRecord));
+  const previous = [...cache.values()].map(toNodeRecord);
+  const record = await withEngine(workflow, registry, options, (engine) => engine.runNode(nodeId, { previous, signal: options.signal }));
   return toNodeResult(record);
 }

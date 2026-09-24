@@ -13,15 +13,18 @@ export interface NodeRecord {
 
 export type NodeOutputsById = Record<string, { readonly json: unknown }>;
 
-/** `$node` entries for the given records, by node id and, when the node has one, by label. */
+/**
+ * `$node` entries for the successful records, by label and by node id. An id always wins over a
+ * label that happens to equal it.
+ */
 export function nodeOutputsOf(records: Iterable<NodeRecord>, labelOf: (nodeId: string) => string | undefined): NodeOutputsById {
-  const outputs: NodeOutputsById = {};
-  for (const record of records) addNodeOutput(outputs, record, labelOf(record.nodeId));
+  const successful = [...records].filter((record) => record.error === null);
+  // No prototype: ids and labels are user text, and "__proto__" must stay an ordinary key.
+  const outputs: NodeOutputsById = Object.create(null);
+  for (const record of successful) {
+    const label = labelOf(record.nodeId);
+    if (label) outputs[label] = { json: record.output };
+  }
+  for (const record of successful) outputs[record.nodeId] = { json: record.output };
   return outputs;
-}
-
-export function addNodeOutput(outputs: NodeOutputsById, record: NodeRecord, label: string | undefined): void {
-  const entry = { json: record.output };
-  outputs[record.nodeId] = entry;
-  if (label) outputs[label] = entry;
 }

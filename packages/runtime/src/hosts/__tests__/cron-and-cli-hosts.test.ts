@@ -47,15 +47,29 @@ describe('CronHost', () => {
     expect(logger.error).toHaveBeenLastCalledWith('[RunFlux Cron]', new Error('crashed'));
   });
 
-  it('stops every task and releases the engine', async () => {
+  it('registers once, stops every task and leaves the engine to its owner', async () => {
     const engine = hostEngine({ schedules });
     const dispose = vi.spyOn(engine, 'dispose');
     const { registered, scheduler } = fakeScheduler();
     const host = new CronHost(engine, { scheduler });
-    await host.start();
-    await host.stop();
+    const [first, second] = await Promise.all([host.start(), host.start()]);
+    expect(first).toBe(second);
+    expect(registered).toHaveLength(2);
+    host.stop();
     expect(registered.every(({ stop }) => stop.mock.calls.length === 1)).toBe(true);
-    expect(dispose).toHaveBeenCalledOnce();
+    expect(dispose).not.toHaveBeenCalled();
+  });
+
+  it('stops the schedules already registered when one cannot be', async () => {
+    const stop = vi.fn();
+    const scheduler: Scheduler = {
+      schedule: (expression) => {
+        if (expression === '0 9 * * 1-5') throw new Error('invalid timezone');
+        return { stop };
+      },
+    };
+    await expect(new CronHost(hostEngine({ schedules }), { scheduler }).start()).rejects.toThrow('invalid timezone');
+    expect(stop).toHaveBeenCalledOnce();
   });
 
   it('does not load node-cron for a workflow without schedules', async () => {
@@ -74,6 +88,13 @@ describe('CliHost', () => {
     const io = output();
     expect(await new CliHost(hostEngine(), io).run(args)).toBe(0);
     expect(JSON.parse(io.log.mock.calls[1][0])).toEqual({ success: true, result: payload, nodeOutputs: { manual: payload } });
+  });
+
+  it('leaves the engine open for its owner', async () => {
+    const engine = hostEngine();
+    const dispose = vi.spyOn(engine, 'dispose');
+    await new CliHost(engine, output()).run([]);
+    expect(dispose).not.toHaveBeenCalled();
   });
 
   it('exits with 1 when the workflow fails or throws', async () => {

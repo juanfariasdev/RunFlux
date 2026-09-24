@@ -12,23 +12,23 @@ export interface ExecutionResponse {
   readonly error?: string;
 }
 
+const CANCELLED = 'The workflow run was cancelled';
+
 /** The outcome of one workflow run; records are in the order nodes finished. */
 export class WorkflowExecution {
   private readonly graph: WorkflowGraph;
   readonly records: readonly NodeRecord[];
   readonly startedAt: string;
   readonly finishedAt: string;
+  /** Whether the run's signal aborted: nodes that had not started by then never ran. */
+  readonly cancelled: boolean;
 
-  constructor(
-    graph: WorkflowGraph,
-    records: readonly NodeRecord[],
-    startedAt: string,
-    finishedAt: string,
-  ) {
+  constructor(graph: WorkflowGraph, records: readonly NodeRecord[], startedAt: string, finishedAt: string, cancelled = false) {
     this.graph = graph;
     this.records = records;
     this.startedAt = startedAt;
     this.finishedAt = finishedAt;
+    this.cancelled = cancelled;
   }
 
   get workflowId(): string {
@@ -42,13 +42,14 @@ export class WorkflowExecution {
     return firstError === 0 ? 'error' : 'partial';
   }
 
+  /** Whether every node that ran succeeded and the run was not cancelled. */
   get succeeded(): boolean {
-    return this.status === 'success';
+    return this.status === 'success' && !this.cancelled;
   }
 
-  /** The error of the first node that failed. */
+  /** The error of the first node that failed, or the cancellation. */
   get error(): string | undefined {
-    return this.records.find((record) => record.error !== null)?.error ?? undefined;
+    return this.records.find((record) => record.error !== null)?.error ?? (this.cancelled ? CANCELLED : undefined);
   }
 
   record(nodeId: string): NodeRecord | undefined {

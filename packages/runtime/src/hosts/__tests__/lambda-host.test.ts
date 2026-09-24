@@ -13,10 +13,11 @@ describe('LambdaHost', () => {
 
   it('routes function URL requests to their trigger with lower-cased headers and the query', async () => {
     vi.stubEnv('ORDERS_KEY', 'correct');
-    const response = await handler(http('/orders', 'POST', { headers: { 'X-Orders-Key': 'correct' }, queryStringParameters: { page: '2' }, body: '{"id":42}' }));
+    const response = await handler(http('/orders', 'POST', { headers: { 'X-Orders-Key': 'correct', 'X-Custom': 'yes' }, queryStringParameters: { page: '2' }, body: '{"id":42}' }));
     expect(response.statusCode).toBe(200);
     expect(response.headers).toEqual({ 'Content-Type': 'application/json' });
-    expect(body(response)).toMatchObject({ success: true, nodeOutputs: { orders: { body: { id: 42 }, headers: { 'x-orders-key': 'correct' }, query: { page: '2' } } } });
+    expect(body(response)).toMatchObject({ success: true, nodeOutputs: { orders: { body: { id: 42 }, headers: { 'x-custom': 'yes' }, query: { page: '2' } } } });
+    expect(body(response).nodeOutputs.orders.headers['x-orders-key']).toBeUndefined();
     expect(Object.keys(body(response).nodeOutputs)).toEqual(['orders']);
   });
 
@@ -53,11 +54,17 @@ describe('LambdaHost', () => {
     expect(body(response)).toEqual({ success: false, error: 'Unknown node "ghost" in workflow "hosted"' });
   });
 
-  it('runs every trigger with the JSON body when the workflow has no HTTP triggers', async () => {
+  it('offers no public entry point when the workflow has no HTTP triggers', async () => {
     const plain = new LambdaHost(hostEngine()).handler;
-    expect(body(await plain(http('/', 'POST', { body: '{"id":1}' })))).toEqual({ success: true, result: { id: 1 }, nodeOutputs: { manual: { id: 1 } } });
-    expect(body(await plain(http('/', 'POST')))).toMatchObject({ result: {} });
-    expect((await plain(http('/', 'POST', { body: 'nope' }))).statusCode).toBe(400);
+    for (const event of [http('/', 'POST', { body: '{"id":1}' }), http('/favicon.ico', 'GET'), http('/api/execute', 'POST')]) {
+      expect((await plain(event)).statusCode).toBe(404);
+    }
+  });
+
+  it('rejects events that are neither function URL requests nor schedules', async () => {
+    const response = await handler({ httpMethod: 'POST', path: '/orders' } as never);
+    expect(response.statusCode).toBe(400);
+    expect(body(response)).toEqual({ error: 'Unsupported event: expected a function URL request or a runfluxTriggerId' });
   });
 
   it('answers 500 with the execution when a node fails', async () => {

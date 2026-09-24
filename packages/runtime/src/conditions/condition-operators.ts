@@ -39,6 +39,9 @@ export const CONDITION_OPERATORS = {
 
 export type ConditionOperator = keyof typeof CONDITION_OPERATORS;
 
+/** Operators that test the left value alone; their rows have no right value. */
+export const UNARY_CONDITION_OPERATORS: readonly ConditionOperator[] = ['isEmpty', 'isNotEmpty'];
+
 export function isConditionOperator(name: string): name is ConditionOperator {
   return Object.hasOwn(CONDITION_OPERATORS, name);
 }
