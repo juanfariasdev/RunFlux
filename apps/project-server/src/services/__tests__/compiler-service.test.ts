@@ -41,6 +41,17 @@ it('downloads a complete standalone project with dependencies, source and compil
   expect(Object.keys(zip.files)).toEqual(expect.arrayContaining(['package.json', 'README.md', 'src/server.ts', 'dist/server.mjs', 'runflux-build.json']));
 });
 
+it('recompiles without carrying removed entrypoints and bundles into the new download', async () => {
+  const service = fixture('export function run(input: unknown) { return input; }');
+  const first = await service.compile({ workflow, targetPlatform: 'local' });
+  writeFileSync(join(first.outputDirectory, 'src/run-cron.ts'), 'export const removed = true;');
+  writeFileSync(join(first.outputDirectory, 'dist/removed.mjs'), 'export const removed = true;');
+  const next = await service.compile({ workflow, targetPlatform: 'local' });
+  const zip = await JSZip.loadAsync(readFileSync(join(next.outputDirectory, next.zipFilename)));
+  expect(Object.keys(zip.files)).not.toContain('dist/removed.mjs');
+  expect(Object.keys(zip.files)).not.toContain('dist/run-cron.mjs');
+});
+
 it('rejects download paths outside the generated output', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'runflux-download-'));
   directories.push(directory);

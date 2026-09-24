@@ -1,4 +1,5 @@
-import { buildLocalSchedules } from './schedules.js';
+import { buildLocalSchedules, getSchedules } from './schedules.js';
+import { getEnvironmentVariables } from './environment.js';
 import { buildLocalApp } from './templates/local-app.js';
 import { generateRunnerRuntime } from './templates/runner-template.js';
 import type { WorkflowDefinition } from '@runflux/workflow-model';
@@ -26,15 +27,13 @@ export function generateLocalProject(context: LocalGeneratorContext): GeneratedF
       .replace(/^-|-$/g, '') || 'runflux-app';
 
   // Detect special trigger nodes in workflow
-  const cronNode = workflow.nodes.find((n) => n.pluginId === 'trigger-cron');
+  const schedules = getSchedules(workflow);
   const webhookNodes = workflow.nodes.filter((n) => n.pluginId === 'trigger-webhook');
   const hasDatabase = workflow.nodes.some((n) => n.pluginId === 'database-query');
 
-  const hasCron = Boolean(cronNode);
+  const hasCron = schedules.length > 0;
   const hasWebhook = webhookNodes.length > 0;
 
-  const cronExpression = (cronNode?.parameters?.expression as string) || '*/15 * * * *';
-  const cronTimezone = (cronNode?.parameters?.timezone as string) || 'UTC';
 
   // Scripts and dependencies
   const buildEntrypoints = ['src/server.ts', 'src/run.ts'];
@@ -176,14 +175,11 @@ volumes:
   let envExampleContent = `PORT=${port}
 NODE_ENV=production
 `;
-  if (hasWebhook) {
-    envExampleContent += `WEBHOOK_SECRET=your-webhook-secret-token\n`;
-  }
   if (hasCron) {
-    envExampleContent += `ENABLE_INLINE_CRON=false\nCRON_TIMEZONE=${cronTimezone}\n`;
+    envExampleContent += `ENABLE_INLINE_CRON=false\n`;
   }
 
-  const customEnvVars = options?.envVars || workflow.settings?.envVars || [];
+  const customEnvVars = getEnvironmentVariables(workflow, options);
   if (customEnvVars.length > 0) {
     envExampleContent += `\n# Project Environment Variables\n`;
     customEnvVars.forEach((v) => {
@@ -205,6 +201,14 @@ Standalone backend compiled with [RunFlux](https://runflux.io).
 
 ## Running the Application
 
+Use Node.js 22 or newer. Install dependencies, configure the environment and build:
+\`\`\`bash
+npm install
+cp .env.example .env
+# Edit .env with your deployment settings
+npm run build
+\`\`\`
+
 ### 1. Run as Standalone CLI
 Execute the workflow directly with JSON arguments:
 \`\`\`bash
@@ -216,7 +220,7 @@ npm run run '{"example": "payload"}'
 npm run start
 \`\`\`
 - Health Check: \`GET http://localhost:${port}/health\`
-- Execute Default Workflow: \`POST http://localhost:${port}/api/execute\`
+${hasWebhook ? '' : '- Execute Default Workflow: `POST http://localhost:' + port + '/api/execute`'}
 `;
 
   if (hasWebhook) {
@@ -235,7 +239,7 @@ Run the dedicated background cron scheduler:
 \`\`\`bash
 npm run cron
 \`\`\`
-Schedule: \`${cronExpression}\` (Timezone: ${cronTimezone})
+${schedules.map((schedule) => '- `' + schedule.expression + '` (Timezone: ' + schedule.timezone + ', trigger: ' + schedule.nodeId + ')').join('\n')}
 `;
   }
 
@@ -271,7 +275,6 @@ docker run -d -p ${port}:${port} --env-file .env ${sanitizedPkgName}
   const serverTsContent = `import 'dotenv/config';
 import { app } from './app.js';
 ${hasCron ? "import { startSchedules } from './schedules.js';" : ''}
-import { runWorkflow } from './runner.js';
 const port = Number(process.env.PORT || ${port});
 ${hasCron ? "if (process.env.ENABLE_INLINE_CRON === 'true') startSchedules();" : ''}
 app.listen(port, () => console.log('[RunFlux] Listening on port', port));

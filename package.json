@@ -21,7 +21,7 @@
     "db:generate": "npm run db:generate --workspace=@runflux/project-server",
     "db:migrate": "npm run db:migrate --workspace=@runflux/project-server",
     "test:plugins": "vitest run --config vitest.plugins.config.ts",
-    "build": "npm run build:node --workspaces --if-present && npm run build --workspace=@runflux/app-workflow-editor",
+    "build": "npm run build:node --workspaces --if-present && npm run build --workspace=@runflux/app-workflow-editor && node scripts/verify-plugin-catalog.mjs",
     "pretest:plugins": "npm run build:node --workspace=@runflux/plugin-system"
   },
   "devDependencies": {

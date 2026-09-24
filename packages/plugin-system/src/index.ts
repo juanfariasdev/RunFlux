@@ -30,6 +30,8 @@ export { listPlugins } from './api/list-plugins';
 export { resolveGenerator, checkPluginReference } from './api/resolve-generator';
 export type { PluginReferenceStatus } from './api/resolve-generator';
 export { resolveExecutor } from './api/resolve-executor';
+export { pushTestWebhook, clearPendingWebhooks } from './webhook-listener';
+export type { WebhookRequest, PendingWebhook } from './webhook-listener';
 
 export {
   evaluateOperator,
@@ -65,4 +67,3 @@ export {
   generateHttpOutputCode,
   generateCodeJavascriptCode,
 } from './code-generators';
-

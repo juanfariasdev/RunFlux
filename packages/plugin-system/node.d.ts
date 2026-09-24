@@ -52,3 +52,7 @@ export class PluginRegistry {
 }
 
 export function listPlugins(registry: PluginRegistry): Record<string, PluginManifest[]>;
+
+// This module is self-contained and already compatible with NodeNext resolution.
+export { pushTestWebhook, clearPendingWebhooks } from './src/webhook-listener.js';
+export type { WebhookRequest, PendingWebhook } from './src/webhook-listener.js';

@@ -3,7 +3,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { validateManifest } from '../manifest-validator';
 import { importPlugin } from './import-plugin.js';
-import type { DiscoveredPlugin, PluginModule } from '../types';
+import type { DiscoveredPlugin } from '../types';
 
 export interface ScanError {
   path: string;

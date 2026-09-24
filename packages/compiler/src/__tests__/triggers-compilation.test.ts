@@ -192,7 +192,7 @@ export function run(input: any) { return input; }`,
       expect(serverFile!.content).toContain("401");
 
       const envFile = result.files.find((f) => f.path === '.env.example');
-      expect(envFile!.content).toContain('WEBHOOK_SECRET');
+      expect(envFile!.content).toContain('ORDER_SECRET=');
     }
   });
 

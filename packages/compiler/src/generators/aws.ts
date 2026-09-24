@@ -1,4 +1,6 @@
 import { getSchedules, toAwsCron } from './schedules.js';
+import { getEnvironmentVariables } from './environment.js';
+import { getWebhookConfig } from '@runflux/plugin-system/webhook-config';
 import { buildAwsHandler } from './templates/aws-handler.js';
 import { generateRunnerRuntime } from './templates/runner-template.js';
 import type { WorkflowDefinition } from '@runflux/workflow-model';
@@ -28,17 +30,9 @@ export function generateAwsProject(context: AwsGeneratorContext): GeneratedFile[
 
   // Detect triggers
   const schedules = getSchedules(workflow);
-  const cronNode = workflow.nodes.find((n) => n.pluginId === 'trigger-cron');
-  const webhookNode = workflow.nodes.find((n) => n.pluginId === 'trigger-webhook');
-  const hasDatabase = workflow.nodes.some((n) => n.pluginId === 'database-query');
-
-  const hasCron = Boolean(cronNode);
-  const hasWebhook = Boolean(webhookNode);
-
-  const cronExpression = (cronNode?.parameters?.expression as string) || '*/15 * * * *';
-  const webhookSecretEnvVar = (webhookNode?.parameters?.secretEnvVar as string) || 'WEBHOOK_SECRET';
-  const webhookAuth = (webhookNode?.parameters?.authentication as string) || (webhookNode?.parameters?.auth as string) || "none";
-  const webhookHeaderName = (webhookNode?.parameters?.headerName as string) || "X-Webhook-Secret";
+  const webhooks = workflow.nodes.filter((node) => node.pluginId === 'trigger-webhook').map((node) => getWebhookConfig(node.parameters));
+  const hasDatabase = workflow.nodes.some((node) => node.pluginId === 'database-query');
+  const hasCron = schedules.length > 0;
 
   const dependencies: Record<string, string> = {
     'aws-cdk-lib': '^2.177.0',
@@ -122,15 +116,17 @@ Compiled serverless backend for AWS Lambda and AWS CDK generated with [RunFlux](
 - **Endpoint:** AWS Lambda Function URL (Public HTTP endpoint with CORS support)
 `;
 
-  if (hasCron) {
-    readmeContent += `\n- **Scheduled Cron:** AWS EventBridge Rule triggering Lambda on schedule: \`${cronExpression}\`\n`;
+  for (const schedule of schedules) {
+    readmeContent += `\n- **Schedule:** ${schedule.expression} (timezone: ${schedule.timezone}, trigger: ${schedule.nodeId}) via EventBridge Scheduler\n`;
   }
-  if (hasWebhook) {
-    readmeContent += `\n- **Webhook Security:** Protected via \`${webhookSecretEnvVar}\` environment variable (Auth: ${webhookAuth})\n`;
+  for (const webhook of webhooks) {
+    readmeContent += `\n- **Webhook:** ${webhook.method} ${webhook.path}; authentication: ${webhook.authentication}${webhook.authentication === 'none' ? '' : '; header: ' + webhook.headerName + '; secret environment variable: ' + webhook.secretEnvVar}\n`;
   }
 
   readmeContent += `\n## Commands
+Use Node.js 22 or newer and AWS credentials configured for the target account. Set the required environment variables in the deployment shell before running CDK.
 \`\`\`bash
+npm install
 npm run build    # Compile TypeScript & bundle with esbuild
 npm run package  # Package dist/* into compiled/function.zip
 npm run deploy   # Deploy the CloudFormation stack to AWS
@@ -177,7 +173,7 @@ ${schedules.map((schedule, index) => `
     });`).join('\n')}
 ` : '';
 
-  const customEnvVars = options?.envVars || workflow.settings?.envVars || [];
+  const customEnvVars = getEnvironmentVariables(workflow, options);
   const customEnvEntries = customEnvVars.map(
     (v) => `        ${JSON.stringify(v.key)}: process.env[${JSON.stringify(v.key)}] || ${JSON.stringify(v.value ?? '')},`
   );
@@ -198,7 +194,7 @@ export class WorkflowStack extends Stack {
       environment: {
         WORKFLOW_NAME: ${JSON.stringify(projectName)},
         NODE_ENV: 'production',
-        ${hasWebhook ? `${JSON.stringify(webhookSecretEnvVar)}: process.env[${JSON.stringify(webhookSecretEnvVar)}] || '',` : ''}${customEnvBlock}
+        ${customEnvBlock}
       },
     });
 

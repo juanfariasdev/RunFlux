@@ -1,6 +1,8 @@
 export type {
   WorkflowConnection,
   WorkflowDefinition,
+  WorkflowEnvVar,
+  WorkflowSettings,
   WorkflowEdgeType,
   WorkflowNode,
   WorkflowNodeAppearance,

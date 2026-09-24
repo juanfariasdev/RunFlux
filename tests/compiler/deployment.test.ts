@@ -3,6 +3,25 @@ import { loadGeneratedModule } from '@runflux/plugin-system/testing';
 import { compileWorkflow } from '../../packages/compiler/src/compiler';
 import { loadPlugin } from '../plugins/helpers';
 
+it.each(['local', 'aws'] as const)('exports every webhook secret and database connection setting (%s)', async (targetPlatform) => {
+  const webhook = await loadPlugin('trigger-webhook');
+  const database = await loadPlugin('database-query');
+  const result = await compileWorkflow({ targetPlatform, projectName: 'Environment', workflow: {
+    id: 'env', name: 'Environment', nodes: [
+      { id: 'first', pluginId: 'trigger-webhook', parameters: { path: '/first', authentication: 'secret', secretEnvVar: 'FIRST_SECRET' } },
+      { id: 'second', pluginId: 'trigger-webhook', parameters: { path: '/second', authentication: 'secret', secretEnvVar: 'SECOND_SECRET' } },
+      { id: 'database', pluginId: 'database-query', parameters: { connectionEnvVar: 'ORDERS_DATABASE_URL' } },
+    ].map((node) => ({ ...node, pluginVersion: '1.0.0', position: { x: 0, y: 0 } })), connections: [],
+    settings: { envVars: [{ key: 'SECOND_SECRET', value: 'configured' }] },
+  } }, (id) => id === 'database-query' ? database : webhook);
+  if (result.status !== 'success') throw new Error('Compilation failed');
+  const file = result.files.find((file) => file.path === (targetPlatform === 'local' ? '.env.example' : 'lib/workflow-stack.ts'))!.content;
+  for (const key of ['FIRST_SECRET', 'SECOND_SECRET', 'ORDERS_DATABASE_URL']) {
+    expect(file).toContain(targetPlatform === 'local' ? `${key}=` : `${JSON.stringify(key)}:`);
+  }
+  if (targetPlatform === 'local') expect(file.match(/^SECOND_SECRET=/gm)).toHaveLength(1);
+});
+
 it('registers every local cron and directs each firing to its own workflow branch', async () => {
   const plugin = await loadPlugin('trigger-cron');
   const result = await compileWorkflow({ targetPlatform: 'local', projectName: 'Schedules', workflow: {

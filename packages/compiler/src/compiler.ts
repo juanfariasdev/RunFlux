@@ -1,6 +1,5 @@
 import { CyclicWorkflowError } from '@runflux/workflow-model';
 import { transformSync } from 'esbuild';
-import type { WorkflowDefinition } from '@runflux/workflow-model';
 import type {
   CompilationRequest,
   CompilationResult,
@@ -108,31 +107,31 @@ export async function compileWorkflow(
   let projectFiles: GeneratedFile[];
 
   try {
-  if (targetPlatform === 'local') {
-    projectFiles = generateLocalProject({
-      workflow,
-      projectName,
-      nodeFiles,
-      nodeEntries,
-      options,
-    });
-  } else if (targetPlatform === 'aws') {
-    projectFiles = generateAwsProject({
-      workflow,
-      projectName,
-      nodeFiles,
-      nodeEntries,
-      options,
-    });
-  } else {
-    return {
-      status: 'failed',
-      error: {
-        code: 'INCOMPATIBLE_NODES',
-        message: `Target platform '${targetPlatform}' is not supported.`,
-      },
-    };
-  }
+    if (targetPlatform === 'local') {
+      projectFiles = generateLocalProject({
+        workflow,
+        projectName,
+        nodeFiles,
+        nodeEntries,
+        options,
+      });
+    } else if (targetPlatform === 'aws') {
+      projectFiles = generateAwsProject({
+        workflow,
+        projectName,
+        nodeFiles,
+        nodeEntries,
+        options,
+      });
+    } else {
+      return {
+        status: 'failed',
+        error: {
+          code: 'INCOMPATIBLE_NODES',
+          message: `Target platform '${targetPlatform}' is not supported.`,
+        },
+      };
+    }
   } catch (error) {
     return { status: 'failed', error: { code: 'INVALID_WORKFLOW', message: error instanceof Error ? error.message : String(error) } };
   }

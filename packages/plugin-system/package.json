@@ -31,7 +31,8 @@
     "./http-client": "./src/http-client.ts",
     "./webhook-config": "./src/webhook-config.ts",
     "./testing": "./src/testing.ts",
-    "./generator-factory": "./src/generator-factory.ts"
+    "./generator-factory": "./src/generator-factory.ts",
+    "./webhook-listener": "./src/webhook-listener.ts"
   },
   "scripts": {
     "test": "vitest run",

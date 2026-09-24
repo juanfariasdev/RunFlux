@@ -1,5 +1,5 @@
 import type { Plugin } from 'vite';
-import { PluginRegistry } from '@runflux/plugin-system/node';
+import { PluginRegistry, pushTestWebhook, clearPendingWebhooks } from '@runflux/plugin-system/node';
 import { runNode, runWorkflow, type PluginExecutionMode, type WorkflowDefinition } from '@runflux/validation-runtime/node';
 
 /**
@@ -24,14 +24,7 @@ export function runfluxValidationPlugin(pluginDirectories: string[]): Plugin {
     configureServer(server) {
       // Cancel active waiting webhooks
       server.middlewares.use('/runflux-webhook-cancel', (_req, res) => {
-        const list = (globalThis as any).__RUNFLUX_PENDING_WEBHOOKS__ || [];
-        while (list.length > 0) {
-          const p = list.pop();
-          if (p) {
-            clearTimeout(p.timer);
-            p.reject(new Error('Webhook listening cancelled by user'));
-          }
-        }
+        clearPendingWebhooks();
         res.statusCode = 200;
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify({ success: true, message: 'Listening cancelled' }));
@@ -75,36 +68,7 @@ export function runfluxValidationPlugin(pluginDirectories: string[]): Plugin {
               method: req.method || 'POST',
             };
 
-            // 1. Deliver via globalThis array directly (100% resilient across module versions/instances)
-            const list: any[] = (globalThis as any).__RUNFLUX_PENDING_WEBHOOKS__ || [];
-            let delivered = false;
-
-            if (list.length > 0) {
-              const cleanTarget = subPath.replace(/^\/+/, '').toLowerCase();
-              let idx = list.findIndex((p: any) => {
-                const cleanP = (p.path || '').replace(/^\/+/, '').toLowerCase();
-                return cleanP === cleanTarget || cleanP === '*' || cleanTarget.endsWith(cleanP) || cleanP.endsWith(cleanTarget);
-              });
-              if (idx === -1 && list.length > 0) {
-                idx = 0; // Fallback to whatever node is actively waiting
-              }
-              if (idx !== -1) {
-                const pending = list.splice(idx, 1)[0];
-                clearTimeout(pending.timer);
-                pending.resolve(payload);
-                delivered = true;
-              }
-            }
-
-            // 2. Also try pushTestWebhook if available
-            if (!delivered) {
-              try {
-                const { pushTestWebhook } = await import('../../plugins/trigger-webhook/index.js');
-                delivered = pushTestWebhook(subPath, payload);
-              } catch {
-                // Ignore if already tried
-              }
-            }
+            const delivered = pushTestWebhook(subPath, payload);
 
             res.statusCode = 200;
             res.setHeader('Content-Type', 'application/json');

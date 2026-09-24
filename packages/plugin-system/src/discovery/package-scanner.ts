@@ -3,7 +3,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { validateManifest } from '../manifest-validator';
 import { importPlugin } from './import-plugin.js';
-import type { DiscoveredPlugin, PluginModule } from '../types';
+import type { DiscoveredPlugin } from '../types';
 import type { ScanError, ScanResult } from './directory-scanner';
 
 /** package.json field that marks a package as a RunFlux plugin (RF-01, D-03). */
