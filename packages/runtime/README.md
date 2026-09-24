@@ -50,6 +50,11 @@ creates an engine disposes it. The hosts (`ExpressHost`, `LambdaHost`, `CronHost
 the `WorkflowRunner` port (`workflow` and `run`), which `WorkflowEngine` implements: they only serve
 the runner they are given, so a composition root can pass a runner that wraps the engine.
 
+Pass `observer` in the engine options to hear each run while it happens (`runStarted`,
+`nodeStarted`, `nodeFinished`, `runFinished`, tagged with an execution id): execution history,
+live progress and telemetry plug in there. The run never waits for an observer, and an observer
+that fails is logged without affecting the run.
+
 ## Rules
 
 - The core entry must stay free of Node.js modules (a test bundles it for the browser).

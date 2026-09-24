@@ -65,6 +65,7 @@ export {
   type WorkflowTriggers,
 } from './workflow/triggers.js';
 
+export type { ExecutionObserver, NodeFinishedEvent, NodeStartedEvent, RunFinishedEvent, RunStartedEvent } from './engine/execution-observer.js';
 export { StaticNodeCatalog, type NodeCatalog } from './engine/node-catalog.js';
 export { InvalidNodeOutputError, UnknownNodeTypeError } from './engine/node-executor.js';
 export type { NodeRecord } from './engine/node-record.js';

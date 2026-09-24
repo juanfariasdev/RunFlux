@@ -1,5 +1,6 @@
 import type { ExecutableNode } from '../workflow/executable-workflow.js';
 import type { WorkflowGraph } from '../workflow/workflow-graph.js';
+import type { RunObservation } from './execution-observer.js';
 import type { NodeExecutor } from './node-executor.js';
 import { nodeOutputsOf, type NodeRecord } from './node-record.js';
 import { anySignal } from './signals.js';
@@ -14,7 +15,8 @@ import { anySignal } from './signals.js';
  *
  * Triggers of the same plugin race each other: once one settles, the others are cancelled and left
  * out of the run, so a run started for several webhooks finishes when any one of them is called.
- * Once the run's own signal aborts, no further node starts.
+ * Once the run's own signal aborts, no further node starts. An observation, when given, hears each
+ * node start and finish.
  */
 export class WorkflowRun {
   private readonly records = new Map<string, NodeRecord>();
@@ -27,12 +29,14 @@ export class WorkflowRun {
   private readonly triggers: readonly ExecutableNode[];
   private readonly payload: unknown;
   private readonly signal: AbortSignal | undefined;
+  private readonly observation: RunObservation | undefined;
 
-  constructor(graph: WorkflowGraph, executor: NodeExecutor, triggers: readonly ExecutableNode[], payload: unknown, signal?: AbortSignal, targetNodeId?: string) {
+  constructor(graph: WorkflowGraph, executor: NodeExecutor, triggers: readonly ExecutableNode[], payload: unknown, signal?: AbortSignal, targetNodeId?: string, observation?: RunObservation) {
     this.graph = graph;
     this.executor = executor;
     this.payload = payload;
     this.signal = signal;
+    this.observation = observation;
     const reachableFromTriggers = graph.reachableFrom(triggers.map((trigger) => trigger.id));
     if (targetNodeId === undefined) {
       this.reachable = reachableFromTriggers;
@@ -89,10 +93,15 @@ export class WorkflowRun {
     const outputs = active.map((connection) => this.records.get(connection.source)!.output);
     const input = parents.length === 0 ? this.payload : outputs.length === 1 ? outputs[0] : outputs;
     const race = this.races.get(nodeId)?.signal;
+    this.observation?.nodeStarted(nodeId);
     const record = await this.executor.execute(node, input, this.ancestorOutputs(nodeId), anySignal([this.signal, race]));
     // A trigger that lost its race did not start this run: leave it out instead of failing it.
-    if (record.error !== null && race?.aborted) return;
+    if (record.error !== null && race?.aborted) {
+      this.observation?.nodeFinished(nodeId);
+      return;
+    }
     this.records.set(nodeId, record);
+    this.observation?.nodeFinished(nodeId, record);
   }
 
   private ancestorOutputs(nodeId: string) {

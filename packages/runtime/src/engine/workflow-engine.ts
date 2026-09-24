@@ -7,6 +7,7 @@ import { ParameterResolver } from '../expressions/parameter-resolver.js';
 import { createRuntimeServices } from '../services/default-services.js';
 import { parseExecutableWorkflow, type ExecutableWorkflow } from '../workflow/executable-workflow.js';
 import { WorkflowGraph } from '../workflow/workflow-graph.js';
+import { RunObservation, type ExecutionObserver } from './execution-observer.js';
 import { StaticNodeCatalog, type NodeCatalog } from './node-catalog.js';
 import { NodeExecutor } from './node-executor.js';
 import { nodeOutputsOf, type NodeRecord } from './node-record.js';
@@ -21,6 +22,10 @@ export interface WorkflowEngineOptions {
   /** `$env` of every node. Defaults to the host process environment. */
   readonly environment?: EnvironmentVariables;
   readonly expressions?: ExpressionEvaluator;
+  /** Receives the progress of every run while it happens; see ExecutionObserver. */
+  readonly observer?: ExecutionObserver;
+  /** Ids of the runs an observer sees. Defaults to random UUIDs; used only with an observer. */
+  readonly createExecutionId?: () => string;
 }
 
 export interface NodeRunRequest {
@@ -42,6 +47,8 @@ export class WorkflowEngine implements WorkflowRunner {
   private readonly graph: WorkflowGraph;
   private readonly executor: NodeExecutor;
   private readonly services: RuntimeServices;
+  private readonly observer?: ExecutionObserver;
+  private readonly createExecutionId: () => string;
   private readonly active = new Set<Promise<unknown>>();
   private disposal?: Promise<void>;
 
@@ -54,6 +61,8 @@ export class WorkflowEngine implements WorkflowRunner {
       mode: options.mode ?? 'production',
       environment: options.environment ?? systemEnvironment(),
     });
+    this.observer = options.observer;
+    this.createExecutionId = options.createExecutionId ?? (() => globalThis.crypto.randomUUID());
   }
 
   /** Validates `document` (typically an exported `workflow.json`) and creates its engine. */
@@ -70,8 +79,12 @@ export class WorkflowEngine implements WorkflowRunner {
     return this.track(async () => {
       const startedAt = this.timestamp();
       const triggers = this.graph.triggers(request.triggerId);
-      const records = await new WorkflowRun(this.graph, this.executor, triggers, request.payload, request.signal, request.targetNodeId).execute();
-      return new WorkflowExecution(this.graph, records, startedAt, this.timestamp(), request.signal?.aborted ?? false);
+      const observation = this.observer && new RunObservation(this.createExecutionId(), this.observer, this.services.logger);
+      const run = new WorkflowRun(this.graph, this.executor, triggers, request.payload, request.signal, request.targetNodeId, observation);
+      observation?.runStarted({ workflowId: this.workflow.id, triggerId: request.triggerId, targetNodeId: request.targetNodeId, startedAt });
+      const execution = new WorkflowExecution(this.graph, await run.execute(), startedAt, this.timestamp(), request.signal?.aborted ?? false);
+      observation?.runFinished(execution);
+      return execution;
     });
   }
 
