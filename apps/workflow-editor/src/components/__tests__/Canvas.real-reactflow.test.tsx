@@ -37,6 +37,64 @@ const catalogWithHttpOutput: PluginCatalogAdapter = {
 };
 
 describe('Canvas with REAL React Flow', () => {
+  it('multi-selects nodes and copies/pastes their internal connections, then undoes the paste', async () => {
+    useWorkflowStore.setState({
+      workflow: {
+        id: 'wf-copy-paste',
+        name: 'Copy paste',
+        nodes: [
+          { id: 'a', pluginId: 'trigger-manual-example', pluginVersion: '1.0.0', parameters: { label: 'A' }, position: { x: 100, y: 100 } },
+          { id: 'b', pluginId: 'trigger-manual-example', pluginVersion: '1.0.0', parameters: { label: 'B' }, position: { x: 400, y: 100 } },
+        ],
+        connections: [{ sourceNodeId: 'a', sourceOutput: 'main', targetNodeId: 'b', targetInput: 'main' }],
+      },
+      selectedNodeId: undefined,
+      nodeResults: {},
+      historyPast: [],
+      historyFuture: [],
+      historyTransactionBase: undefined,
+    });
+
+    const { container } = render(
+      <div style={{ width: 1000, height: 800 }}>
+        <ReactFlowProvider>
+          <Canvas catalog={catalog} onSelectNode={() => {}} />
+        </ReactFlowProvider>
+      </div>
+    );
+
+    const nodeA = await waitFor(() => container.querySelector('.react-flow__node[data-id="a"]') as HTMLElement);
+    const nodeB = container.querySelector('.react-flow__node[data-id="b"]') as HTMLElement;
+    fireEvent.click(nodeA);
+    fireEvent.keyDown(window, { key: 'Control', code: 'ControlLeft', ctrlKey: true });
+    fireEvent.click(nodeB, { ctrlKey: true });
+    fireEvent.keyUp(window, { key: 'Control', code: 'ControlLeft' });
+
+    await waitFor(() => {
+      expect(nodeA).toHaveClass('selected');
+      expect(nodeB).toHaveClass('selected');
+    });
+
+    fireEvent.keyDown(window, { key: 'c', ctrlKey: true });
+    fireEvent.keyDown(window, { key: 'v', ctrlKey: true });
+
+    await waitFor(() => {
+      const workflow = useWorkflowStore.getState().workflow;
+      expect(workflow.nodes).toHaveLength(4);
+      expect(workflow.connections).toHaveLength(2);
+      const copied = workflow.nodes.filter((node) => node.id !== 'a' && node.id !== 'b');
+      expect(copied).toHaveLength(2);
+      expect(copied.map((node) => node.position)).toEqual(expect.arrayContaining([{ x: 132, y: 132 }, { x: 432, y: 132 }]));
+      expect(workflow.connections.some((connection) => copied.some((node) => node.id === connection.sourceNodeId) && copied.some((node) => node.id === connection.targetNodeId))).toBe(true);
+    });
+
+    fireEvent.keyDown(window, { key: 'z', ctrlKey: true });
+    await waitFor(() => {
+      expect(useWorkflowStore.getState().workflow.nodes.map((node) => node.id)).toEqual(['a', 'b']);
+      expect(useWorkflowStore.getState().workflow.connections).toHaveLength(1);
+    });
+  });
+
   it('renders a subflow and a workflow node added to the store with visibility visible', async () => {
     useWorkflowStore.setState({
       workflow: {

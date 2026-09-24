@@ -15,11 +15,15 @@ vi.mock('@xyflow/react', async () => {
 
   return {
     ...actual,
-    ReactFlow: ({ children, onDrop, nodes = [], fitView: shouldFitView }: React.HTMLAttributes<HTMLDivElement> & { nodes?: unknown[]; fitView?: boolean }) => (
+    ReactFlow: ({ children, onDrop, nodes = [], fitView: shouldFitView, selectionOnDrag, panOnDrag, selectionKeyCode, multiSelectionKeyCode }: React.HTMLAttributes<HTMLDivElement> & { nodes?: unknown[]; fitView?: boolean; selectionOnDrag?: boolean; panOnDrag?: boolean; selectionKeyCode?: string | string[] | null; multiSelectionKeyCode?: string | string[] | null }) => (
       <div
         data-testid="react-flow-pane"
         data-node-count={nodes.length}
         data-fit-view={shouldFitView ? 'true' : 'false'}
+        data-selection-on-drag={selectionOnDrag ? 'true' : 'false'}
+        data-pan-on-drag={panOnDrag ? 'true' : 'false'}
+        data-selection-key={Array.isArray(selectionKeyCode) ? selectionKeyCode.join(',') : selectionKeyCode ?? ''}
+        data-multi-selection-key={Array.isArray(multiSelectionKeyCode) ? multiSelectionKeyCode.join(',') : multiSelectionKeyCode ?? ''}
         onDrop={(event) => {
           onDrop?.(event);
           event.stopPropagation();
@@ -57,6 +61,30 @@ beforeEach(() => {
 });
 
 describe('Canvas external drag feedback', () => {
+  it('offers an explicit multi-select mode that switches drag from panning to selection', () => {
+    render(<Canvas catalog={catalog} onSelectNode={vi.fn()} />);
+
+    const pane = screen.getByTestId('react-flow-pane');
+    const button = screen.getByRole('button', { name: /selecionar vários/i });
+    expect(button).toHaveAttribute('aria-pressed', 'false');
+    expect(pane).toHaveAttribute('data-selection-on-drag', 'false');
+    expect(pane).toHaveAttribute('data-pan-on-drag', 'true');
+
+    fireEvent.click(button);
+
+    expect(button).toHaveAttribute('aria-pressed', 'true');
+    expect(pane).toHaveAttribute('data-selection-on-drag', 'true');
+    expect(pane).toHaveAttribute('data-pan-on-drag', 'false');
+  });
+
+  it('uses Ctrl/Command for both additive clicks and drag-box multi-selection', () => {
+    render(<Canvas catalog={catalog} onSelectNode={vi.fn()} />);
+
+    const pane = screen.getByTestId('react-flow-pane');
+    expect(pane).toHaveAttribute('data-selection-key', 'Meta,Control');
+    expect(pane).toHaveAttribute('data-multi-selection-key', 'Meta,Control');
+  });
+
   it('visually marks the canvas as an active drop target while a palette item is over it', () => {
     render(<Canvas catalog={catalog} onSelectNode={vi.fn()} />);
 

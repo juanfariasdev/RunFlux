@@ -7,6 +7,7 @@ import {
   MiniMap,
   Panel,
   ReactFlow,
+  SelectionMode,
   useReactFlow,
   useViewport,
   type Connection,
@@ -42,28 +43,138 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge, testingNodeIds }: 
   const workflow = useWorkflowStore((state) => state.workflow);
   const nodeResults = useWorkflowStore((state) => state.nodeResults);
   const addNode = useWorkflowStore((state) => state.addNode);
+  const addSubgraph = useWorkflowStore((state) => state.addSubgraph);
   const addConnection = useWorkflowStore((state) => state.addConnection);
-  const removeNode = useWorkflowStore((state) => state.removeNode);
+  const removeNodes = useWorkflowStore((state) => state.removeNodes);
   const removeConnection = useWorkflowStore((state) => state.removeConnection);
   const updateNodeGeometry = useWorkflowStore((state) => state.updateNodeGeometry);
   const replaceNodes = useWorkflowStore((state) => state.replaceNodes);
+  const undo = useWorkflowStore((state) => state.undo);
+  const redo = useWorkflowStore((state) => state.redo);
+  const beginHistoryTransaction = useWorkflowStore((state) => state.beginHistoryTransaction);
+  const endHistoryTransaction = useWorkflowStore((state) => state.endHistoryTransaction);
   const [manifests, setManifests] = useState<Record<string, PluginManifest>>({});
   const [rejectionMessage, setRejectionMessage] = useState<string>();
   const [isDragActive, setIsDragActive] = useState(false);
   const [dragPoint, setDragPoint] = useState({ x: 0, y: 0 });
   const [draggedPlugin, setDraggedPlugin] = useState<DraggedPlugin>();
   const [layout, setLayout] = useState<WorkflowLayout>('horizontal');
+  const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(new Set());
+  const [multiSelectMode, setMultiSelectMode] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
   const dragDepth = useRef(0);
+  const clipboardRef = useRef<{
+    nodes: WorkflowNode[];
+    connections: typeof workflow.connections;
+    pasteCount: number;
+  } | undefined>(undefined);
   const { fitView, screenToFlowPosition } = useReactFlow();
   const { zoom } = useViewport();
 
   const manifestFor = useCallback((pluginId: string) => manifests[pluginId], [manifests]);
   const nodes: FlowNode[] = useMemo(
-    () => workflow.nodes.map((node) => toReactFlowNode(node, manifestFor(node.pluginId), node.appearance?.shape === 'subflow' ? { status: 'ok' } : { status: manifestFor(node.pluginId) ? 'ok' : 'missing' }, nodeResults[node.id], testingNodeIds?.has(node.id) ?? false, layout)),
-    [workflow.nodes, manifestFor, nodeResults, testingNodeIds, layout],
+    () => workflow.nodes.map((node) => ({
+      ...toReactFlowNode(node, manifestFor(node.pluginId), node.appearance?.shape === 'subflow' ? { status: 'ok' } : { status: manifestFor(node.pluginId) ? 'ok' : 'missing' }, nodeResults[node.id], testingNodeIds?.has(node.id) ?? false, layout),
+      selected: selectedNodeIds.has(node.id),
+    })),
+    [workflow.nodes, manifestFor, nodeResults, testingNodeIds, layout, selectedNodeIds],
   );
   const edges = useMemo(() => workflow.connections.map(toReactFlowEdge), [workflow.connections]);
+
+  useEffect(() => {
+    setSelectedNodeIds((current) => {
+      const existing = new Set(workflow.nodes.map((node) => node.id));
+      const next = new Set([...current].filter((id) => existing.has(id)));
+      return next.size === current.size ? current : next;
+    });
+  }, [workflow.nodes]);
+
+  // A panel edits one node, so it closes once the selection is not exactly one node.
+  useEffect(() => {
+    if (selectedNodeIds.size !== 1) onSelectNode(undefined);
+  }, [selectedNodeIds, onSelectNode]);
+
+  useEffect(() => {
+    const isEditableTarget = (target: EventTarget | null) => {
+      const element = target instanceof Element ? target : null;
+      return Boolean(element?.closest('input, textarea, select, [contenteditable="true"]'));
+    };
+    const cloneNode = (node: WorkflowNode): WorkflowNode => ({
+      ...node,
+      parameters: structuredClone(node.parameters),
+      position: { ...node.position },
+      ...(node.appearance ? { appearance: { ...node.appearance } } : {}),
+    });
+
+    const handleKeyboard = (event: KeyboardEvent) => {
+      if (isEditableTarget(event.target)) return;
+      const modifier = event.metaKey || event.ctrlKey;
+      if (!modifier) return;
+      const key = event.key.toLowerCase();
+
+      if (key === 'z') {
+        event.preventDefault();
+        if (event.shiftKey) redo();
+        else undo();
+        setSelectedNodeIds(new Set());
+        onSelectNode(undefined);
+        onSelectEdge?.(undefined);
+        return;
+      }
+      if (key === 'y') {
+        event.preventDefault();
+        redo();
+        setSelectedNodeIds(new Set());
+        onSelectNode(undefined);
+        onSelectEdge?.(undefined);
+        return;
+      }
+      if (key === 'c') {
+        const selected = workflow.nodes.filter((node) => selectedNodeIds.has(node.id));
+        if (selected.length === 0) return;
+        event.preventDefault();
+        const ids = new Set(selected.map((node) => node.id));
+        clipboardRef.current = {
+          nodes: selected.map(cloneNode),
+          connections: workflow.connections
+            .filter((connection) => ids.has(connection.sourceNodeId) && ids.has(connection.targetNodeId))
+            .map((connection) => ({ ...connection })),
+          pasteCount: 0,
+        };
+        return;
+      }
+      if (key === 'v') {
+        const clipboard = clipboardRef.current;
+        if (!clipboard || clipboard.nodes.length === 0) return;
+        event.preventDefault();
+        clipboard.pasteCount += 1;
+        const offset = clipboard.pasteCount * 32;
+        const idMap = new Map(clipboard.nodes.map((node) => [node.id, crypto.randomUUID()]));
+        const pastedNodes = clipboard.nodes.map((node) => {
+          const copiedParent = node.parentId ? idMap.get(node.parentId) : undefined;
+          return {
+            ...cloneNode(node),
+            id: idMap.get(node.id)!,
+            position: copiedParent ? { ...node.position } : { x: node.position.x + offset, y: node.position.y + offset },
+            ...(copiedParent ? { parentId: copiedParent } : node.parentId ? { parentId: node.parentId } : {}),
+          };
+        });
+        const pastedConnections = clipboard.connections.map((connection) => ({
+          ...connection,
+          sourceNodeId: idMap.get(connection.sourceNodeId)!,
+          targetNodeId: idMap.get(connection.targetNodeId)!,
+        }));
+        addSubgraph(pastedNodes, pastedConnections);
+        const pastedIds = new Set(pastedNodes.map((node) => node.id));
+        setSelectedNodeIds(pastedIds);
+        onSelectEdge?.(undefined);
+        onSelectNode(pastedNodes.length === 1 ? pastedNodes[0].id : undefined);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyboard);
+    return () => window.removeEventListener('keydown', handleKeyboard);
+  }, [addSubgraph, onSelectEdge, onSelectNode, redo, selectedNodeIds, undo, workflow]);
 
   useEffect(() => {
     let cancelled = false;
@@ -167,16 +278,30 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge, testingNodeIds }: 
   }, [workflow.nodes, manifestFor, addConnection]);
 
   const onNodesChange = useCallback((changes: NodeChange<FlowNode>[]) => {
+    const removedIds = changes.filter((change) => change.type === 'remove').map((change) => change.id);
+    if (removedIds.length > 0) {
+      removeNodes(removedIds);
+      setSelectedNodeIds((current) => new Set([...current].filter((id) => !removedIds.includes(id))));
+    }
+    const selectionChanges = changes.filter((change) => change.type === 'select');
+    if (selectionChanges.length > 0) {
+      setSelectedNodeIds((current) => {
+        const next = new Set(current);
+        for (const change of selectionChanges) {
+          if (change.selected) next.add(change.id);
+          else next.delete(change.id);
+        }
+        return next;
+      });
+    }
     for (const change of changes) {
       if (change.type === 'position' && change.position) {
         updateNodeGeometry(change.id, { position: change.position });
-      } else if (change.type === 'dimensions' && change.dimensions) {
+      } else if (change.type === 'dimensions' && change.dimensions && change.setAttributes) {
         updateNodeGeometry(change.id, { width: change.dimensions.width, height: change.dimensions.height });
-      } else if (change.type === 'remove') {
-        removeNode(change.id);
       }
     }
-  }, [removeNode, updateNodeGeometry]);
+  }, [onSelectNode, removeNodes, updateNodeGeometry]);
 
   const onEdgesChange = useCallback((changes: EdgeChange[]) => {
     for (const change of changes) {
@@ -328,7 +453,12 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge, testingNodeIds }: 
         parentId: null,
       });
     }
-  }, [updateNodeGeometry, workflow.nodes]);
+    endHistoryTransaction();
+  }, [endHistoryTransaction, updateNodeGeometry, workflow.nodes]);
+
+  const onNodeDragStart: OnNodeDrag<FlowNode> = useCallback(() => {
+    beginHistoryTransaction();
+  }, [beginHistoryTransaction]);
 
   const applyLayout = useCallback((layout: WorkflowLayout) => {
     setLayout(layout);
@@ -419,15 +549,23 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge, testingNodeIds }: 
         onDragOver={onDragOver}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
+        onNodeDragStart={onNodeDragStart}
+        onSelectionDragStart={beginHistoryTransaction}
+        onSelectionDragStop={endHistoryTransaction}
         onNodeDragStop={onNodeDragStop}
         onConnect={onConnect}
         onNodeClick={(_event, node) => { onSelectEdge?.(undefined); onSelectNode(node.id); }}
         onEdgeClick={(_event, edge) => { onSelectNode(undefined); onSelectEdge?.(edge.id); }}
-        onPaneClick={() => { onSelectNode(undefined); onSelectEdge?.(undefined); }}
+        onPaneClick={() => { setSelectedNodeIds(new Set()); onSelectNode(undefined); onSelectEdge?.(undefined); }}
         connectionLineType={ConnectionLineType.SmoothStep}
         connectionLineStyle={{ stroke: '#4f46e5', strokeWidth: 2 }}
         defaultEdgeOptions={{ type: 'smoothstep' }}
         deleteKeyCode={['Backspace', 'Delete']}
+        selectionKeyCode={['Meta', 'Control']}
+        selectionOnDrag={multiSelectMode}
+        selectionMode={SelectionMode.Partial}
+        multiSelectionKeyCode={['Meta', 'Control']}
+        panOnDrag={!multiSelectMode}
         fitViewOptions={{ padding: 0.2 }}
         minZoom={0.25}
         maxZoom={2.25}
@@ -448,6 +586,21 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge, testingNodeIds }: 
           ariaLabel="Workflow map"
         />
         <Panel position="top-center" className="!flex !items-center !gap-1 !rounded-xl !border !border-slate-200 !bg-white/95 !p-1 !shadow-xl !backdrop-blur">
+          <button
+            type="button"
+            aria-pressed={multiSelectMode}
+            className={`h-7 rounded-lg px-2.5 text-[10px] font-semibold transition ${multiSelectMode ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-indigo-50 hover:text-indigo-800'}`}
+            onClick={() => setMultiSelectMode((active) => !active)}
+            title="Ative este modo ou segure Ctrl/Command para selecionar vários nós"
+          >
+            ◫ Selecionar vários
+          </button>
+          {selectedNodeIds.size > 1 && (
+            <span className="rounded-md bg-indigo-50 px-2 py-1 text-[9px] font-bold text-indigo-700" data-testid="multi-selection-count">
+              {selectedNodeIds.size} selecionados
+            </span>
+          )}
+          <span className="mx-1 h-[18px] w-px bg-slate-200" />
           <span className="px-1.5 text-[9px] font-extrabold uppercase tracking-wider text-slate-400 max-[1120px]:hidden">Layout</span>
           <button type="button" className="h-7 rounded-lg px-2.5 text-[10px] font-semibold text-slate-600 transition hover:bg-indigo-50 hover:text-indigo-800" onClick={() => applyLayout('horizontal')} title="Arrange from left to right">Horizontal</button>
           <button type="button" className="h-7 rounded-lg px-2.5 text-[10px] font-semibold text-slate-600 transition hover:bg-indigo-50 hover:text-indigo-800" onClick={() => applyLayout('vertical')} title="Arrange from top to bottom">Vertical</button>

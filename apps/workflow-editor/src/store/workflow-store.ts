@@ -12,6 +12,11 @@ import type { NodeResult } from '@runflux/validation-runtime';
 export interface WorkflowStoreState {
   workflow: WorkflowDefinition;
   selectedNodeId: string | undefined;
+  historyPast: WorkflowDefinition[];
+  historyFuture: WorkflowDefinition[];
+  historyTransactionBase: WorkflowDefinition | undefined;
+  /** Consecutive edits of the same group (typing in one node's form) share one undo step. */
+  historyGroup: string | undefined;
 
   /**
    * Latest validation result per node (003-validation-runtime, RF-02/RF-05).
@@ -25,8 +30,14 @@ export interface WorkflowStoreState {
   clearNodeResults: () => void;
 
   setWorkflow: (workflow: WorkflowDefinition) => void;
+  undo: () => void;
+  redo: () => void;
+  beginHistoryTransaction: () => void;
+  endHistoryTransaction: () => void;
   addNode: (node: WorkflowNode) => void;
+  addSubgraph: (nodes: WorkflowNode[], connections: WorkflowConnection[]) => void;
   removeNode: (nodeId: string) => void;
+  removeNodes: (nodeIds: string[]) => void;
   updateNodeParameters: (nodeId: string, parameters: Record<string, unknown>) => void;
   moveNode: (nodeId: string, position: { x: number; y: number }) => void;
   updateNodeAppearance: (nodeId: string, appearance: Partial<WorkflowNodeAppearance>) => void;
@@ -61,9 +72,38 @@ function orderNodesByParent(nodes: WorkflowNode[]): WorkflowNode[] {
   return [...parents, ...children];
 }
 
+const HISTORY_LIMIT = 100;
+
+function samePosition(a: { x: number; y: number }, b: { x: number; y: number }) {
+  return a.x === b.x && a.y === b.y;
+}
+
+function commitWorkflow(
+  state: WorkflowStoreState,
+  workflow: WorkflowDefinition,
+  extra: Partial<WorkflowStoreState> = {},
+  group?: string,
+): Partial<WorkflowStoreState> {
+  if (workflow === state.workflow) return extra;
+  if (state.historyTransactionBase || (group !== undefined && state.historyGroup === group)) {
+    return { workflow, historyFuture: [], ...extra };
+  }
+  return {
+    workflow,
+    historyPast: [...state.historyPast.slice(-(HISTORY_LIMIT - 1)), state.workflow],
+    historyFuture: [],
+    historyGroup: group,
+    ...extra,
+  };
+}
+
 export const useWorkflowStore = create<WorkflowStoreState>((set, get) => ({
   workflow: emptyWorkflow(),
   selectedNodeId: undefined,
+  historyPast: [],
+  historyFuture: [],
+  historyTransactionBase: undefined,
+  historyGroup: undefined,
   nodeResults: {},
 
   setNodeResults: (results) =>
@@ -87,30 +127,88 @@ export const useWorkflowStore = create<WorkflowStoreState>((set, get) => ({
       workflow,
       selectedNodeId: undefined,
       nodeResults: {},
+      historyPast: [],
+      historyFuture: [],
+      historyTransactionBase: undefined,
+      historyGroup: undefined,
+    }),
+
+  undo: () =>
+    set((state) => {
+      const previous = state.historyPast.at(-1);
+      if (!previous) return state;
+      return {
+        workflow: previous,
+        historyPast: state.historyPast.slice(0, -1),
+        historyFuture: [state.workflow, ...state.historyFuture].slice(0, HISTORY_LIMIT),
+        historyTransactionBase: undefined,
+        historyGroup: undefined,
+        selectedNodeId: undefined,
+        nodeResults: {},
+      };
+    }),
+
+  redo: () =>
+    set((state) => {
+      const next = state.historyFuture[0];
+      if (!next) return state;
+      return {
+        workflow: next,
+        historyPast: [...state.historyPast.slice(-(HISTORY_LIMIT - 1)), state.workflow],
+        historyFuture: state.historyFuture.slice(1),
+        historyTransactionBase: undefined,
+        historyGroup: undefined,
+        selectedNodeId: undefined,
+        nodeResults: {},
+      };
+    }),
+
+  beginHistoryTransaction: () =>
+    set((state) => state.historyTransactionBase ? state : { historyTransactionBase: state.workflow }),
+
+  endHistoryTransaction: () =>
+    set((state) => {
+      const base = state.historyTransactionBase;
+      if (!base) return state;
+      if (base === state.workflow) return { historyTransactionBase: undefined };
+      return {
+        historyPast: [...state.historyPast.slice(-(HISTORY_LIMIT - 1)), base],
+        historyFuture: [],
+        historyTransactionBase: undefined,
+        historyGroup: undefined,
+      };
     }),
 
   addNode: (node) =>
-    set((state) => ({
-      workflow: {
+    set((state) => commitWorkflow(state, {
         ...state.workflow,
         nodes: orderNodesByParent([...state.workflow.nodes, node]),
-      },
+      })),
+
+  addSubgraph: (nodes, connections) =>
+    set((state) => commitWorkflow(state, {
+      ...state.workflow,
+      nodes: orderNodesByParent([...state.workflow.nodes, ...nodes]),
+      connections: [...state.workflow.connections, ...connections],
     })),
 
-  removeNode: (nodeId) =>
+  removeNode: (nodeId) => get().removeNodes([nodeId]),
+
+  removeNodes: (nodeIds) =>
     set((state) => {
-      const { [nodeId]: _removed, ...remainingResults } = state.nodeResults;
-      return {
-        workflow: {
+      const removed = new Set(nodeIds);
+      if (!state.workflow.nodes.some((node) => removed.has(node.id))) return state;
+      const remainingResults = Object.fromEntries(Object.entries(state.nodeResults).filter(([nodeId]) => !removed.has(nodeId)));
+      return commitWorkflow(state, {
           ...state.workflow,
-          nodes: state.workflow.nodes.filter((n) => n.id !== nodeId),
+          nodes: state.workflow.nodes.filter((n) => !removed.has(n.id)),
           connections: state.workflow.connections.filter(
-            (c) => c.sourceNodeId !== nodeId && c.targetNodeId !== nodeId,
+            (c) => !removed.has(c.sourceNodeId) && !removed.has(c.targetNodeId),
           ),
-        },
-        selectedNodeId: state.selectedNodeId === nodeId ? undefined : state.selectedNodeId,
+        }, {
+        selectedNodeId: state.selectedNodeId && removed.has(state.selectedNodeId) ? undefined : state.selectedNodeId,
         nodeResults: remainingResults,
-      };
+      });
     }),
 
   updateNodeParameters: (nodeId, parameters) =>
@@ -118,37 +216,44 @@ export const useWorkflowStore = create<WorkflowStoreState>((set, get) => ({
       // A parameter change invalidates any previous test result for this
       // node — its output no longer reflects what the node would produce now.
       const { [nodeId]: _stale, ...remainingResults } = state.nodeResults;
-      return {
-        workflow: {
+      const nextWorkflow = {
           ...state.workflow,
           nodes: state.workflow.nodes.map((n) => (n.id === nodeId ? { ...n, parameters } : n)),
-        },
+        };
+      return commitWorkflow(state, nextWorkflow, {
         nodeResults: remainingResults,
-      };
+      }, `parameters:${nodeId}`);
     }),
 
   moveNode: (nodeId, position) =>
-    set((state) => ({
-      workflow: {
+    set((state) => {
+      const current = state.workflow.nodes.find((node) => node.id === nodeId);
+      if (!current || samePosition(current.position, position)) return state;
+      return commitWorkflow(state, {
         ...state.workflow,
         nodes: state.workflow.nodes.map((n) => (n.id === nodeId ? { ...n, position } : n)),
-      },
-    })),
+      });
+    }),
 
   updateNodeAppearance: (nodeId, appearance) =>
-    set((state) => ({
-      workflow: {
+    set((state) => commitWorkflow(state, {
         ...state.workflow,
         nodes: state.workflow.nodes.map((node) =>
           node.id === nodeId
             ? { ...node, appearance: { ...node.appearance, ...appearance } }
             : node,
         ),
-      },
-    })),
+      }, {}, `appearance:${nodeId}`)),
 
   updateNodeGeometry: (nodeId, geometry) =>
     set((state) => {
+      const current = state.workflow.nodes.find((node) => node.id === nodeId);
+      if (!current) return state;
+      const sameParent = geometry.parentId === undefined || (geometry.parentId === null ? !current.parentId : current.parentId === geometry.parentId);
+      const sameWidth = geometry.width === undefined || current.appearance?.width === geometry.width;
+      const sameHeight = geometry.height === undefined || current.appearance?.height === geometry.height;
+      const samePos = geometry.position === undefined || samePosition(current.position, geometry.position);
+      if (sameParent && sameWidth && sameHeight && samePos) return state;
       const updatedNodes = state.workflow.nodes.map((node) => {
         if (node.id !== nodeId) return node;
         const updated: WorkflowNode = {
@@ -170,16 +275,14 @@ export const useWorkflowStore = create<WorkflowStoreState>((set, get) => ({
         return updated;
       });
 
-      return {
-        workflow: {
+      return commitWorkflow(state, {
           ...state.workflow,
           nodes: orderNodesByParent(updatedNodes),
-        },
-      };
+        });
     }),
 
   replaceNodes: (nodes) =>
-    set((state) => ({ workflow: { ...state.workflow, nodes: orderNodesByParent(nodes) } })),
+    set((state) => commitWorkflow(state, { ...state.workflow, nodes: orderNodesByParent(nodes) })),
 
   selectNode: (nodeId) => set({ selectedNodeId: nodeId }),
 
@@ -188,15 +291,12 @@ export const useWorkflowStore = create<WorkflowStoreState>((set, get) => ({
     if (wouldCreateCycle(workflow.connections, connection.sourceNodeId, connection.targetNodeId)) {
       return false;
     }
-    set((state) => ({
-      workflow: { ...state.workflow, connections: [...state.workflow.connections, connection] },
-    }));
+    set((state) => commitWorkflow(state, { ...state.workflow, connections: [...state.workflow.connections, connection] }));
     return true;
   },
 
   updateConnection: (sourceNodeId, sourceOutput, targetNodeId, targetInput, appearance) =>
-    set((state) => ({
-      workflow: {
+    set((state) => commitWorkflow(state, {
         ...state.workflow,
         connections: state.workflow.connections.map((connection) =>
           connection.sourceNodeId === sourceNodeId &&
@@ -206,12 +306,19 @@ export const useWorkflowStore = create<WorkflowStoreState>((set, get) => ({
             ? { ...connection, ...appearance }
             : connection,
         ),
-      },
-    })),
+      })),
 
   removeConnection: (sourceNodeId, sourceOutput, targetNodeId, targetInput) =>
-    set((state) => ({
-      workflow: {
+    set((state) => {
+      const exists = state.workflow.connections.some(
+        (c) =>
+          c.sourceNodeId === sourceNodeId &&
+          c.sourceOutput === sourceOutput &&
+          c.targetNodeId === targetNodeId &&
+          c.targetInput === targetInput,
+      );
+      if (!exists) return state;
+      return commitWorkflow(state, {
         ...state.workflow,
         connections: state.workflow.connections.filter(
           (c) =>
@@ -222,6 +329,6 @@ export const useWorkflowStore = create<WorkflowStoreState>((set, get) => ({
               c.targetInput === targetInput
             ),
         ),
-      },
-    })),
+      });
+    }),
 }));

@@ -21,6 +21,74 @@ beforeEach(() => {
     workflow: { id: 'wf-test', name: 'Test', nodes: [], connections: [] },
     selectedNodeId: undefined,
     nodeResults: {},
+    historyPast: [],
+    historyFuture: [],
+    historyTransactionBase: undefined,
+  });
+});
+
+describe('undo / redo', () => {
+  it('undoes and redoes workflow mutations', () => {
+    const { addNode, addConnection, undo, redo } = useWorkflowStore.getState();
+    addNode(node('a'));
+    addNode(node('b'));
+    addConnection(connection('a', 'b'));
+
+    undo();
+    expect(useWorkflowStore.getState().workflow.connections).toEqual([]);
+    undo();
+    expect(useWorkflowStore.getState().workflow.nodes.map((n) => n.id)).toEqual(['a']);
+
+    redo();
+    expect(useWorkflowStore.getState().workflow.nodes.map((n) => n.id)).toEqual(['a', 'b']);
+    redo();
+    expect(useWorkflowStore.getState().workflow.connections).toHaveLength(1);
+  });
+
+  it('treats a drag transaction as one undo step', () => {
+    const { addNode, beginHistoryTransaction, updateNodeGeometry, endHistoryTransaction, undo } = useWorkflowStore.getState();
+    addNode(node('a'));
+    beginHistoryTransaction();
+    updateNodeGeometry('a', { position: { x: 10, y: 20 } });
+    updateNodeGeometry('a', { position: { x: 100, y: 200 } });
+    endHistoryTransaction();
+
+    undo();
+    expect(useWorkflowStore.getState().workflow.nodes[0].position).toEqual({ x: 0, y: 0 });
+  });
+
+  it('groups consecutive edits of one node form into a single undo step', () => {
+    const { addNode, updateNodeParameters, undo } = useWorkflowStore.getState();
+    addNode(node('a'));
+    addNode(node('b'));
+    for (const text of ['S', 'SE', 'SEL']) updateNodeParameters('a', { query: text });
+    updateNodeParameters('b', { query: 'x' });
+    updateNodeParameters('a', { query: 'SELECT' });
+
+    undo();
+    expect(useWorkflowStore.getState().workflow.nodes.find((n) => n.id === 'a')!.parameters).toEqual({ query: 'SEL' });
+    undo();
+    expect(useWorkflowStore.getState().workflow.nodes.find((n) => n.id === 'b')!.parameters).toEqual({});
+    undo();
+    expect(useWorkflowStore.getState().workflow.nodes.find((n) => n.id === 'a')!.parameters).toEqual({});
+  });
+
+  it('pastes a copied subgraph as one undoable mutation', () => {
+    const { addNode, addConnection, addSubgraph, undo } = useWorkflowStore.getState();
+    addNode(node('a'));
+    addNode(node('b'));
+    addConnection(connection('a', 'b'));
+
+    addSubgraph(
+      [{ ...node('copy-a'), position: { x: 32, y: 32 } }, { ...node('copy-b'), position: { x: 64, y: 32 } }],
+      [connection('copy-a', 'copy-b')],
+    );
+    expect(useWorkflowStore.getState().workflow.nodes).toHaveLength(4);
+    expect(useWorkflowStore.getState().workflow.connections).toHaveLength(2);
+
+    undo();
+    expect(useWorkflowStore.getState().workflow.nodes.map((n) => n.id)).toEqual(['a', 'b']);
+    expect(useWorkflowStore.getState().workflow.connections).toEqual([connection('a', 'b')]);
   });
 });
 
