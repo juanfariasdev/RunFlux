@@ -28,10 +28,8 @@ export function run(input: any) {
   const base = input && typeof input === 'object' ? input : {};
   return {
     ...base,
-    trigger: {
-      label,
-      triggeredAt: new Date().toISOString(),
-    },
+    label,
+    triggeredAt: new Date().toISOString(),
   };
 }
 `,

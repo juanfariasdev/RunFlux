@@ -18,5 +18,8 @@
     "typescript": "^5.5.4",
     "vitest": "^4.1.9",
     "@types/node": "^22.5.0"
+  },
+  "dependencies": {
+    "@runflux/plugin-system": "*"
   }
 }

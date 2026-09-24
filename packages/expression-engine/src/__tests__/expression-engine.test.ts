@@ -29,6 +29,12 @@ describe('evaluateExpression (004-core-nodes-catalog, D-01)', () => {
 });
 
 describe('resolveExpressions (004-core-nodes-catalog, D-01, RF-10)', () => {
+  it('interpolates adjacent expressions and renders missing embedded values as empty text', () => {
+    expect(resolveExpressions({ label: '{{ $json.first }} {{ $json.last }}', missing: 'value={{ $json.missing }}' }, {
+      $json: { first: 'Ada', last: 'Lovelace' },
+    })).toEqual({ label: 'Ada Lovelace', missing: 'value=' });
+  });
+
   it('leaves a plain literal string untouched', () => {
     const result = resolveExpressions({ label: 'hello world' }, { $json: {} });
     expect(result.label).toBe('hello world');

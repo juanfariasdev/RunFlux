@@ -9,6 +9,12 @@ export interface GeneratedFile {
   type: 'source' | 'config' | 'infrastructure' | 'asset';
 }
 
+export interface CompiledNodeEntry {
+  path: string;
+  isTrigger: boolean;
+  outputs?: string[];
+}
+
 export interface BuildManifest {
   $schema?: string;
   runfluxVersion: string;

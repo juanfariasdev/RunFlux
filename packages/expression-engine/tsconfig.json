@@ -3,7 +3,9 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "lib": ["ES2022"],
+    "lib": [
+      "ES2022"
+    ],
     "rootDir": "src",
     "outDir": "dist",
     "strict": true,
@@ -15,5 +17,12 @@
     "resolveJsonModule": true,
     "verbatimModuleSyntax": true
   },
-  "include": ["src/**/*.ts"]
+  "include": [
+    "src/**/*.ts"
+  ],
+  "references": [
+    {
+      "path": "../plugin-system"
+    }
+  ]
 }

@@ -26,19 +26,21 @@
     "./evaluator": "./src/evaluator.ts",
     "./snippets": "./src/snippets.ts",
     "./code-generators": "./src/code-generators.ts",
-    "./generators": "./src/code-generators.ts"
+    "./generators": "./src/code-generators.ts",
+    "./standalone": "./src/standalone.ts",
+    "./http-client": "./src/http-client.ts"
   },
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -b tsconfig.json",
-    "build:node": "esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist-node/index.mjs --external:zod"
+    "build:node": "esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist-node/index.mjs --external:zod --external:esbuild"
   },
   "dependencies": {
-    "zod": "^3.23.8"
+    "zod": "^3.23.8",
+    "esbuild": "^0.28.2"
   },
   "devDependencies": {
-    "esbuild": "^0.25.0",
     "typescript": "^5.5.4",
     "vitest": "^4.1.9",
     "@types/node": "^22.5.0"

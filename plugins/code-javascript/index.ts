@@ -17,6 +17,7 @@ export const manifest: PluginModule['manifest'] = {
       label: 'JavaScript Code',
       type: 'string',
       required: true,
+      expressions: false,
       default: `// JavaScript Code Node
 // Available variables: $json (input payload), $node (earlier nodes), $env (environment variables)
 return {
@@ -53,4 +54,3 @@ export const execute: PluginModule['execute'] = async (params, input, context) =
     throw new Error(`[code-javascript]: Execution error: ${err.message || String(err)}`);
   }
 };
-

@@ -89,12 +89,13 @@ async function executeNode(
   try {
     // D-02: expressions resolve here, once, for every plugin — a plugin's
     // execute() always receives already-resolved parameters, never a raw {{ }}.
-    const resolvedParams = resolveExpressions(params, {
+    const literalParameters = new Set(manifest?.parameters.filter((parameter) => parameter.expressions === false).map((parameter) => parameter.name));
+    const resolvedParams = Object.fromEntries(Object.entries(params).map(([key, value]) => [key, literalParameters.has(key) ? value : resolveExpressions({ value }, {
       $json: input,
       $node: expressionContext?.$node,
       $env: expressionContext?.$env,
-    });
-    const raw = await executor(resolvedParams, input, context);
+    }).value]));
+    const raw = await executor(resolvedParams, input, { ...context, $node: expressionContext?.$node, $env: expressionContext?.$env });
     if (!manifest?.outputs) {
       return { output: raw ?? null, error: null, activeOutputs: ['main'] };
     }

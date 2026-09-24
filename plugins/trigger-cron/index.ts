@@ -46,12 +46,12 @@ export const CRON_TIMEZONE = ${JSON.stringify(timezone)};
 
 export function run(input: any) {
   const base = input && typeof input === 'object' ? input : {};
-  return {
+  return { value: {
     ...base,
     triggeredAt: new Date().toISOString(),
     cronExpression: CRON_EXPRESSION,
     timezone: CRON_TIMEZONE,
-  };
+  }, activeOutput: 'main' };
 }
 `,
         },
@@ -67,10 +67,10 @@ export const execute: PluginModule['execute'] = (params, input, _context?: Plugi
   const expression = (params.expression as string) || '*/15 * * * *';
   const timezone = (params.timezone as string) || 'UTC';
 
-  return {
+  return { value: {
     ...base,
     triggeredAt: new Date().toISOString(),
     cronExpression: expression,
     timezone,
-  };
+  }, activeOutput: 'main' };
 };

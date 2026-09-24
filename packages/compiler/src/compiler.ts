@@ -1,3 +1,4 @@
+import { CyclicWorkflowError } from '@runflux/workflow-model';
 import type { WorkflowDefinition } from '@runflux/workflow-model';
 import type {
   CompilationRequest,
@@ -5,8 +6,9 @@ import type {
   PluginResolver,
   BuildManifest,
   GeneratedFile,
+  CompiledNodeEntry,
 } from './types.js';
-import { validateWorkflowCompatibility, getTopologicalNodeOrder } from './validator.js';
+import { validateWorkflowCompatibility, getTopologicalNodeOrder, validateGraphReferences } from './validator.js';
 import { generateLocalProject } from './generators/local.js';
 import { generateAwsProject } from './generators/aws.js';
 import { createZipPackage } from './packager.js';
@@ -33,10 +35,20 @@ export async function compileWorkflow(
   }
 
   // 2. DAG topological node ordering
-  const orderedNodes = getTopologicalNodeOrder(workflow);
+  let orderedNodes;
+  try {
+    validateGraphReferences(workflow, resolver);
+    orderedNodes = getTopologicalNodeOrder(workflow);
+  } catch (error) {
+    return { status: 'failed', error: {
+      code: error instanceof CyclicWorkflowError ? 'CYCLE_DETECTED' : 'INVALID_WORKFLOW',
+      message: error instanceof Error ? error.message : String(error),
+    } };
+  }
 
   // 3. Resolve plugins and invoke node generators
   const nodeFiles: GeneratedFile[] = [];
+  const nodeEntries: Record<string, CompiledNodeEntry> = Object.create(null);
   const pluginVersions: Record<string, string> = {};
 
   for (let i = 0; i < orderedNodes.length; i++) {
@@ -60,6 +72,7 @@ export async function compileWorkflow(
             const normalizedPath = file.path.startsWith('src/nodes/')
               ? file.path
               : `src/nodes/node-${i + 1}-${rawFileName}`;
+            nodeEntries[node.id] ??= { path: normalizedPath, isTrigger: plugin.manifest.category === 'trigger', outputs: plugin.manifest.outputs };
             nodeFiles.push({
               path: normalizedPath,
               content: file.content || '',
@@ -94,6 +107,7 @@ export async function compileWorkflow(
       workflow,
       projectName,
       nodeFiles,
+      nodeEntries,
       options,
     });
   } else if (targetPlatform === 'aws') {
@@ -101,6 +115,7 @@ export async function compileWorkflow(
       workflow,
       projectName,
       nodeFiles,
+      nodeEntries,
       options,
     });
   } else {

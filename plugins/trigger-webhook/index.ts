@@ -98,18 +98,12 @@ export const WEBHOOK_SECRET_ENV = ${JSON.stringify(secretEnvVar)};
 export const WEBHOOK_RAW_BODY = ${JSON.stringify(rawBody)};
 
 export function run(input: any) {
-  if (input && typeof input === 'object') {
-    const body = input.body !== undefined ? input.body : input;
-    if (typeof body === 'object' && body !== null && !Array.isArray(body)) {
-      return {
-        ...body,
-        _headers: input.headers ?? {},
-        _query: input.query ?? {},
-      };
-    }
-    return { data: body, _headers: input.headers ?? {}, _query: input.query ?? {} };
-  }
-  return { data: input };
+  const request = input && typeof input === 'object' ? input : {};
+  const body = request.body !== undefined ? request.body : input;
+  const value = body && typeof body === 'object' && !Array.isArray(body)
+    ? { ...body, _headers: request.headers ?? {}, _query: request.query ?? {} }
+    : { data: body, _headers: request.headers ?? {}, _query: request.query ?? {} };
+  return { value, activeOutput: 'main' };
 }
 `,
         },

@@ -4,16 +4,24 @@
   "private": true,
   "type": "module",
   "main": "./index.ts",
-  "runflux": { "plugin": true },
+  "runflux": {
+    "plugin": true
+  },
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc -b tsconfig.json"
   },
   "dependencies": {
-    "@runflux/plugin-system": "*"
+    "@runflux/plugin-system": "*",
+    "pg": "^8.13.0"
   },
   "devDependencies": {
     "typescript": "^5.5.4",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.9",
+    "@types/pg": "^8.11.10"
+  },
+  "exports": {
+    ".": "./index.ts",
+    "./runtime": "./runtime.ts"
   }
 }

@@ -1,11 +1,13 @@
+import { generateRunnerRuntime } from './templates/runner-template.js';
 import type { WorkflowDefinition } from '@runflux/workflow-model';
-import type { GeneratedFile, CompilationOptions } from '../types.js';
-import { buildRunnerCode } from './templates/runner-template.js';
+import type { GeneratedFile, CompilationOptions, CompiledNodeEntry } from '../types.js';
+import { generateGraphRunner } from './graph.js';
 
 export interface AwsGeneratorContext {
   workflow: WorkflowDefinition;
   projectName: string;
   nodeFiles: GeneratedFile[];
+  nodeEntries?: Record<string, CompiledNodeEntry>;
   options?: CompilationOptions;
 }
 
@@ -83,6 +85,7 @@ export function generateAwsProject(context: AwsGeneratorContext): GeneratedFile[
         rootDir: '.',
         outDir: 'dist',
         strict: true,
+        allowJs: true,
         esModuleInterop: true,
         skipLibCheck: true,
       },
@@ -210,64 +213,8 @@ ${cronCdkBlock}
 }
 `;
 
-  // Assembly of DAG runner and nodes
-  const importsList: string[] = [];
-  const graphNodeEntries: string[] = [];
+  const runnerTsContent = generateGraphRunner(workflow, nodeFiles, context.nodeEntries);
 
-  workflow.nodes.forEach((node, index) => {
-    const matchingFile =
-      nodeFiles.find(
-        (f) =>
-          f.path.includes(`/${node.id}-`) ||
-          f.path.includes(`node-${index + 1}-`) ||
-          f.path.endsWith(`${node.pluginId}.ts`) ||
-          f.path.includes(node.id)
-      ) || nodeFiles[index];
-
-    const importName = `nodeModule_${index}`;
-    const relativeModulePath = matchingFile
-      ? matchingFile.path.replace(/^src\//, './').replace(/\.ts$/, '.js')
-      : `./nodes/node-${index + 1}-${node.pluginId}.js`;
-
-    importsList.push(`import * as ${importName} from '${relativeModulePath}';`);
-
-    const isTrigger = node.pluginId.startsWith('trigger-');
-    const label = JSON.stringify(node.appearance?.label || node.pluginId);
-    graphNodeEntries.push(`  {
-    id: '${node.id}',
-    name: ${label},
-    isTrigger: ${isTrigger},
-    run: (input, context) => typeof ${importName}.run === 'function' ? ${importName}.run(input, context) : Promise.resolve(input),
-  }`);
-  });
-
-  if (workflow.nodes.length === 0 && nodeFiles.length > 0) {
-    nodeFiles.forEach((file, index) => {
-      const importName = `nodeModule_${index}`;
-      const relativeModulePath = file.path.replace(/^src\//, './').replace(/\.ts$/, '.js');
-      importsList.push(`import * as ${importName} from '${relativeModulePath}';`);
-      graphNodeEntries.push(`  {
-    id: 'node-${index}',
-    name: 'Node ${index}',
-    isTrigger: ${index === 0},
-    run: (input, context) => typeof ${importName}.run === 'function' ? ${importName}.run(input, context) : Promise.resolve(input),
-  }`);
-    });
-  }
-
-  const graphNodesCode = graphNodeEntries.join(',\n');
-  const graphConnectionsJson = JSON.stringify(
-    workflow.connections.map((c) => ({
-      source: c.sourceNodeId,
-      sourceOutput: c.sourceOutput || 'main',
-      target: c.targetNodeId,
-      targetInput: c.targetInput || 'main',
-    })),
-    null,
-    2
-  );
-
-  const runnerTsContent = buildRunnerCode(importsList, graphNodesCode, graphConnectionsJson);
 
   let webhookAuthCheck = '';
   if (hasWebhook && (webhookAuth === "secret" || webhookAuth === "headerAuth")) {
@@ -355,6 +302,7 @@ ${webhookAuthCheck}
     { path: 'README.md', content: readmeContent, type: 'asset' },
     { path: 'bin/app.ts', content: binAppContent, type: 'infrastructure' },
     { path: 'lib/workflow-stack.ts', content: libStackContent, type: 'infrastructure' },
+    { path: 'src/runtime.js', content: generateRunnerRuntime(), type: 'source' },
     { path: 'src/runner.ts', content: runnerTsContent, type: 'source' },
     { path: 'src/handler.ts', content: handlerContent, type: 'source' },
     ...nodeFiles,

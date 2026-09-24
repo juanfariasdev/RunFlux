@@ -20,16 +20,16 @@ describe('trigger-cron plugin', () => {
   it('executes in sandbox and returns structured cron payload', () => {
     expect(execute).toBeDefined();
     const result = execute!({ expression: '0 0 * * *', timezone: 'America/New_York' }, { previous: 123 }, testContext);
-    expect(result).toHaveProperty('triggeredAt');
-    expect(result).toHaveProperty('cronExpression', '0 0 * * *');
-    expect(result).toHaveProperty('timezone', 'America/New_York');
-    expect(result).toHaveProperty('previous', 123);
+    expect(result).toHaveProperty('value.triggeredAt');
+    expect(result).toHaveProperty('value.cronExpression', '0 0 * * *');
+    expect(result).toHaveProperty('value.timezone', 'America/New_York');
+    expect(result).toHaveProperty('value.previous', 123);
   });
 
   it('applies fallback defaults when params are omitted', () => {
     expect(execute).toBeDefined();
     const result = execute!({}, {}, testContext);
-    expect(result).toHaveProperty('cronExpression', '*/15 * * * *');
-    expect(result).toHaveProperty('timezone', 'UTC');
+    expect(result).toHaveProperty('value.cronExpression', '*/15 * * * *');
+    expect(result).toHaveProperty('value.timezone', 'UTC');
   });
 });

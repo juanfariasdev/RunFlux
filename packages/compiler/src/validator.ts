@@ -1,3 +1,4 @@
+import { getExecutionOrder } from '@runflux/workflow-model';
 import type { WorkflowDefinition, WorkflowNode } from '@runflux/workflow-model';
 import type { TargetPlatform, IncompatibleNode, PluginResolver } from './types.js';
 
@@ -31,59 +32,19 @@ export function validateWorkflowCompatibility(
 }
 
 export function getTopologicalNodeOrder(workflow: WorkflowDefinition): WorkflowNode[] {
-  const nodeMap = new Map<string, WorkflowNode>();
-  const inDegree = new Map<string, number>();
-  const adjList = new Map<string, string[]>();
+  return getExecutionOrder(workflow.nodes, workflow.connections);
+}
 
+export function validateGraphReferences(workflow: WorkflowDefinition, resolver: PluginResolver): void {
+  const nodes = new Map<string, WorkflowNode>();
   for (const node of workflow.nodes) {
-    nodeMap.set(node.id, node);
-    inDegree.set(node.id, 0);
-    adjList.set(node.id, []);
+    if (!node.id || nodes.has(node.id)) throw new Error(`Duplicate or empty node ID "${node.id}"`);
+    nodes.set(node.id, node);
   }
-
-  for (const conn of workflow.connections) {
-    if (inDegree.has(conn.targetNodeId)) {
-      inDegree.set(conn.targetNodeId, (inDegree.get(conn.targetNodeId) || 0) + 1);
-    }
-    if (adjList.has(conn.sourceNodeId)) {
-      adjList.get(conn.sourceNodeId)!.push(conn.targetNodeId);
-    }
+  for (const connection of workflow.connections) {
+    const source = nodes.get(connection.sourceNodeId);
+    if (!source || !nodes.has(connection.targetNodeId)) throw new Error('Connection references an unknown node');
+    const outputs = resolver(source.pluginId)?.manifest.outputs ?? ['main'];
+    if (!outputs.includes(connection.sourceOutput || 'main')) throw new Error(`Unknown output "${connection.sourceOutput}" on node "${source.id}"`);
   }
-
-  const queue: string[] = [];
-  for (const [nodeId, deg] of inDegree.entries()) {
-    if (deg === 0) {
-      queue.push(nodeId);
-    }
-  }
-
-  const sorted: WorkflowNode[] = [];
-
-  while (queue.length > 0) {
-    const currentId = queue.shift()!;
-    const node = nodeMap.get(currentId);
-    if (node) {
-      sorted.push(node);
-    }
-
-    const neighbors = adjList.get(currentId) || [];
-    for (const neighborId of neighbors) {
-      const newDeg = (inDegree.get(neighborId) || 1) - 1;
-      inDegree.set(neighborId, newDeg);
-      if (newDeg === 0) {
-        queue.push(neighborId);
-      }
-    }
-  }
-
-  // Append any remaining isolated nodes or cycles to ensure all nodes are processed
-  if (sorted.length < workflow.nodes.length) {
-    for (const node of workflow.nodes) {
-      if (!sorted.some((s) => s.id === node.id)) {
-        sorted.push(node);
-      }
-    }
-  }
-
-  return sorted;
 }

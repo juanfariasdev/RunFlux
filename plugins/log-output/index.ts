@@ -27,7 +27,7 @@ export const generators: PluginModule['generators'] = {
 const LABEL = ${label};
 
 export function run($json: any) {
-  console.log('[log-output] ' + LABEL + ':', JSON.stringify($json, null, 2));
+  console.log('[log-output] ' + LABEL + ':', $json);
   return $json;
 }
 `,

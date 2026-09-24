@@ -43,6 +43,8 @@ export interface ParameterSchema {
   required: boolean;
   default?: unknown;
   sensitive?: boolean;
+  /** Disable interpolation for source code or SQL; bind data through separate parameters. */
+  expressions?: boolean;
   /** Row shape for a `type: 'json'` array-of-objects parameter. See JsonRowFieldSchema. */
   rowSchema?: JsonRowFieldSchema[];
 }
@@ -97,6 +99,8 @@ export interface PluginExecutionContext {
   workflowId: string;
   nodeId: string;
   mode: 'sandbox' | 'production';
+  $node?: Record<string, { json: unknown }>;
+  $env?: Record<string, string | undefined>;
   /**
    * Fires when this node's wait no longer matters — e.g. a whole-workflow
    * run raced two independent triggers (RN-08) and a different one already
