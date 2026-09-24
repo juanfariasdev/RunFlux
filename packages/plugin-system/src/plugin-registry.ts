@@ -1,6 +1,8 @@
-import type { DiscoveredPlugin, ExecutorFn, GeneratorFn, PluginManifest } from './types';
-import { scanDirectory, type ScanError } from './discovery/directory-scanner';
-import { scanPackages } from './discovery/package-scanner';
+import type { NodeCatalog, NodeDefinition, NodeTypeDescription } from '@runflux/runtime';
+import { scanDirectory, type ScanError } from './discovery/directory-scanner.js';
+import { scanPackages } from './discovery/package-scanner.js';
+import { loadPlugin } from './discovery/plugin-loader.js';
+import type { DiscoveredPlugin, PluginManifest, PluginModule } from './types.js';
 
 export class DuplicatePluginIdError extends Error {
   constructor(id: string, existingPath: string, conflictingPath: string) {
@@ -25,89 +27,75 @@ export interface DiscoverSummary {
 }
 
 /**
- * In-memory registry of discovered plugins (D-05: no persistence of its own —
- * rebuilt on every discover() call, e.g. at boot).
+ * In-memory registry of loaded plugins (D-05: no persistence of its own — rebuilt on every
+ * discover() call). It is also the node catalog the editor's engine runs nodes from.
  */
-export class PluginRegistry {
-  private plugins = new Map<string, DiscoveredPlugin>();
+export class PluginRegistry implements NodeCatalog {
+  private readonly plugins = new Map<string, DiscoveredPlugin>();
 
-  /** Registers a discovered plugin. Rejects (EC-02) rather than silently overwriting a duplicate id. */
+  /** Registers a loaded plugin. Rejects (EC-02) rather than silently overwriting a duplicate id. */
   register(plugin: DiscoveredPlugin): void {
     const existing = this.plugins.get(plugin.manifest.id);
-    if (existing) {
-      throw new DuplicatePluginIdError(plugin.manifest.id, existing.sourcePath, plugin.sourcePath);
-    }
+    if (existing) throw new DuplicatePluginIdError(plugin.manifest.id, existing.sourcePath, plugin.sourcePath);
     this.plugins.set(plugin.manifest.id, plugin);
+  }
+
+  /** Loads a plugin module that is already imported, such as one bundled with a test. */
+  async registerModule(module: PluginModule, sourcePath: string): Promise<DiscoveredPlugin> {
+    const plugin = await loadPlugin(module, sourcePath);
+    this.register(plugin);
+    return plugin;
   }
 
   /** Runs directory + npm-package discovery and registers every valid plugin found (RF-01). */
   async discover(options: DiscoverOptions = {}): Promise<DiscoverSummary> {
     const log = options.onLog ?? (() => {});
+    const results = await Promise.all([
+      ...(options.pluginDirectories ?? []).map((dir) => scanDirectory(dir)),
+      ...(options.nodeModulesDirectories ?? []).map((dir) => scanPackages(dir)),
+    ]);
     const errors: ScanError[] = [];
     let discovered = 0;
     let rejected = 0;
-
-    const directoryResults = await Promise.all(
-      (options.pluginDirectories ?? []).map((dir) => scanDirectory(dir)),
-    );
-    const packageResults = await Promise.all(
-      (options.nodeModulesDirectories ?? []).map((dir) => scanPackages(dir)),
-    );
-
-    for (const result of [...directoryResults, ...packageResults]) {
+    for (const result of results) {
       errors.push(...result.errors);
       for (const plugin of result.plugins) {
         try {
           this.register(plugin);
           discovered += 1;
-        } catch (err) {
+        } catch (error) {
           rejected += 1;
-          errors.push({ path: plugin.sourcePath, error: (err as Error).message });
+          errors.push({ path: plugin.sourcePath, error: (error as Error).message });
         }
       }
     }
-
-    log(
-      `Plugin discovery: ${discovered} plugin(s) registered, ${errors.length} rejected/malformed.`,
-    );
-    for (const error of errors) {
-      log(`  - ${error.path}: ${error.error}`);
-    }
-
+    log(`Plugin discovery: ${discovered} plugin(s) registered, ${errors.length} rejected/malformed.`);
+    for (const error of errors) log(`  - ${error.path}: ${error.error}`);
     return { discovered, rejected, errors };
   }
 
   /** Lists all registered plugin manifests (backs RF-05, the editor's palette). */
   listManifests(): PluginManifest[] {
-    return [...this.plugins.values()].map((p) => p.manifest);
+    return [...this.plugins.values()].map((plugin) => plugin.manifest);
   }
 
-  /** Resolves the generator for a (pluginId, platform) pair (RF-06). Throws a clear error otherwise. */
-  resolveGenerator(pluginId: string, platform: string): GeneratorFn {
-    const plugin = this.plugins.get(pluginId);
-    if (!plugin) {
-      throw new Error(`Unknown plugin "${pluginId}"`);
-    }
-    const generator = plugin.generators[platform];
-    if (!generator) {
-      throw new Error(`Plugin "${pluginId}" does not support platform "${platform}"`);
-    }
-    return generator;
+  list(): DiscoveredPlugin[] {
+    return [...this.plugins.values()];
   }
 
-  /** Returns the manifest for a plugin id, or undefined if not registered (used by RF-08 fallback checks). */
+  get(pluginId: string): DiscoveredPlugin | undefined {
+    return this.plugins.get(pluginId);
+  }
+
   getManifest(pluginId: string): PluginManifest | undefined {
     return this.plugins.get(pluginId)?.manifest;
   }
 
-  /**
-   * Returns the local executor for a plugin id, or undefined if the plugin
-   * is not registered or does not declare one (003-validation-runtime, D-04).
-   * Unlike `resolveGenerator`, this never throws — the caller (the
-   * validation engine) turns "no executor" into a per-node result, not an
-   * exception that would abort the whole run.
-   */
-  getExecutor(pluginId: string): ExecutorFn | undefined {
-    return this.plugins.get(pluginId)?.execute;
+  /** The node definition of a registered plugin (NodeCatalog). */
+  resolve(pluginId: string): NodeDefinition | undefined {
+    return this.plugins.get(pluginId)?.definition;
   }
+
+  /** What the workflow builder needs to know about a node type. */
+  readonly describe = (pluginId: string): NodeTypeDescription | undefined => this.getManifest(pluginId);
 }

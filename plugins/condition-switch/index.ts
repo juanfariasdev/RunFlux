@@ -1,16 +1,11 @@
-import { createCodeGenerators } from '@runflux/plugin-system/generator-factory';
-import type { PluginModule } from '@runflux/plugin-system/types';
 import { RULE_ROW_SCHEMA } from '@runflux/plugin-system/condition-row-schema';
-import { evaluateSwitch, type SwitchRule } from '@runflux/plugin-system/operators';
-import { generateConditionSwitchCode } from '@runflux/plugin-system/generators';
+import type { PluginModule } from '@runflux/plugin-system/types';
+import { FALLBACK_OUTPUT, RULE_OUTPUTS } from './runtime.js';
 
 /**
- * Switch (004-core-nodes-catalog, RF-02): evaluates a list of rules in
- * order, routing to the first one that matches (or "fallback" if enabled and
- * none match).
+ * Switch (004-core-nodes-catalog, RF-02): evaluates its rules in order, routing to the first one
+ * that matches, or to "fallback" when enabled and none matches.
  */
-const RULE_OUTPUTS = ['output1', 'output2', 'output3', 'output4', 'output5'];
-
 export const manifest: PluginModule['manifest'] = {
   id: 'condition-switch',
   name: 'Switch',
@@ -21,14 +16,7 @@ export const manifest: PluginModule['manifest'] = {
     { name: 'fallbackEnabled', label: 'Enable fallback output', type: 'boolean', required: false, default: false },
   ],
   supportedPlatforms: ['local', 'aws'],
-  outputs: [...RULE_OUTPUTS, 'fallback'],
+  outputs: [...RULE_OUTPUTS, FALLBACK_OUTPUT],
 };
 
-export const generators = createCodeGenerators(manifest, (config) => generateConditionSwitchCode({ ...config, ruleOutputs: RULE_OUTPUTS }));
-
-export const execute: PluginModule['execute'] = (params, input) => {
-  const rules = Array.isArray(params.rules) ? (params.rules as SwitchRule[]) : [];
-  const fallbackEnabled = Boolean(params.fallbackEnabled);
-  const activeOutput = evaluateSwitch(rules, RULE_OUTPUTS, fallbackEnabled);
-  return { value: input, activeOutput };
-};
+export const runtimeModule = new URL('./runtime.ts', import.meta.url);

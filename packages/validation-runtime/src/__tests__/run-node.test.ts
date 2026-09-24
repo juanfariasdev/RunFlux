@@ -1,23 +1,9 @@
-import { PluginRegistry } from '@runflux/plugin-system/plugin-registry';
-import type { DiscoveredPlugin, ExecutorFn } from '@runflux/plugin-system/types';
 import { describe, expect, it } from 'vitest';
 import { runNode, type NodeResult } from '../engine';
 import type { WorkflowDefinition } from '@runflux/workflow-model/types';
+import { behaviourPlugin, registryWith, type TestBehaviour } from './support';
 
-function plugin(id: string, execute?: ExecutorFn): DiscoveredPlugin {
-  return {
-    manifest: { id, name: id, category: 'action', version: '1.0.0', parameters: [], supportedPlatforms: ['local'] },
-    generators: { local: () => ({ files: [], infra: [] }) },
-    execute,
-    sourcePath: `/plugins/${id}`,
-  };
-}
-
-function registryWith(...plugins: DiscoveredPlugin[]): PluginRegistry {
-  const registry = new PluginRegistry();
-  for (const p of plugins) registry.register(p);
-  return registry;
-}
+const plugin = (id: string, behaviour: TestBehaviour = () => undefined) => behaviourPlugin({ id }, behaviour);
 
 function workflow(): WorkflowDefinition {
   return {

@@ -1,173 +1,103 @@
-import { CyclicWorkflowError } from '@runflux/workflow-model';
-import { transformSync } from 'esbuild';
-import type {
-  CompilationRequest,
-  CompilationResult,
-  PluginResolver,
-  BuildManifest,
-  GeneratedFile,
-  CompiledNodeEntry,
-} from './types.js';
-import { validateWorkflowCompatibility, getTopologicalNodeOrder, validateGraphReferences } from './validator.js';
-import { generateLocalProject } from './generators/local.js';
-import { generateAwsProject } from './generators/aws.js';
+import { RuntimeBundleError, RuntimeBundler } from './bundling/runtime-bundler.js';
+import { DeploymentPlanner, type DeploymentPlan } from './deployment/deployment-plan.js';
 import { createZipPackage } from './packager.js';
+import { AwsTarget } from './targets/aws-target.js';
+import type { DeploymentTarget } from './targets/deployment-target.js';
+import { LocalTarget } from './targets/local-target.js';
+import {
+  CompilationError,
+  type BuildManifest,
+  type CompilationRequest,
+  type CompilationResult,
+  type GeneratedFile,
+  type PluginResolver,
+  type TargetPlatform,
+} from './types.js';
+import { WorkflowValidator } from './validation/workflow-validator.js';
 
-export async function compileWorkflow(
-  request: CompilationRequest,
-  resolver: PluginResolver
-): Promise<CompilationResult> {
-  const { workflow, targetPlatform, projectName, projectVersion, options } = request;
+export const RUNFLUX_VERSION = '0.1.0';
 
-  // 1. Fast-fail compatibility validation
-  const validation = validateWorkflowCompatibility(workflow, targetPlatform, resolver);
-  if (!validation.compatible) {
+export interface CompilerDependencies {
+  readonly bundler?: RuntimeBundler;
+  readonly targets?: Partial<Record<TargetPlatform, DeploymentTarget>>;
+  readonly clock?: () => Date;
+}
+
+/**
+ * Compiles a workflow into a standalone backend project: validates it for the target, plans the
+ * deployment from the plugins' declarations, lets the target generate the project files and
+ * bundles the runtime with the plugins the workflow uses.
+ */
+export class WorkflowCompiler {
+  private readonly validator: WorkflowValidator;
+  private readonly planner: DeploymentPlanner;
+  private readonly bundler: RuntimeBundler;
+  private readonly targets: Partial<Record<TargetPlatform, DeploymentTarget>>;
+  private readonly clock: () => Date;
+
+  constructor(plugins: PluginResolver, dependencies: CompilerDependencies = {}) {
+    this.validator = new WorkflowValidator(plugins);
+    this.planner = new DeploymentPlanner(plugins);
+    this.bundler = dependencies.bundler ?? new RuntimeBundler();
+    this.targets = dependencies.targets ?? { local: new LocalTarget(), aws: new AwsTarget() };
+    this.clock = dependencies.clock ?? (() => new Date());
+  }
+
+  /** Never throws for an invalid workflow: problems become a failed result with a code. */
+  async compile(request: CompilationRequest): Promise<CompilationResult> {
+    try {
+      return await this.compileProject(request);
+    } catch (error) {
+      if (error instanceof CompilationError) return error.toFailure();
+      throw error;
+    }
+  }
+
+  private async compileProject(request: CompilationRequest): Promise<CompilationResult> {
+    const { workflow, targetPlatform, projectName, options = {} } = request;
+    const target = this.targets[targetPlatform];
+    if (!target) throw new CompilationError('INCOMPATIBLE_NODES', `Target platform '${targetPlatform}' is not supported.`);
+    this.validator.validate(workflow, targetPlatform);
+    const plan = this.planner.plan(workflow, options);
+    const projectFiles = await target.files({ plan, projectName, options });
+    const runtimeFiles = await this.bundleRuntime(target, plan);
+    const generated = [...projectFiles, ...runtimeFiles];
+    const manifest = this.buildManifest(request, target, plan, generated);
+    const files: GeneratedFile[] = [{ path: 'runflux-build.json', content: `${JSON.stringify(manifest, null, 2)}\n`, type: 'config' }, ...generated];
+    return { status: 'success', projectName, targetPlatform, files, manifest, zipBuffer: await createZipPackage(files) };
+  }
+
+  private async bundleRuntime(target: DeploymentTarget, plan: DeploymentPlan): Promise<GeneratedFile[]> {
+    try {
+      return await this.bundler.bundle({
+        entries: target.runtimeEntries,
+        plugins: plan.plugins,
+        external: [...Object.keys(target.hostDependencies), ...Object.keys(plan.dependencies)],
+      });
+    } catch (error) {
+      if (error instanceof RuntimeBundleError) throw new CompilationError('GENERATOR_ERROR', error.message);
+      throw error;
+    }
+  }
+
+  private buildManifest(request: CompilationRequest, target: DeploymentTarget, plan: DeploymentPlan, files: readonly GeneratedFile[]): BuildManifest {
+    const profile = target.buildProfile(plan);
     return {
-      status: 'failed',
-      error: {
-        code: 'INCOMPATIBLE_NODES',
-        message: `Workflow contains ${validation.incompatibleNodes.length} node(s) without support for target platform '${targetPlatform}'.`,
-        details: {
-          incompatibleNodes: validation.incompatibleNodes,
-        },
-      },
+      runfluxVersion: RUNFLUX_VERSION,
+      targetPlatform: request.targetPlatform,
+      workflowId: request.workflow.id,
+      projectName: request.projectName,
+      workflowVersion: request.projectVersion || 'v1',
+      compiledAt: this.clock().toISOString(),
+      entrypoint: target.entrypoint,
+      build: { entryPoints: [...profile.entryPoints], bundleDependencies: profile.bundleDependencies },
+      nodeCount: request.workflow.nodes.length,
+      pluginVersions: { ...plan.pluginVersions },
+      generatedFiles: files.map((file) => file.path),
     };
   }
+}
 
-  // 2. DAG topological node ordering
-  let orderedNodes;
-  try {
-    validateGraphReferences(workflow, resolver);
-    orderedNodes = getTopologicalNodeOrder(workflow);
-  } catch (error) {
-    return { status: 'failed', error: {
-      code: error instanceof CyclicWorkflowError ? 'CYCLE_DETECTED' : 'INVALID_WORKFLOW',
-      message: error instanceof Error ? error.message : String(error),
-    } };
-  }
-
-  // 3. Resolve plugins and invoke node generators
-  const nodeFiles: GeneratedFile[] = [];
-  const nodeEntries: Record<string, CompiledNodeEntry> = Object.create(null);
-  const pluginVersions: Record<string, string> = {};
-
-  for (let i = 0; i < orderedNodes.length; i++) {
-    const node = orderedNodes[i];
-    const plugin = resolver(node.pluginId);
-    if (!plugin) continue;
-
-    pluginVersions[node.pluginId] = plugin.manifest.version;
-
-    const generatorFn = plugin.generators?.[targetPlatform];
-    if (typeof generatorFn === 'function') {
-      try {
-        const artifact = await generatorFn(node.parameters || {}, {
-          workflowId: workflow.id,
-          nodeId: node.id,
-        });
-
-        if (!artifact?.files?.length) throw new Error('Generator returned no entrypoint');
-        if (artifact && Array.isArray(artifact.files)) {
-          for (const file of artifact.files) {
-            const relativePath = file.path.replace(/\\/g, '/').replace(/^src\/nodes\//, '');
-            if (!relativePath || relativePath.startsWith('/') || relativePath.split('/').some((part) => part === '..' || part === '.') || relativePath.includes(':')) {
-              throw new Error(`Unsafe artifact path "${file.path}"`);
-            }
-            const isTypeScript = relativePath.endsWith('.ts');
-            const normalizedPath = `src/nodes/node-${i + 1}/${relativePath.replace(/\.ts$/, '.js')}`;
-            if (nodeFiles.some((file) => file.path === normalizedPath)) throw new Error(`Duplicate artifact path "${file.path}"`);
-            nodeEntries[node.id] ??= { path: normalizedPath, isTrigger: plugin.manifest.category === 'trigger', outputs: plugin.manifest.outputs };
-            nodeFiles.push({
-              path: normalizedPath,
-              content: isTypeScript ? transformSync(file.content, { loader: 'ts', format: 'esm', target: 'node22' }).code : file.content,
-              type: 'source',
-            });
-          }
-        }
-      } catch (err: any) {
-        return {
-          status: 'failed',
-          error: {
-            code: 'GENERATOR_ERROR',
-            message: `Generator error in plugin '${node.pluginId}': ${err?.message || err}`,
-          },
-        };
-      }
-    } else {
-      // Safe fallback generator
-      nodeFiles.push({
-        path: `src/nodes/node-${i + 1}-${node.pluginId}.ts`,
-        content: `export async function run(input: any) { return input; }`,
-        type: 'source',
-      });
-    }
-  }
-
-  // 4. Assemble project tree via target platform generator
-  let projectFiles: GeneratedFile[];
-
-  try {
-    if (targetPlatform === 'local') {
-      projectFiles = generateLocalProject({
-        workflow,
-        projectName,
-        nodeFiles,
-        nodeEntries,
-        options,
-      });
-    } else if (targetPlatform === 'aws') {
-      projectFiles = generateAwsProject({
-        workflow,
-        projectName,
-        nodeFiles,
-        nodeEntries,
-        options,
-      });
-    } else {
-      return {
-        status: 'failed',
-        error: {
-          code: 'INCOMPATIBLE_NODES',
-          message: `Target platform '${targetPlatform}' is not supported.`,
-        },
-      };
-    }
-  } catch (error) {
-    return { status: 'failed', error: { code: 'INVALID_WORKFLOW', message: error instanceof Error ? error.message : String(error) } };
-  }
-
-  // 5. Build manifest generation (runflux-build.json)
-  const buildManifest: BuildManifest = {
-    runfluxVersion: '0.1.0',
-    targetPlatform,
-    workflowId: workflow.id,
-    projectName,
-    workflowVersion: projectVersion || 'v1',
-    compiledAt: new Date().toISOString(),
-    entrypoint: targetPlatform === 'local' ? 'src/server.ts' : 'src/handler.ts',
-    nodeCount: workflow.nodes.length,
-    pluginVersions,
-    generatedFiles: projectFiles.map((f) => f.path),
-  };
-
-  const allFiles: GeneratedFile[] = [
-    {
-      path: 'runflux-build.json',
-      content: JSON.stringify(buildManifest, null, 2),
-      type: 'config',
-    },
-    ...projectFiles,
-  ];
-
-  // 6. In-memory ZIP package creation
-  const zipBuffer = await createZipPackage(allFiles);
-
-  return {
-    status: 'success',
-    projectName,
-    targetPlatform,
-    files: allFiles,
-    manifest: buildManifest,
-    zipBuffer,
-  };
+export function compileWorkflow(request: CompilationRequest, plugins: PluginResolver): Promise<CompilationResult> {
+  return new WorkflowCompiler(plugins).compile(request);
 }

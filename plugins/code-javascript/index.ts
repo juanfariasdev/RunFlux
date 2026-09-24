@@ -1,11 +1,8 @@
-import { createCodeGenerators } from '@runflux/plugin-system/generator-factory';
 import type { PluginModule } from '@runflux/plugin-system/types';
-import { extractContext } from '@runflux/plugin-system/context-helpers';
-import { generateCodeJavascriptCode } from '@runflux/plugin-system/generators';
 
 /**
- * Code Node (010-code-node-plugin): executes arbitrary user-authored
- * JavaScript / TypeScript functions receiving ($json, $node, $env).
+ * Code Node (010-code-node-plugin): runs user-authored JavaScript receiving `$json`, `$node` and
+ * `$env`. The source is a literal parameter, so `{{ }}` inside it is never interpolated.
  */
 export const manifest: PluginModule['manifest'] = {
   id: 'code-javascript',
@@ -30,17 +27,4 @@ return {
   supportedPlatforms: ['local', 'aws'],
 };
 
-export const generators = createCodeGenerators(manifest, generateCodeJavascriptCode);
-
-export const execute: PluginModule['execute'] = async (params, input, context) => {
-  const rawCode = (params.code as string | undefined)?.trim() || 'return $json;';
-  try {
-    const { $node, $env } = extractContext(context);
-    // eslint-disable-next-line @typescript-eslint/no-empty-function
-    const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
-    const fn = new AsyncFunction('$json', '$node', '$env', rawCode);
-    return await fn(input, $node, $env);
-  } catch (err: any) {
-    throw new Error(`[code-javascript]: Execution error: ${err.message || String(err)}`);
-  }
-};
+export const runtimeModule = new URL('./runtime.ts', import.meta.url);

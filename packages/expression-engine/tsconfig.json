@@ -22,7 +22,7 @@
   ],
   "references": [
     {
-      "path": "../plugin-system"
+      "path": "../runtime"
     }
   ]
 }

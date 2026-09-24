@@ -1,5 +1,5 @@
 import type { PluginManifest } from '@runflux/plugin-system/types';
-import type { PluginReferenceStatus } from '@runflux/plugin-system/api/resolve-generator';
+import type { PluginReferenceStatus } from '@runflux/plugin-system/api/check-plugin-reference';
 
 /**
  * Seam between the editor's UI (browser) and the Plugin System's discovery

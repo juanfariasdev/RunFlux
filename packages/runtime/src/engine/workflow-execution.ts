@@ -14,12 +14,22 @@ export interface ExecutionResponse {
 
 /** The outcome of one workflow run; records are in the order nodes finished. */
 export class WorkflowExecution {
+  private readonly graph: WorkflowGraph;
+  readonly records: readonly NodeRecord[];
+  readonly startedAt: string;
+  readonly finishedAt: string;
+
   constructor(
-    private readonly graph: WorkflowGraph,
-    readonly records: readonly NodeRecord[],
-    readonly startedAt: string,
-    readonly finishedAt: string,
-  ) {}
+    graph: WorkflowGraph,
+    records: readonly NodeRecord[],
+    startedAt: string,
+    finishedAt: string,
+  ) {
+    this.graph = graph;
+    this.records = records;
+    this.startedAt = startedAt;
+    this.finishedAt = finishedAt;
+  }
 
   get workflowId(): string {
     return this.graph.workflow.id;

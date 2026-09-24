@@ -3,7 +3,7 @@ import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { resolveExpressions } from '@runflux/expression-engine';
 import type { PluginManifest } from '@runflux/plugin-system/types';
-import { composeFields, type FieldConfig } from '@runflux/plugin-system/fields-row-schema';
+import { FieldComposer, type FieldDefinition } from '@runflux/runtime';
 import type { NodeResult } from '@runflux/validation-runtime';
 import type { WorkflowNodeAppearance, WorkflowNodeShape } from '@runflux/workflow-model/types';
 import { buildZodSchema } from '../forms/build-zod-schema';
@@ -57,7 +57,7 @@ function hasExpressionSyntax(text: string): boolean {
 
 /** `sampleBody` is a `FIELDS_ROW_SCHEMA` array (see trigger-webhook's manifest) — compose it into the flat body a real request would carry. */
 export function resolveSampleBodyForTest(sampleBody: unknown): unknown {
-  if (Array.isArray(sampleBody)) return composeFields(sampleBody as FieldConfig[]);
+  if (Array.isArray(sampleBody)) return new FieldComposer().compose(sampleBody as FieldDefinition[]);
   return sampleBody || { message: 'Sample test payload' };
 }
 

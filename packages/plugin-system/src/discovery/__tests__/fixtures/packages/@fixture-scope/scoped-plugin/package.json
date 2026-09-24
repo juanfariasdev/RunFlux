@@ -1,0 +1,7 @@
+{
+  "name": "@fixture-scope/scoped-plugin",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.js",
+  "runflux": { "plugin": true }
+}

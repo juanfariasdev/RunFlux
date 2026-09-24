@@ -1,145 +1,83 @@
-import { describe, it, expect } from 'vitest';
-import type { WorkflowDefinition } from '@runflux/workflow-model';
-import type { CompiledPlugin } from '../types.js';
-import { compileWorkflow } from '../compiler.js';
+import JSZip from 'jszip';
+import { describe, expect, it } from 'vitest';
+import { WorkflowCompiler } from '../compiler.js';
+import { BuildProfile } from '../project/build-profile.js';
+import type { DeploymentTarget } from '../targets/deployment-target.js';
+import type { CompilationRequest } from '../types.js';
+import { resolveFixture } from './fixtures/plugins.js';
+import { edge, node, workflow } from './fixtures/workflows.js';
 
-describe('compileWorkflow Engine', () => {
-  const dummyTrigger: CompiledPlugin = {
-    manifest: {
-      id: 'trigger-manual-example',
-      name: 'Trigger Manual',
-      version: '1.0.0',
-      category: 'trigger',
-      parameters: [],
-      supportedPlatforms: ['local', 'aws'],
-    },
-    generators: {
-      local: () => ({
-        files: [
-          {
-            path: 'src/nodes/trigger.ts',
-            content: 'export async function run() { return { start: true }; }',
-          },
-        ],
-        infra: [],
-      }),
-      aws: () => ({
-        files: [
-          {
-            path: 'src/nodes/trigger.ts',
-            content: 'export async function run() { return { start: true }; }',
-          },
-        ],
-        infra: [],
-      }),
-    },
-  };
+const clock = () => new Date('2026-01-01T12:00:00.000Z');
+const compiler = new WorkflowCompiler(resolveFixture, { clock });
+const request = (overrides: Partial<CompilationRequest> = {}): CompilationRequest => ({
+  workflow: workflow([node('hook', 'webhook'), node('echo', 'echo')], [edge('hook', 'echo')]),
+  targetPlatform: 'local',
+  projectName: 'Orders',
+  ...overrides,
+});
 
-  const dummySet: CompiledPlugin = {
-    manifest: {
-      id: 'set',
-      name: 'Set Field',
-      version: '1.0.0',
-      category: 'action',
-      parameters: [],
-      supportedPlatforms: ['local', 'aws'],
-    },
-    generators: {
-      local: () => ({
-        files: [
-          {
-            path: 'src/nodes/set.ts',
-            content: 'export async function run(input: any) { return { ...input, ok: true }; }',
-          },
-        ],
-        infra: [],
-      }),
-      aws: () => ({
-        files: [
-          {
-            path: 'src/nodes/set.ts',
-            content: 'export async function run(input: any) { return { ...input, ok: true }; }',
-          },
-        ],
-        infra: [],
-      }),
-    },
-  };
-
-  const resolver = (pluginId: string): CompiledPlugin | undefined => {
-    if (pluginId === 'trigger-manual-example') return dummyTrigger;
-    if (pluginId === 'set') return dummySet;
-    return undefined;
-  };
-
-  const workflow: WorkflowDefinition = {
-    id: 'wf-compile-test',
-    name: 'Compilation Test Workflow',
-    nodes: [
-      {
-        id: 'n1',
-        pluginId: 'trigger-manual-example',
-        pluginVersion: '1.0.0',
-        parameters: {},
-        position: { x: 0, y: 0 },
-      },
-      {
-        id: 'n2',
-        pluginId: 'set',
-        pluginVersion: '1.0.0',
-        parameters: {},
-        position: { x: 100, y: 0 },
-      },
-    ],
-    connections: [
-      {
-        sourceNodeId: 'n1',
-        sourceOutput: 'main',
-        targetNodeId: 'n2',
-        targetInput: 'main',
-      },
-    ],
-  };
-
-  it('successfully compiles for target local producing manifest and zip', async () => {
-    const result = await compileWorkflow(
-      {
-        workflow,
-        targetPlatform: 'local',
-        projectName: 'Compilation Test Workflow',
-        projectVersion: 'v1',
-      },
-      resolver
-    );
-
-    expect(result.status).toBe('success');
-    if (result.status === 'success') {
-      expect(result.targetPlatform).toBe('local');
-      expect(result.files.map((f) => f.path)).toContain('runflux-build.json');
-      expect(result.files.map((f) => f.path)).toContain('src/server.ts');
-      expect(result.manifest.pluginVersions['set']).toBe('1.0.0');
-      expect(result.zipBuffer).toBeDefined();
-      expect(result.zipBuffer!.length).toBeGreaterThan(100);
-    }
+describe('WorkflowCompiler', () => {
+  it.each(['local', 'aws'] as const)('produces a %s project with its manifest, runtime and zip', async (targetPlatform) => {
+    const result = await compiler.compile(request({ targetPlatform, projectVersion: 'v3' }));
+    if (result.status !== 'success') throw new Error(result.error.message);
+    const paths = result.files.map((file) => file.path);
+    expect(paths[0]).toBe('runflux-build.json');
+    expect(paths).toEqual(expect.arrayContaining(['src/workflow.json', 'vendor/runflux-runtime/plugins.js', 'vendor/runflux-runtime/index.js']));
+    expect(result.manifest).toEqual({
+      runfluxVersion: '0.1.0',
+      targetPlatform,
+      workflowId: 'fixture',
+      projectName: 'Orders',
+      workflowVersion: 'v3',
+      compiledAt: '2026-01-01T12:00:00.000Z',
+      entrypoint: targetPlatform === 'local' ? 'src/server.ts' : 'src/handler.ts',
+      build: targetPlatform === 'local'
+        ? { entryPoints: ['src/server.ts', 'src/run.ts'], bundleDependencies: false }
+        : { entryPoints: ['src/handler.ts'], bundleDependencies: true },
+      nodeCount: 2,
+      pluginVersions: { webhook: '1.0.0', echo: '1.0.0' },
+      generatedFiles: paths.slice(1),
+    });
+    expect(JSON.parse(result.files[0].content)).toEqual(result.manifest);
+    const zip = await JSZip.loadAsync(result.zipBuffer);
+    expect(Object.keys(zip.files).filter((path) => !path.endsWith('/')).sort()).toEqual([...paths].sort());
   });
 
-  it('successfully compiles for target aws producing CDK stack and zip', async () => {
-    const result = await compileWorkflow(
-      {
-        workflow,
-        targetPlatform: 'aws',
-        projectName: 'AWS Test Workflow',
-        projectVersion: 'v1',
-      },
-      resolver
-    );
+  it('leaves the plugins dependencies and the hosts packages out of the runtime bundle', async () => {
+    const result = await compiler.compile(request({ workflow: workflow([node('hook', 'webhook'), node('save', 'store')]) }));
+    if (result.status !== 'success') throw new Error(result.error.message);
+    const express = result.files.find((file) => file.path === 'vendor/runflux-runtime/express.js')!;
+    expect(express.content).toMatch(/from "express"/);
+  });
 
-    expect(result.status).toBe('success');
-    if (result.status === 'success') {
-      expect(result.targetPlatform).toBe('aws');
-      expect(result.files.map((f) => f.path)).toContain('lib/workflow-stack.ts');
-      expect(result.files.map((f) => f.path)).toContain('src/handler.ts');
-      expect(result.zipBuffer).toBeDefined();
-    }
+  it.each<[string, Partial<CompilationRequest>, string]>([
+    ['incompatible nodes', { targetPlatform: 'aws', workflow: workflow([node('a', 'localOnly')]) }, 'INCOMPATIBLE_NODES'],
+    ['an unsupported target', { targetPlatform: 'gcp' as never }, 'INCOMPATIBLE_NODES'],
+    ['cycles', { workflow: workflow([node('a', 'echo'), node('b', 'echo')], [edge('a', 'b'), edge('b', 'a')]) }, 'CYCLE_DETECTED'],
+    ['invalid references', { workflow: workflow([node('a', 'echo')], [edge('a', 'ghost')]) }, 'INVALID_WORKFLOW'],
+    ['invalid trigger configuration', { workflow: workflow([node('a', 'failingDeployment')]) }, 'INVALID_WORKFLOW'],
+    ['schedules AWS cannot express', { targetPlatform: 'aws', workflow: workflow([node('a', 'schedule', { expression: '0 0 * * 7' })]) }, 'INVALID_WORKFLOW'],
+    ['runtimes that cannot be bundled', { workflow: workflow([node('a', 'broken')]) }, 'GENERATOR_ERROR'],
+    ['runtimes importing editor packages', { workflow: workflow([node('a', 'editorOnly')]) }, 'GENERATOR_ERROR'],
+  ])('reports %s as a failed result', async (_case, overrides, code) => {
+    expect(await compiler.compile(request(overrides))).toMatchObject({ status: 'failed', error: { code } });
+  });
+
+  it('uses the targets it is given and rethrows their unexpected errors', async () => {
+    const custom: DeploymentTarget = {
+      platform: 'local',
+      entrypoint: 'custom.txt',
+      runtimeEntries: [],
+      hostDependencies: {},
+      buildProfile: () => BuildProfile.server(['custom.txt']),
+      files: async () => [{ path: 'custom.txt', content: 'custom', type: 'asset' }],
+    };
+    const result = await new WorkflowCompiler(resolveFixture, { clock, targets: { local: custom } }).compile(request());
+    if (result.status !== 'success') throw new Error(result.error.message);
+    expect(result.files.map((file) => file.path)).toContain('custom.txt');
+    expect(result.manifest).toMatchObject({ entrypoint: 'custom.txt', build: { entryPoints: ['custom.txt'] } });
+
+    const crashing = { ...custom, files: async () => { throw new Error('target crashed'); } };
+    await expect(new WorkflowCompiler(resolveFixture, { targets: { local: crashing } }).compile(request())).rejects.toThrow('target crashed');
   });
 });

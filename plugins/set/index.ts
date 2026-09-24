@@ -1,14 +1,10 @@
-import { createCodeGenerators } from '@runflux/plugin-system/generator-factory';
+import { FIELDS_ROW_SCHEMA } from '@runflux/plugin-system/fields-row-schema';
 import type { PluginModule } from '@runflux/plugin-system/types';
-import { FIELDS_ROW_SCHEMA, composeFields, type FieldConfig } from '@runflux/plugin-system/fields-row-schema';
-import { generateSetCode } from '@runflux/plugin-system/generators';
 
 /**
- * Set (004-core-nodes-catalog, RF-11): composes an output object from
- * manually defined fields (literal or `{{ }}` expression values), optionally
- * keeping the rest of the input object. Modeled after n8n's "Edit Fields
- * (Set)" node (packages/nodes-base/nodes/Set/v2/SetV2.node.ts), manual-mapping
- * mode only — the JSON mode is out of scope for v1.
+ * Set (004-core-nodes-catalog, RF-11): composes an output object from manually defined fields
+ * (literal or `{{ }}` expression values), optionally keeping the rest of the input object.
+ * Modeled after n8n's "Edit Fields (Set)" node, manual-mapping mode only.
  */
 export const manifest: PluginModule['manifest'] = {
   id: 'set',
@@ -22,11 +18,4 @@ export const manifest: PluginModule['manifest'] = {
   supportedPlatforms: ['local', 'aws'],
 };
 
-export const generators = createCodeGenerators(manifest, generateSetCode);
-
-export const execute: PluginModule['execute'] = (params, input) => {
-  const fields = Array.isArray(params.fields) ? (params.fields as FieldConfig[]) : [];
-  const includeOtherFields = Boolean(params.includeOtherFields);
-  return composeFields(fields, includeOtherFields && input !== null && typeof input === 'object' ? input as Record<string, unknown> : {});
-};
-
+export const runtimeModule = new URL('./runtime.ts', import.meta.url);

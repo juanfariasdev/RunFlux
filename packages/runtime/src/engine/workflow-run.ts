@@ -21,12 +21,21 @@ export class WorkflowRun {
   private readonly races = new Map<string, AbortController>();
   private readonly reachable: ReadonlySet<string>;
 
+  private readonly graph: WorkflowGraph;
+  private readonly executor: NodeExecutor;
+  private readonly triggers: readonly ExecutableNode[];
+  private readonly payload: unknown;
+
   constructor(
-    private readonly graph: WorkflowGraph,
-    private readonly executor: NodeExecutor,
-    private readonly triggers: readonly ExecutableNode[],
-    private readonly payload: unknown,
+    graph: WorkflowGraph,
+    executor: NodeExecutor,
+    triggers: readonly ExecutableNode[],
+    payload: unknown,
   ) {
+    this.graph = graph;
+    this.executor = executor;
+    this.triggers = triggers;
+    this.payload = payload;
     this.reachable = graph.reachableFrom(triggers.map((trigger) => trigger.id));
   }
 

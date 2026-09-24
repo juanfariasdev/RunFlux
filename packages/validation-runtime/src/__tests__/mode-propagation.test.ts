@@ -1,17 +1,12 @@
 import { PluginRegistry } from '@runflux/plugin-system/plugin-registry';
-import type { DiscoveredPlugin, PluginExecutionContext } from '@runflux/plugin-system/types';
+import type { PluginCategory } from '@runflux/plugin-system/types';
 import { describe, expect, it } from 'vitest';
 import { runNode, runWorkflow } from '../engine';
 import type { WorkflowDefinition } from '@runflux/workflow-model/types';
+import { behaviourPlugin } from './support';
 
-function echoModePlugin(id: string, category: DiscoveredPlugin['manifest']['category'] = 'action'): DiscoveredPlugin {
-  return {
-    manifest: { id, name: id, category, version: '1.0.0', parameters: [], supportedPlatforms: ['local'] },
-    generators: { local: () => ({ files: [], infra: [] }) },
-    execute: (_params, _input, context: PluginExecutionContext) => ({ mode: context.mode, workflowId: context.workflowId, nodeId: context.nodeId }),
-    sourcePath: `/plugins/${id}`,
-  };
-}
+const echoModePlugin = (id: string, category: PluginCategory = 'action') =>
+  behaviourPlugin({ id, category }, (_parameters, _input, context) => ({ mode: context.mode, workflowId: context.workflowId, nodeId: context.nodeId }));
 
 function workflow(): WorkflowDefinition {
   return {

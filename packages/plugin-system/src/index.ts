@@ -1,69 +1,31 @@
-// Public entry point of @runflux/plugin-system. Prefer the subpath exports
-// (e.g. `@runflux/plugin-system/plugin-registry`) for granular imports —
-// this barrel is a convenience for consumers that just want the essentials.
+// Public entry point of @runflux/plugin-system: plugin contracts, discovery and the editor-side
+// services around them. Node execution lives in @runflux/runtime.
 
 export type {
   DiscoveredPlugin,
-  ExecutorFn,
-  GeneratedArtifact,
-  GeneratorFn,
-  InfraFragment,
   JsonRowFieldSchema,
   JsonRowOption,
   ParameterSchema,
   PluginCategory,
-  PluginExecutionContext,
   PluginManifest,
   PluginModule,
-  WorkflowContext,
-} from './types';
+} from './types.js';
+export type { ComposeContribution, ComposeService, EnvironmentVariableDeclaration, PluginDeployment } from './deployment.js';
 
-export { PluginRegistry, DuplicatePluginIdError } from './plugin-registry';
-export type { DiscoverOptions, DiscoverSummary } from './plugin-registry';
+export { PluginRegistry, DuplicatePluginIdError } from './plugin-registry.js';
+export type { DiscoverOptions, DiscoverSummary } from './plugin-registry.js';
+export { PluginLoadError, loadPlugin } from './discovery/plugin-loader.js';
 
-export { validateManifest } from './manifest-validator';
-export type { ManifestValidationResult } from './manifest-validator';
+export { validateManifest } from './manifest-validator.js';
+export type { ManifestValidationResult } from './manifest-validator.js';
+export { serializeManifest, deserializeManifest } from './manifest-serializer.js';
 
-export { serializeManifest, deserializeManifest } from './manifest-serializer';
+export { listPlugins } from './api/list-plugins.js';
+export { checkPluginReference } from './api/check-plugin-reference.js';
+export type { PluginReferenceStatus } from './api/check-plugin-reference.js';
 
-export { listPlugins } from './api/list-plugins';
-export { resolveGenerator, checkPluginReference } from './api/resolve-generator';
-export type { PluginReferenceStatus } from './api/resolve-generator';
-export { resolveExecutor } from './api/resolve-executor';
-export { pushTestWebhook, clearPendingWebhooks } from './webhook-listener';
-export type { WebhookRequest, PendingWebhook } from './webhook-listener';
+export { WebhookTestHub } from './webhook-test-hub.js';
+export type { WebhookTestRequest } from './webhook-test-hub.js';
 
-export {
-  evaluateOperator,
-  combineConditions,
-  matchRule,
-  evaluateSwitch,
-  compare,
-  combine,
-  deepEqual,
-  isEmptyValue,
-} from './operators';
-export type { ConditionOperator, Combinator, ConditionRule, SwitchRule, CompareOptions } from './operators';
-
-export { getSafeEnv, getSafeNode, createSafeNodeProxy, extractContext } from './context-helpers';
-export type { ExtractedContext } from './context-helpers';
-
-export { evaluateExpression, resolveValue, resolveTemplateObject } from './evaluator';
-export type { EvaluatorContext } from './evaluator';
-
-export { normalizeFieldValue, composeFields } from './fields-row-schema';
-export type { FieldConfig } from './fields-row-schema';
-
-export {
-  STANDALONE_OPERATOR_CODE,
-  STANDALONE_EXPRESSION_EVALUATOR_CODE,
-} from './snippets';
-
-export {
-  generateConditionIfCode,
-  generateConditionSwitchCode,
-  generateFilterCode,
-  generateSetCode,
-  generateHttpOutputCode,
-  generateCodeJavascriptCode,
-} from './code-generators';
+export { FIELDS_ROW_SCHEMA } from './fields-row-schema.js';
+export { CONDITION_ROW_SCHEMA, COMBINATOR_OPTIONS, OPERATOR_OPTIONS, RULE_ROW_SCHEMA } from './condition-row-schema.js';

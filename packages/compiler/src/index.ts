@@ -1,6 +1,11 @@
 export * from './types.js';
-export * from './validator.js';
-export * from './generators/local.js';
-export * from './generators/aws.js';
-export * from './packager.js';
-export * from './compiler.js';
+export { WorkflowCompiler, compileWorkflow, RUNFLUX_VERSION, type CompilerDependencies } from './compiler.js';
+export { WorkflowValidator } from './validation/workflow-validator.js';
+export { DeploymentPlanner, type BundledPlugin, type DeploymentPlan } from './deployment/deployment-plan.js';
+export { RuntimeBundler, RuntimeBundleError, RUNTIME_ENTRIES, VENDOR_DIRECTORY, type RuntimeBundleRequest, type RuntimeEntry } from './bundling/runtime-bundler.js';
+export { BuildProfile } from './project/build-profile.js';
+export { LocalTarget } from './targets/local-target.js';
+export { AwsTarget, type WorkflowInfrastructure } from './targets/aws-target.js';
+export { toAwsCron } from './targets/aws-schedule.js';
+export type { DeploymentTarget, TargetContext } from './targets/deployment-target.js';
+export { createZipPackage, createZipArchive } from './packager.js';

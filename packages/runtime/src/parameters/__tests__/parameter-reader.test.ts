@@ -24,6 +24,7 @@ describe('ParameterReader', () => {
     expect(parameters.record('object')).toEqual({ a: 1 });
     expect(parameters.choice('option', ['a', 'b'], 'b')).toBe('a');
     expect(parameters.raw('object')).toEqual({ a: 1 });
+    expect(parameters.all()).toEqual({ text: ' spaced ', flag: false, textFlag: 'true', list: [1], object: { a: 1 }, option: 'a' });
   });
 
   it.each<[string, (parameters: ParameterReader) => unknown, string]>([

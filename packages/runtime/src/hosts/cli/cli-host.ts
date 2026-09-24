@@ -12,10 +12,16 @@ export interface CliOutput {
  * other text passed as `{ raw: text }`.
  */
 export class CliHost {
+  private readonly engine: WorkflowEngine;
+  private readonly output: CliOutput;
+
   constructor(
-    private readonly engine: WorkflowEngine,
-    private readonly output: CliOutput = console,
-  ) {}
+    engine: WorkflowEngine,
+    output: CliOutput = console,
+  ) {
+    this.engine = engine;
+    this.output = output;
+  }
 
   /** Whether the module at `moduleUrl` is the script Node was started with. */
   static isEntrypoint(moduleUrl: string, script: string | undefined = process.argv[1]): boolean {

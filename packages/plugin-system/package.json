@@ -10,6 +10,7 @@
       "import": "./dist-node/index.mjs"
     },
     "./types": "./src/types.ts",
+    "./deployment": "./src/deployment.ts",
     "./condition-row-schema": "./src/condition-row-schema.ts",
     "./fields-row-schema": "./src/fields-row-schema.ts",
     "./manifest-validator": "./src/manifest-validator.ts",
@@ -19,31 +20,20 @@
     "./discovery/package-scanner": "./src/discovery/package-scanner.ts",
     "./discovery/logger": "./src/discovery/logger.ts",
     "./api/list-plugins": "./src/api/list-plugins.ts",
-    "./api/resolve-generator": "./src/api/resolve-generator.ts",
-    "./api/resolve-executor": "./src/api/resolve-executor.ts",
-    "./operators": "./src/operators.ts",
-    "./context-helpers": "./src/context-helpers.ts",
-    "./evaluator": "./src/evaluator.ts",
-    "./snippets": "./src/snippets.ts",
-    "./code-generators": "./src/code-generators.ts",
-    "./generators": "./src/code-generators.ts",
-    "./standalone": "./src/standalone.ts",
-    "./http-client": "./src/http-client.ts",
-    "./webhook-config": "./src/webhook-config.ts",
-    "./testing": "./src/testing.ts",
-    "./generator-factory": "./src/generator-factory.ts",
-    "./webhook-listener": "./src/webhook-listener.ts"
+    "./api/check-plugin-reference": "./src/api/check-plugin-reference.ts",
+    "./webhook-test-hub": "./src/webhook-test-hub.ts",
+    "./testing": "./src/testing.ts"
   },
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -b tsconfig.json",
-    "build:node": "esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist-node/index.mjs --external:zod --external:esbuild --external:tsx"
+    "build:node": "esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist-node/index.mjs --external:zod --external:tsx"
   },
   "dependencies": {
-    "zod": "^3.23.8",
-    "esbuild": "^0.28.2",
-    "tsx": "^4.19.0"
+    "@runflux/runtime": "*",
+    "tsx": "^4.19.0",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "typescript": "^5.5.4",

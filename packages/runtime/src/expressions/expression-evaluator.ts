@@ -9,12 +9,12 @@ export interface ExpressionScope {
 }
 
 export class ExpressionError extends Error {
-  constructor(
-    readonly expression: string,
-    cause: unknown,
-  ) {
+  readonly expression: string;
+
+  constructor(expression: string, cause: unknown) {
     super(`Expression "${expression}" failed: ${cause instanceof Error ? cause.message : String(cause)}`, { cause });
     this.name = 'ExpressionError';
+    this.expression = expression;
   }
 }
 

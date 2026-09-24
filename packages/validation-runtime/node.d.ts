@@ -36,8 +36,14 @@ export interface WorkflowDefinition {
   connections: WorkflowConnection[];
 }
 
+/** Delivers external events, such as webhook test requests, to the triggers waiting for them. */
+export interface TriggerEventSource {
+  waitFor(channel: string, signal: AbortSignal): Promise<unknown>;
+}
+
 export interface ValidationRunOptions {
   mode: PluginExecutionMode;
+  services?: { triggerEvents?: TriggerEventSource };
 }
 
 export interface NodeResult {

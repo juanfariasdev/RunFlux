@@ -1,17 +1,17 @@
-import { PluginRegistry } from '@runflux/plugin-system/plugin-registry';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import * as esbuild from 'esbuild';
+import { PluginRegistry } from '@runflux/plugin-system/plugin-registry';
 import type { WorkflowDefinition } from '@runflux/workflow-model';
 import {
-  compileWorkflow,
-  validateWorkflowCompatibility,
+  BuildProfile,
+  TARGET_PLATFORMS,
+  WorkflowCompiler,
   createZipArchive,
-  type TargetPlatform,
-  type CompiledPlugin,
+  type BuildManifest,
+  type CompilationSuccess,
   type IncompatibleNode,
-  type PluginResolver,
+  type TargetPlatform,
 } from '@runflux/compiler';
 
 export class IncompatibleNodesError extends Error {
@@ -46,216 +46,76 @@ export interface CompileWorkflowResponse {
   zipFilename: string;
   downloadUrl: string;
   outputDirectory: string;
-  manifest: unknown;
+  manifest: BuildManifest;
   filesCount: number;
 }
 
+/**
+ * Compiles workflows into downloadable backends. Each compilation is written to its own folder in
+ * the output directory, built into dist/ with the project's own build profile, and packaged as
+ * `<project>-<target>.zip` (the whole project) plus `compiled/function.zip` (dist/ only).
+ */
 export class CompilerService {
-  private pluginsCache = new Map<string, CompiledPlugin>();
-  private pluginsLoaded = false;
+  private registry?: Promise<PluginRegistry>;
 
   constructor(
     private readonly customPluginsDir?: string,
     private readonly customOutputDir?: string,
   ) {}
 
-  private getPluginsDir(): string {
-    if (this.customPluginsDir && fs.existsSync(this.customPluginsDir)) {
-      return this.customPluginsDir;
-    }
-    const currentDir = path.dirname(fileURLToPath(import.meta.url));
-    const candidates = [
-      path.resolve(process.cwd(), 'plugins'),
-      path.resolve(process.cwd(), '../../plugins'),
-      path.resolve(currentDir, '../../../../plugins'),
-      path.resolve(currentDir, '../../../plugins'),
-    ];
-    for (const cand of candidates) {
-      if (fs.existsSync(cand)) return cand;
-    }
-    return path.resolve(process.cwd(), 'plugins');
-  }
-
   getOutputDir(): string {
-    if (this.customOutputDir) {
-      return this.customOutputDir;
-    }
-    if (process.env.RUNFLUX_OUTPUT_DIR) {
-      return path.resolve(process.env.RUNFLUX_OUTPUT_DIR);
-    }
-    const pluginsDir = this.getPluginsDir();
-    const repoRoot = path.resolve(pluginsDir, '..');
-    return path.join(repoRoot, 'output-backends');
+    if (this.customOutputDir) return this.customOutputDir;
+    if (process.env.RUNFLUX_OUTPUT_DIR) return path.resolve(process.env.RUNFLUX_OUTPUT_DIR);
+    return path.join(path.resolve(this.getPluginsDir(), '..'), 'output-backends');
   }
 
-  async loadPlugins(): Promise<void> {
-    if (this.pluginsLoaded && this.pluginsCache.size > 0) {
-      return;
-    }
-
-    const registry = new PluginRegistry();
-    await registry.discover({ pluginDirectories: [this.getPluginsDir()], onLog: (message) => {
-      if (process.env.NODE_ENV !== 'test') console.info(message);
-    } });
-    for (const manifest of registry.listManifests()) {
-      this.pluginsCache.set(manifest.id, {
-        manifest,
-        generators: Object.fromEntries(manifest.supportedPlatforms.map((platform) => [platform, registry.resolveGenerator(manifest.id, platform)])),
+  /** Discovers the plugins once; later compilations reuse the registry. */
+  loadPlugins(): Promise<PluginRegistry> {
+    this.registry ??= (async () => {
+      const registry = new PluginRegistry();
+      await registry.discover({
+        pluginDirectories: [this.getPluginsDir()],
+        onLog: (message) => { if (process.env.NODE_ENV !== 'test') console.info(message); },
       });
-    }
-    this.pluginsLoaded = true;
-  }
-
-  private createPluginResolver(): PluginResolver {
-    return (pluginId: string): CompiledPlugin | undefined => {
-      return this.pluginsCache.get(pluginId);
-    };
+      return registry;
+    })();
+    return this.registry;
   }
 
   async compile(request: CompileWorkflowRequest): Promise<CompileWorkflowResponse> {
     if (!request.workflow || !Array.isArray(request.workflow.nodes)) {
       throw new CompilerValidationError('Invalid workflow: nodes must be defined.');
     }
-
-    await this.loadPlugins();
-
-    const targetPlatform: TargetPlatform =
-      (request.targetPlatform || request.target || 'local').toLowerCase() as TargetPlatform;
-
-    if (targetPlatform !== 'local' && targetPlatform !== 'aws') {
-      throw new CompilerValidationError(`Plataforma alvo inválida: "${targetPlatform}". Suportadas: local, aws.`);
+    const targetPlatform = (request.targetPlatform || request.target || 'local').toLowerCase() as TargetPlatform;
+    if (!TARGET_PLATFORMS.includes(targetPlatform)) {
+      throw new CompilerValidationError(`Plataforma alvo inválida: "${targetPlatform}". Suportadas: ${TARGET_PLATFORMS.join(', ')}.`);
     }
-
-    const resolver = this.createPluginResolver();
+    const registry = await this.loadPlugins();
     const projectName = (request.projectName || request.workflow.name || 'runflux-project').trim();
-    console.log(`[compiler] Starting compilation for project "${projectName}" (target: ${targetPlatform}, skipTests: ${request.skipTests ?? true})`);
+    console.log(`[compiler] Starting compilation for project "${projectName}" (target: ${targetPlatform})`);
 
-    // 1. Compilação do scaffold através do core compiler
-    const result = await compileWorkflow(
-      {
-        workflow: request.workflow,
-        targetPlatform,
-        projectName,
-        options: {
-          skipTests: request.skipTests ?? true,
-        },
-      },
-      resolver,
-    );
-
+    const result = await new WorkflowCompiler((pluginId) => registry.get(pluginId)).compile({
+      workflow: request.workflow,
+      targetPlatform,
+      projectName,
+      options: { skipTests: request.skipTests ?? true },
+    });
     if (result.status === 'failed') {
-      if (result.error.code === 'INCOMPATIBLE_NODES') {
-        throw new IncompatibleNodesError(result.error.details?.incompatibleNodes || []);
-      }
+      if (result.error.code === 'INCOMPATIBLE_NODES') throw new IncompatibleNodesError(result.error.details?.incompatibleNodes || []);
       throw new CompilerValidationError(result.error.message);
     }
 
-    // 2. Preparação dos diretórios de saída físicos (sempre vazios, para não herdar
-    //    entrypoints e bundles de uma compilação anterior)
-    const sanitizedProjectName = projectName.replace(/[^a-zA-Z0-9_\-]/g, '_');
-    const folderName = `${sanitizedProjectName}-${targetPlatform}`;
-    const baseDir = this.getOutputDir();
-    const outputDir = path.join(baseDir, folderName);
-
-    await fs.promises.rm(outputDir, { recursive: true, force: true });
-    await fs.promises.mkdir(outputDir, { recursive: true });
-
-    // 3. Gravação física de cada arquivo fonte na pasta
-    for (const file of result.files) {
-      const filePath = path.join(outputDir, file.path);
-      await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
-      await fs.promises.writeFile(filePath, file.content, 'utf8');
-    }
-
-    // 4. Empacotamento leve com esbuild (gerando dist/ e compiled/function.zip)
-    const distDir = path.join(outputDir, 'dist');
-    const compiledDir = path.join(outputDir, 'compiled');
-    await fs.promises.mkdir(distDir, { recursive: true });
-    await fs.promises.mkdir(compiledDir, { recursive: true });
-
-    try {
-      if (targetPlatform === 'local') {
-        const entryPoints = [
-          path.join(outputDir, 'src', 'server.ts'),
-          path.join(outputDir, 'src', 'run.ts'),
-        ];
-        const runCronPath = path.join(outputDir, 'src', 'run-cron.ts');
-        if (fs.existsSync(runCronPath)) {
-          entryPoints.push(runCronPath);
-        }
-        await esbuild.build({
-          entryPoints,
-          bundle: true,
-          format: 'esm',
-          splitting: true,
-          packages: 'external',
-          outExtension: { '.js': '.mjs' },
-          platform: 'node',
-          target: 'node22',
-          banner: {
-            js: "import { createRequire } from 'module'; const require = createRequire(import.meta.url);",
-          },
-          outdir: distDir,
-        });
-      } else {
-        await esbuild.build({
-          entryPoints: [
-            path.join(outputDir, 'src', 'handler.ts'),
-          ],
-          bundle: true,
-          format: 'esm',
-          outExtension: { '.js': '.mjs' },
-          platform: 'node',
-          target: 'node22',
-          banner: {
-            js: "import { createRequire } from 'module'; const require = createRequire(import.meta.url);",
-          },
-          outdir: distDir,
-        });
-      }
-      console.log(`[compiler] esbuild bundle created successfully in ${distDir}`);
-    } catch (bundleErr) {
-      throw new CompilerValidationError(`Backend build failed: ${bundleErr instanceof Error ? bundleErr.message : String(bundleErr)}`);
-    }
-
-    // 5. Coleta dos arquivos em dist/ para criar o pacote leve (function.zip e <projeto>.zip)
-    const distEntries = fs.existsSync(distDir) ? await fs.promises.readdir(distDir) : [];
-    const bundledFilesForZip: { path: string; content: string | Uint8Array }[] = [];
-
-    for (const entry of distEntries) {
-      const entryPath = path.join(distDir, entry);
-      if (fs.statSync(entryPath).isFile()) {
-        const buffer = await fs.promises.readFile(entryPath);
-        bundledFilesForZip.push({ path: entry, content: buffer });
-      }
-    }
-
-    const zipBuffer = bundledFilesForZip.length > 0
-      ? await createZipArchive(bundledFilesForZip)
-      : (result.zipBuffer ? Buffer.from(result.zipBuffer) : await createZipArchive(result.files));
-
-    // Grava compiled/function.zip (padrão esbuild/serverless)
-    const functionZipPath = path.join(compiledDir, 'function.zip');
-    await fs.promises.writeFile(functionZipPath, zipBuffer);
-
-    // Grava <projeto>-<plataforma>.zip na raiz da pasta do backend; a plataforma no nome
-    // impede que o download local e o AWS do mesmo fluxo se confundam em findZipFile
+    const outputDir = path.join(this.getOutputDir(), `${projectName.replace(/[^a-zA-Z0-9_\-]/g, '_')}-${targetPlatform}`);
+    // The target in the name keeps the local and AWS downloads of one workflow apart.
     const zipFilename = `${projectName.replace(/[\\/<>:"|?*\x00-\x1f]/g, '_') || 'backend'}-${targetPlatform}.zip`;
-    const zipPath = path.join(outputDir, zipFilename);
-    const projectZip = await createZipArchive([
-      ...result.files,
-      ...bundledFilesForZip.map((file) => ({ ...file, path: `dist/${file.path}` })),
-    ]);
-    await fs.promises.writeFile(zipPath, projectZip);
-
-    console.log(`[compiler] Compilation succeeded: ${result.files.length} source files, esbuild bundle in dist/, zip created at ${zipPath} (${zipBuffer.length} bytes)`);
-    const downloadUrl = `/api/compiler/downloads/${encodeURIComponent(zipFilename)}`;
+    await this.writeProject(result, outputDir, zipFilename);
+    console.log(`[compiler] Compilation succeeded: ${result.files.length} files, download ${zipFilename}`);
 
     return {
       status: 'success',
       targetPlatform,
       zipFilename,
-      downloadUrl,
+      downloadUrl: `/api/compiler/downloads/${encodeURIComponent(zipFilename)}`,
       outputDirectory: outputDir,
       manifest: result.manifest,
       filesCount: result.files.length,
@@ -266,28 +126,59 @@ export class CompilerService {
     if (filename !== path.basename(filename) || filename.includes('\\') || !filename.endsWith('.zip')) return null;
     const baseDir = this.getOutputDir();
     if (!fs.existsSync(baseDir)) return null;
-
-    const entries = await fs.promises.readdir(baseDir, { withFileTypes: true });
-    for (const entry of entries) {
-      if (entry.isDirectory()) {
-        const candidate = path.join(baseDir, entry.name, filename);
-        if (fs.existsSync(candidate)) {
-          console.log(`[compiler] Serving download for "${filename}" from ${candidate}`);
-          return candidate;
-        }
-        const functionZipCandidate = path.join(baseDir, entry.name, 'compiled', filename);
-        if (fs.existsSync(functionZipCandidate)) {
-          console.log(`[compiler] Serving download for "${filename}" from ${functionZipCandidate}`);
-          return functionZipCandidate;
-        }
+    for (const entry of await fs.promises.readdir(baseDir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      for (const candidate of [path.join(baseDir, entry.name, filename), path.join(baseDir, entry.name, 'compiled', filename)]) {
+        if (fs.existsSync(candidate)) return candidate;
       }
     }
-
     const rootCandidate = path.join(baseDir, filename);
-    if (fs.existsSync(rootCandidate)) {
-      return rootCandidate;
-    }
+    return fs.existsSync(rootCandidate) ? rootCandidate : null;
+  }
 
-    return null;
+  /**
+   * Writes the project into an emptied folder (so nothing from an earlier compilation survives),
+   * builds dist/ and packages both archives.
+   */
+  private async writeProject(result: CompilationSuccess, outputDir: string, zipFilename: string): Promise<void> {
+    await fs.promises.rm(outputDir, { recursive: true, force: true });
+    for (const file of result.files) {
+      const filePath = path.join(outputDir, file.path);
+      await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+      await fs.promises.writeFile(filePath, file.content, 'utf8');
+    }
+    try {
+      await BuildProfile.fromManifest(result.manifest).build(outputDir, [this.dependencyDirectory()]);
+    } catch (error) {
+      throw new CompilerValidationError(`Backend build failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    const distDir = path.join(outputDir, 'dist');
+    const bundle = await Promise.all((await fs.promises.readdir(distDir)).map(async (entry) => ({
+      path: entry,
+      content: await fs.promises.readFile(path.join(distDir, entry)),
+    })));
+    await fs.promises.mkdir(path.join(outputDir, 'compiled'), { recursive: true });
+    await fs.promises.writeFile(path.join(outputDir, 'compiled', 'function.zip'), await createZipArchive(bundle));
+    await fs.promises.writeFile(
+      path.join(outputDir, zipFilename),
+      await createZipArchive([...result.files, ...bundle.map((file) => ({ ...file, path: `dist/${file.path}` }))]),
+    );
+  }
+
+  /** RunFlux's own node_modules, which provides the npm packages a function bundle includes. */
+  private dependencyDirectory(): string {
+    return path.join(path.resolve(this.getPluginsDir(), '..'), 'node_modules');
+  }
+
+  private getPluginsDir(): string {
+    if (this.customPluginsDir && fs.existsSync(this.customPluginsDir)) return this.customPluginsDir;
+    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const candidates = [
+      path.resolve(process.cwd(), 'plugins'),
+      path.resolve(process.cwd(), '../../plugins'),
+      path.resolve(currentDir, '../../../../plugins'),
+      path.resolve(currentDir, '../../../plugins'),
+    ];
+    return candidates.find((candidate) => fs.existsSync(candidate)) ?? path.resolve(process.cwd(), 'plugins');
   }
 }

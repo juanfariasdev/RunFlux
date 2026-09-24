@@ -10,7 +10,7 @@ import {
   ValidationError,
 } from './services/project-service.js';
 import { CompilerService } from './services/compiler-service.js';
-import { pushTestWebhook } from '@runflux/plugin-system/webhook-listener';
+import { WebhookTestHub } from '@runflux/plugin-system/webhook-test-hub';
 
 export function createServer(service?: ProjectService, compilerService?: CompilerService): Express {
   const app = express();
@@ -36,7 +36,7 @@ export function createServer(service?: ProjectService, compilerService?: Compile
   app.all(['/api/webhooks/test', '/api/webhooks/test/*'], async (req, res) => {
     try {
       const subPath = req.path.replace(/^\/api\/webhooks\/test/, '') || '/webhook';
-      const captured = pushTestWebhook(subPath, {
+      const captured = WebhookTestHub.shared().deliver(subPath, {
         body: req.body,
         headers: req.headers,
         query: req.query,

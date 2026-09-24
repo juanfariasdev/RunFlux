@@ -34,7 +34,11 @@ export type NodeTypeLookup = (pluginId: string) => NodeTypeDescription | undefin
  * exist are dropped; nodes of unknown types are kept so the engine can report them when they run.
  */
 export class ExecutableWorkflowBuilder {
-  constructor(private readonly describe: NodeTypeLookup) {}
+  private readonly describe: NodeTypeLookup;
+
+  constructor(describe: NodeTypeLookup) {
+    this.describe = describe;
+  }
 
   build(source: WorkflowSource, triggers: WorkflowTriggers = NO_TRIGGERS): ExecutableWorkflow {
     const nodeIds = new Set(source.nodes.map((node) => node.id));

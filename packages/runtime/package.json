@@ -10,7 +10,8 @@
     "./lambda": "./src/hosts/lambda/index.ts",
     "./cron": "./src/hosts/cron/index.ts",
     "./cli": "./src/hosts/cli/index.ts",
-    "./plugins": "./src/plugins.ts"
+    "./plugins": "./src/plugins.ts",
+    "./testing": "./src/testing/index.ts"
   },
   "scripts": {
     "build:node": "tsc -b tsconfig.json",

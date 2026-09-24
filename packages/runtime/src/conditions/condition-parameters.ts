@@ -1,5 +1,6 @@
 import type { ParameterReader } from '../parameters/parameter-reader.js';
 import type { Combinator, Condition, ConditionGroup } from './condition-evaluator.js';
+import { isRecord } from '../values.js';
 import { isConditionOperator } from './condition-operators.js';
 
 const COMBINATORS: readonly Combinator[] = ['and', 'or'];
@@ -36,8 +37,4 @@ function parseConditions(rows: readonly unknown[], fail: (problem: string) => Er
     }
     return { leftValue: row.leftValue, operator, rightValue: row.rightValue };
   });
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }

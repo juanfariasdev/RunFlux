@@ -20,6 +20,6 @@
     "@types/node": "^22.5.0"
   },
   "dependencies": {
-    "@runflux/plugin-system": "*"
+    "@runflux/runtime": "*"
   }
 }

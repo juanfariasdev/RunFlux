@@ -1,19 +1,24 @@
-import type { WorkflowDefinition } from '@runflux/workflow-model';
-import type { PluginManifest, GeneratorFn } from '@runflux/plugin-system';
+import type { PluginDeployment, PluginManifest } from '@runflux/plugin-system';
+import type { WorkflowDefinition, WorkflowEnvVar } from '@runflux/workflow-model';
 
 export type TargetPlatform = 'local' | 'aws';
+
+export const TARGET_PLATFORMS: readonly TargetPlatform[] = ['local', 'aws'];
 
 export interface GeneratedFile {
   path: string;
   content: string;
-  type: 'source' | 'config' | 'infrastructure' | 'asset';
+  type: 'source' | 'config' | 'infrastructure' | 'asset' | 'runtime';
 }
 
-export interface CompiledNodeEntry {
-  path: string;
-  isTrigger: boolean;
-  outputs?: string[];
+/** What the compiler needs from a plugin: a PluginModule, or a plugin the registry discovered. */
+export interface CompiledPlugin {
+  manifest: PluginManifest;
+  runtimeModule: URL | string;
+  deployment?: PluginDeployment;
 }
+
+export type PluginResolver = (pluginId: string) => CompiledPlugin | undefined;
 
 export interface BuildManifest {
   $schema?: string;
@@ -24,23 +29,20 @@ export interface BuildManifest {
   targetPlatform: TargetPlatform;
   compiledAt: string;
   entrypoint: string;
+  /** How the project bundles itself into dist/ (see BuildProfile). */
+  build: { entryPoints: string[]; bundleDependencies: boolean };
   nodeCount: number;
   pluginVersions: Record<string, string>;
   generatedFiles: string[];
 }
 
-export interface ProjectEnvVar {
-  key: string;
-  value?: string;
-  description?: string;
-}
+export type ProjectEnvVar = WorkflowEnvVar;
 
 export interface CompilationOptions {
+  /** Port of the local server. Defaults to 3000. */
   port?: number;
-  includeDocker?: boolean;
-  includeCdk?: boolean;
-  packageName?: string;
   skipTests?: boolean;
+  /** Replace the workflow's own environment variables. */
   envVars?: ProjectEnvVar[];
 }
 
@@ -64,13 +66,15 @@ export interface CompilationSuccess {
   targetPlatform: TargetPlatform;
   files: GeneratedFile[];
   manifest: BuildManifest;
-  zipBuffer?: Uint8Array;
+  zipBuffer: Uint8Array;
 }
+
+export type CompilationErrorCode = 'INCOMPATIBLE_NODES' | 'CYCLE_DETECTED' | 'GENERATOR_ERROR' | 'INVALID_WORKFLOW';
 
 export interface CompilationFailure {
   status: 'failed';
   error: {
-    code: 'INCOMPATIBLE_NODES' | 'CYCLE_DETECTED' | 'GENERATOR_ERROR' | 'INVALID_WORKFLOW';
+    code: CompilationErrorCode;
     message: string;
     details?: {
       incompatibleNodes?: IncompatibleNode[];
@@ -80,9 +84,18 @@ export interface CompilationFailure {
 
 export type CompilationResult = CompilationSuccess | CompilationFailure;
 
-export interface CompiledPlugin {
-  manifest: PluginManifest;
-  generators?: Record<string, GeneratorFn>;
-}
+/** A compilation that cannot proceed; the compiler reports it as a failed result. */
+export class CompilationError extends Error {
+  constructor(
+    readonly code: CompilationErrorCode,
+    message: string,
+    readonly details?: CompilationFailure['error']['details'],
+  ) {
+    super(message);
+    this.name = 'CompilationError';
+  }
 
-export type PluginResolver = (pluginId: string) => CompiledPlugin | undefined;
+  toFailure(): CompilationFailure {
+    return { status: 'failed', error: { code: this.code, message: this.message, ...(this.details ? { details: this.details } : {}) } };
+  }
+}

@@ -12,10 +12,13 @@ export type ExecutionMode = 'sandbox' | 'production';
  * A `null` port ends the branch without an error, e.g. a filter that rejected its input.
  */
 export class NodeOutput {
-  private constructor(
-    readonly value: unknown,
-    readonly activeOutput: string | null,
-  ) {}
+  readonly value: unknown;
+  readonly activeOutput: string | null;
+
+  private constructor(value: unknown, activeOutput: string | null) {
+    this.value = value;
+    this.activeOutput = activeOutput;
+  }
 
   /** Sends `value` through the main output. */
   static main(value: unknown): NodeOutput {

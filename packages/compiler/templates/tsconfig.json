@@ -1,0 +1,17 @@
+{
+  // Type-checks the templates in place. `rootDirs` merges the directories that end up together in
+  // an exported project's src/, and supplies a sample workflow.json for the JSON import.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "noEmit": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "types": ["node"],
+    "rootDirs": ["shared/src", "local/src", "aws/src", "fixtures/src"]
+  },
+  "include": ["shared/**/*.ts", "local/**/*.ts", "aws/**/*.ts"]
+}

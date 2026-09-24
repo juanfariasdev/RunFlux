@@ -1,2 +1,2 @@
-// Intentionally does not export `manifest` or `generators`.
+// Intentionally exports neither `manifest` nor `runtimeModule`.
 export const somethingElse = 42;

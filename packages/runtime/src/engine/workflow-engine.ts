@@ -36,11 +36,14 @@ export class WorkflowEngine {
   private readonly executor: NodeExecutor;
   private readonly services: RuntimeServices;
 
+  readonly workflow: ExecutableWorkflow;
+
   constructor(
-    readonly workflow: ExecutableWorkflow,
+    workflow: ExecutableWorkflow,
     catalog: NodeCatalog,
     options: WorkflowEngineOptions = {},
   ) {
+    this.workflow = workflow;
     this.graph = new WorkflowGraph(workflow);
     this.services = createRuntimeServices(options.services);
     this.executor = new NodeExecutor(catalog, this.services, new ParameterResolver(options.expressions ?? new ExpressionEvaluator()), {

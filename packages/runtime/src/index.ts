@@ -14,6 +14,7 @@ export {
 } from './contracts/node.js';
 export type { Clock, Logger, RuntimeServices, TriggerEventSource } from './contracts/services.js';
 export { systemEnvironment, type EnvironmentVariables } from './environment.js';
+export { isRecord } from './values.js';
 
 export { ServiceKey, ServiceRegistry } from './services/service-registry.js';
 export { ConsoleLogger, SystemClock, createRuntimeServices } from './services/default-services.js';

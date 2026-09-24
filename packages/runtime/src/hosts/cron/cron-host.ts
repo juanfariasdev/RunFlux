@@ -40,10 +40,13 @@ export class CronHost {
   private readonly clock: Clock;
   private tasks: ScheduledTask[] = [];
 
+  private readonly engine: WorkflowEngine;
+
   constructor(
-    private readonly engine: WorkflowEngine,
+    engine: WorkflowEngine,
     options: CronHostOptions = {},
   ) {
+    this.engine = engine;
     this.scheduler = options.scheduler ?? new NodeCronScheduler();
     this.logger = options.logger ?? new ConsoleLogger();
     this.clock = options.clock ?? new SystemClock();

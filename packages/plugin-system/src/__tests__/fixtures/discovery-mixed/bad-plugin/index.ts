@@ -10,6 +10,4 @@ export const manifest = {
   supportedPlatforms: ['local'],
 } as unknown as import('../../../../types').PluginModule['manifest'];
 
-export const generators: import('../../../../types').PluginModule['generators'] = {
-  local: () => ({ files: [], infra: [] }),
-};
+export const runtimeModule = new URL('./index.ts', import.meta.url);

@@ -23,10 +23,15 @@ export class ExpressHost {
   readonly app: Express;
   private server?: Server;
 
+  private readonly engine: WorkflowEngine;
+  private readonly options: ExpressHostOptions;
+
   constructor(
-    private readonly engine: WorkflowEngine,
-    private readonly options: ExpressHostOptions = {},
+    engine: WorkflowEngine,
+    options: ExpressHostOptions = {},
   ) {
+    this.engine = engine;
+    this.options = options;
     this.app = this.createApp();
   }
 

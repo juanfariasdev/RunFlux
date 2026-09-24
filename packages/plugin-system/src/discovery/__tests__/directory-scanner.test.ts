@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ParameterReader, type NodeDefinition } from '@runflux/runtime';
 import { describe, expect, it } from 'vitest';
 import { scanDirectory } from '../directory-scanner';
 
@@ -9,76 +10,52 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const sharedFixturesDir = path.join(__dirname, '..', '..', '__tests__', 'fixtures', 'discovery-mixed');
 const edgeCasesDir = path.join(__dirname, 'fixtures', 'edge-cases');
 
-describe('scanDirectory — happy path and malformed plugin (RN-01, EC-01)', () => {
-  it('discovers the valid plugin and reports the malformed one without stopping', async () => {
-    const result = await scanDirectory(sharedFixturesDir);
+async function execute(definition: NodeDefinition, input: unknown) {
+  const handler = definition.createHandler({} as never);
+  return handler.execute({ parameters: definition.parseParameters(new ParameterReader({}, 'test')), input, context: {} as never });
+}
 
-    expect(result.plugins.map((p) => p.manifest.id)).toContain('fixture-good-plugin');
+describe('scanDirectory', () => {
+  it('loads the valid plugin with its runtime and reports the malformed one without stopping (RN-01, EC-01)', async () => {
+    const result = await scanDirectory(sharedFixturesDir);
+    expect(result.plugins.map((plugin) => plugin.manifest.id)).toEqual(['fixture-good-plugin']);
+    expect(result.plugins[0].sourcePath).toMatch(/good-plugin$/);
+    expect(await execute(result.plugins[0].definition, 'payload')).toMatchObject({ value: { received: 'payload' } });
     expect(result.errors).toHaveLength(1);
     expect(result.errors[0].path).toMatch(/bad-plugin/);
   });
 
-  it('sets sourcePath to the plugin subdirectory for every discovered plugin', async () => {
-    const result = await scanDirectory(sharedFixturesDir);
-    const good = result.plugins.find((p) => p.manifest.id === 'fixture-good-plugin');
-    expect(good?.sourcePath).toMatch(/good-plugin$/);
-  });
-});
-
-describe('scanDirectory — edge cases', () => {
-  it('returns an empty result (no throw) when the directory does not exist', async () => {
-    const result = await scanDirectory(path.join(__dirname, 'this-does-not-exist'));
-    expect(result).toEqual({ plugins: [], errors: [] });
+  it('returns an empty result when the directory does not exist', async () => {
+    expect(await scanDirectory(path.join(__dirname, 'this-does-not-exist'))).toEqual({ plugins: [], errors: [] });
   });
 
-  it('reports a plugin subdirectory with no entry file, without affecting siblings', async () => {
+  it('reports each kind of malformed plugin', async () => {
     const result = await scanDirectory(edgeCasesDir);
-    const noEntryError = result.errors.find((e) => e.path.endsWith('no-entry-file'));
-    expect(noEntryError?.error).toMatch(/no entry file/i);
+    const errorOf = (name: string) => result.errors.find((error) => error.path.endsWith(name))?.error;
+    expect(result.plugins).toEqual([]);
+    expect(errorOf('no-entry-file')).toMatch(/no entry file/i);
+    expect(errorOf('missing-exports')).toBe('module must export "manifest" and "runtimeModule"');
+    expect(errorOf('invalid-runtime')).toMatch(/runtime module must export a node definition/);
+    expect(result.errors).toHaveLength(3);
   });
 
-  it('reports a plugin module missing the "manifest"/"generators" exports', async () => {
-    const result = await scanDirectory(edgeCasesDir);
-    const missingExportsError = result.errors.find((e) => e.path.endsWith('missing-exports'));
-    expect(missingExportsError?.error).toMatch(/must export "manifest" and "generators"/i);
-  });
-
-  it('finds no valid plugins among purely edge-case fixtures', async () => {
-    const result = await scanDirectory(edgeCasesDir);
-    expect(result.plugins).toHaveLength(0);
-    expect(result.errors).toHaveLength(2);
-  });
-});
-
-describe('scanDirectory — changed modules', () => {
-  it('loads the new module version when an entry file changes', async () => {
+  it('loads the new version of a plugin whose runtime changed', async () => {
     const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), 'runflux-plugin-scan-'));
     const pluginDir = path.join(rootDir, 'reloadable-plugin');
-    const entryFile = path.join(pluginDir, 'index.js');
-    const source = (value: string) => `
-export const manifest = {
-  id: 'reloadable-plugin',
-  name: 'Reloadable Plugin',
-  category: 'action',
-  version: '1.0.0',
-  parameters: [],
-  supportedPlatforms: ['local'],
-};
-export const generators = { local: () => ({ files: [], infra: [] }) };
-export const execute = () => ${JSON.stringify(value)};
-`;
-
+    const runtime = (value: string) => `export default {
+  parseParameters: () => ({}),
+  createHandler: () => ({ execute: () => ({ value: ${JSON.stringify(value)}, activeOutput: 'main' }) }),
+};`;
     try {
       await fs.mkdir(pluginDir);
-      await fs.writeFile(entryFile, source('before'));
+      await fs.writeFile(path.join(pluginDir, 'index.js'), `export const manifest = { id: 'reloadable-plugin', name: 'Reloadable', category: 'action', version: '1.0.0', parameters: [], supportedPlatforms: ['local'] };
+export const runtimeModule = new URL('./runtime.js', import.meta.url);`);
+      await fs.writeFile(path.join(pluginDir, 'runtime.js'), runtime('before'));
       const first = await scanDirectory(rootDir);
-
-      await fs.writeFile(entryFile, source('after-change'));
+      await fs.writeFile(path.join(pluginDir, 'runtime.js'), runtime('after-change'));
       const second = await scanDirectory(rootDir);
-
-      const context = { workflowId: 'wf-test', nodeId: 'node-test', mode: 'sandbox' as const };
-      expect(await first.plugins[0].execute?.({}, null, context)).toBe('before');
-      expect(await second.plugins[0].execute?.({}, null, context)).toBe('after-change');
+      expect(await execute(first.plugins[0].definition, null)).toMatchObject({ value: 'before' });
+      expect(await execute(second.plugins[0].definition, null)).toMatchObject({ value: 'after-change' });
     } finally {
       await fs.rm(rootDir, { recursive: true, force: true });
     }

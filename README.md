@@ -2,7 +2,7 @@
 
 Criador visual de backends. O fluxo é um grafo de plugins que pode ser testado no editor e compilado em um projeto independente para Node.js/Express ou AWS Lambda/CDK.
 
-O backend exportado contém código, configuração, dependências declaradas e instruções de execução. Ele não precisa do editor nem de um servidor RunFlux para executar.
+O backend exportado contém o fluxo como dado (`src/workflow.json`), pontos de entrada em TypeScript, o runtime do RunFlux já compilado em `vendor/`, configuração e instruções de execução. Ele não precisa do editor nem de um servidor RunFlux para executar.
 
 ## Desenvolvimento
 
@@ -21,12 +21,12 @@ O servidor de projetos usa a porta 3001; o terminal do Vite informa o endereço 
 ## Verificação
 
 ```sh
-npm test          # Tipos, testes dos workspaces e contratos de todos os plugins
-npm run build    # Bundles Node, editor e conferência do catálogo produzido
-npm run test:plugins  # Contratos, execução HTTP e compilação dos backends exportados
+npm test              # Tipos (pacotes, testes e templates), testes dos workspaces e de tests/
+npm run build         # Bundles Node, editor e conferência do catálogo produzido
+npm run test:plugins  # Paridade editor/backend, backends exportados, build e síntese CDK
 ```
 
-Os testes verificam o resultado dos módulos gerados, executam requisições HTTP locais e compilam projetos exportados com TypeScript estrito. PostgreSQL é substituído somente na fronteira do driver nesses testes; o deploy real em AWS não faz parte da suíte.
+Os testes compilam backends, gravam o projeto como o download, constroem `dist/` e executam o resultado: requisições HTTP, processo do servidor, CLI, cron, handler Lambda e síntese da stack CDK. Cada plugin é executado no editor e no backend exportado com a exigência do mesmo resultado. PostgreSQL é substituído somente na fronteira do driver; o deploy real em AWS não faz parte da suíte.
 
 ## Estrutura
 
@@ -35,14 +35,15 @@ Os testes verificam o resultado dos módulos gerados, executam requisições HTT
 | `apps/workflow-editor` | Canvas, formulários, catálogo e testes interativos |
 | `apps/project-server` | Persistência, versões, compilação e downloads |
 | `packages/workflow-model` | Modelo do fluxo e ordenação do grafo |
-| `packages/plugin-system` | Contratos, descoberta e componentes compartilhados dos plugins |
-| `packages/expression-engine` | Interface de expressões sobre o avaliador canônico |
-| `packages/validation-runtime` | Execução e validação no editor |
-| `packages/compiler` | Grafo executável, geração local/AWS e empacotamento |
-| `plugins` | Os 11 plugins disponíveis |
-| `tests` | Contratos entre plugins, editor e projetos compilados |
+| `packages/runtime` | Motor, expressões, condições, campos, HTTP e hosts Express/Lambda/cron/CLI, iguais no editor e nos backends |
+| `packages/plugin-system` | Contrato de plugin, descoberta, registro e hub de webhooks de teste |
+| `packages/expression-engine` | Expressões dos previews do editor, sobre o avaliador do runtime |
+| `packages/validation-runtime` | Execuções de teste do editor sobre o motor do runtime |
+| `packages/compiler` | Validação, plano de deployment, alvos local/AWS, templates e empacotamento do runtime |
+| `plugins` | Os 11 plugins: `runtime.ts` executável e `index.ts` com manifesto e deployment |
+| `tests` | Paridade entre editor e backend e execução dos projetos exportados |
 
-Consulte [arquitetura e contratos](docs/architecture.md) e [análise dos plugins e validação](docs/plugin-audit.md) antes de adicionar um plugin.
+Consulte [arquitetura e contratos](docs/architecture.md), [análise dos plugins e validação](docs/plugin-audit.md) e o [guia do runtime](packages/runtime/README.md) antes de adicionar um plugin.
 
 ## Escopo atual
 

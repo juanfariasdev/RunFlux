@@ -1,15 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { PluginRegistry } from '../../plugin-registry';
 import { listPlugins } from '../list-plugins';
-import type { DiscoveredPlugin } from '../../types';
+import { testPlugin } from '../../testing';
+import type { PluginCategory } from '../../types';
 
-function makePlugin(id: string, category: DiscoveredPlugin['manifest']['category']): DiscoveredPlugin {
-  return {
-    manifest: { id, name: id, category, version: '1.0.0', parameters: [], supportedPlatforms: ['local'] },
-    generators: { local: () => ({ files: [], infra: [] }) },
-    sourcePath: `/plugins/${id}`,
-  };
-}
+const makePlugin = (id: string, category: PluginCategory) => testPlugin({ id, category });
 
 describe('listPlugins', () => {
   it('returns an empty object when the registry has no plugins', () => {

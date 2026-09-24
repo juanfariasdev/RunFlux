@@ -3,7 +3,9 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "lib": ["ES2022"],
+    "lib": [
+      "ES2022"
+    ],
     "rootDir": "src",
     "outDir": "dist",
     "strict": true,
@@ -13,11 +15,23 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "verbatimModuleSyntax": true
+    "verbatimModuleSyntax": true,
+    "types": [
+      "node"
+    ]
   },
-  "include": ["src/**/*.ts"],
+  "include": [
+    "src/**/*.ts"
+  ],
   "references": [
-    { "path": "../plugin-system" },
-    { "path": "../workflow-model" }
+    {
+      "path": "../runtime"
+    },
+    {
+      "path": "../plugin-system"
+    },
+    {
+      "path": "../workflow-model"
+    }
   ]
 }

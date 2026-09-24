@@ -1,27 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { PluginRegistry } from '@runflux/plugin-system/plugin-registry';
-import type { DiscoveredPlugin, ExecutorFn } from '@runflux/plugin-system/types';
+import type { PluginCategory } from '@runflux/plugin-system/types';
 import type { WorkflowDefinition } from '@runflux/workflow-model/types';
 import { runWorkflow, runNode } from '../engine';
+import { behaviourPlugin, registryWith, type TestBehaviour } from './support';
 
-function plugin(
-  id: string,
-  execute?: ExecutorFn,
-  category: DiscoveredPlugin['manifest']['category'] = 'action'
-): DiscoveredPlugin {
-  return {
-    manifest: { id, name: id, category, version: '1.0.0', parameters: [], supportedPlatforms: ['local'] },
-    generators: { local: () => ({ files: [], infra: [] }) },
-    execute,
-    sourcePath: `/plugins/${id}`,
-  };
-}
-
-function registryWith(...plugins: DiscoveredPlugin[]): PluginRegistry {
-  const registry = new PluginRegistry();
-  for (const p of plugins) registry.register(p);
-  return registry;
-}
+const plugin = (id: string, behaviour: TestBehaviour, category: PluginCategory = 'action') => behaviourPlugin({ id, category }, behaviour);
 
 describe('node-context-propagation: $node across workflow nodes (009-expression-global-context)', () => {
   it('propagates executed node outputs to downstream expressions via $node by label and by ID', async () => {

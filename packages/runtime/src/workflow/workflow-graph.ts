@@ -20,7 +20,10 @@ export class WorkflowGraph {
   private readonly incomingById = new Map<string, ExecutableConnection[]>();
   private readonly outgoingById = new Map<string, ExecutableConnection[]>();
 
-  constructor(readonly workflow: ExecutableWorkflow) {
+  readonly workflow: ExecutableWorkflow;
+
+  constructor(workflow: ExecutableWorkflow) {
+    this.workflow = workflow;
     for (const node of workflow.nodes) this.byId.set(node.id, node);
     for (const connection of workflow.connections) {
       if (!this.byId.has(connection.source) || !this.byId.has(connection.target)) continue;

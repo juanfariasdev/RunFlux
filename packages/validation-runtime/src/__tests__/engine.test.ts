@@ -1,23 +1,10 @@
-import { PluginRegistry } from '@runflux/plugin-system/plugin-registry';
-import type { DiscoveredPlugin, ExecutorFn } from '@runflux/plugin-system/types';
+import type { PluginCategory } from '@runflux/plugin-system/types';
 import { describe, expect, it } from 'vitest';
 import { runWorkflow } from '../engine';
 import type { WorkflowDefinition } from '@runflux/workflow-model/types';
+import { behaviourPlugin, registryWith, type TestBehaviour } from './support';
 
-function plugin(id: string, execute?: ExecutorFn, category: DiscoveredPlugin['manifest']['category'] = 'action'): DiscoveredPlugin {
-  return {
-    manifest: { id, name: id, category, version: '1.0.0', parameters: [], supportedPlatforms: ['local'] },
-    generators: { local: () => ({ files: [], infra: [] }) },
-    execute,
-    sourcePath: `/plugins/${id}`,
-  };
-}
-
-function registryWith(...plugins: DiscoveredPlugin[]): PluginRegistry {
-  const registry = new PluginRegistry();
-  for (const p of plugins) registry.register(p);
-  return registry;
-}
+const plugin = (id: string, behaviour: TestBehaviour, category: PluginCategory = 'action') => behaviourPlugin({ id, category }, behaviour);
 
 function workflow(overrides: Partial<WorkflowDefinition> = {}): WorkflowDefinition {
   return { id: 'wf-1', name: 'Test workflow', nodes: [], connections: [], ...overrides };
@@ -110,16 +97,20 @@ describe('runWorkflow (RF-01, RF-02)', () => {
     expect(run.nodeResults.map((r) => r.nodeId)).toEqual(['n1']);
   });
 
-  it('records a clear error for a node whose plugin has no execute function, without throwing', async () => {
-    const registry = registryWith(plugin('no-executor', undefined, 'trigger')); // no execute passed
+  it('records a clear error for a node whose plugin is not installed, without throwing', async () => {
+    const registry = registryWith(plugin('trigger', () => 'ok', 'trigger'));
     const wf = workflow({
-      nodes: [{ id: 'n1', pluginId: 'no-executor', pluginVersion: '1.0.0', parameters: {}, position: { x: 0, y: 0 } }],
+      nodes: [
+        { id: 'n1', pluginId: 'trigger', pluginVersion: '1.0.0', parameters: {}, position: { x: 0, y: 0 } },
+        { id: 'n2', pluginId: 'uninstalled', pluginVersion: '1.0.0', parameters: {}, position: { x: 0, y: 0 } },
+      ],
+      connections: [{ sourceNodeId: 'n1', sourceOutput: 'main', targetNodeId: 'n2', targetInput: 'main' }],
     });
 
     const run = await runWorkflow(wf, registry, { mode: 'sandbox' });
 
-    expect(run.status).toBe('error');
-    expect(run.nodeResults[0].error).toMatch(/does not support local execution/i);
+    expect(run.status).toBe('partial');
+    expect(run.nodeResults[1].error).toBe('Plugin "uninstalled" is not installed');
   });
 
   it('never executes a node with no incoming connection unless it is an actual trigger (RN-07)', async () => {
@@ -193,7 +184,7 @@ describe('runWorkflow (RF-01, RF-02)', () => {
       plugin('webhook-like', (_params, _input, context) => {
         if (context.nodeId === 'fast-node') return Promise.resolve('fired');
         return new Promise((_resolve, reject) => {
-          context.signal?.addEventListener('abort', () => reject(new Error('Cancelled: superseded by another trigger')));
+          context.signal.addEventListener('abort', () => reject(new Error('Cancelled: superseded by another trigger')));
         });
       }, 'trigger'),
     );

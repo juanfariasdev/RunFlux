@@ -5,7 +5,11 @@
 export class ServiceKey<TService> {
   declare readonly service?: TService;
 
-  constructor(readonly name: string) {}
+  readonly name: string;
+
+  constructor(name: string) {
+    this.name = name;
+  }
 }
 
 export class ServiceRegistry {

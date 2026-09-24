@@ -1,13 +1,9 @@
-import { createCodeGenerators } from '@runflux/plugin-system/generator-factory';
-import type { PluginModule } from '@runflux/plugin-system/types';
 import { CONDITION_ROW_SCHEMA } from '@runflux/plugin-system/condition-row-schema';
-import { matchRule, type ConditionRule } from '@runflux/plugin-system/operators';
-import { generateFilterCode } from '@runflux/plugin-system/generators';
+import type { PluginModule } from '@runflux/plugin-system/types';
 
 /**
- * Filter (004-core-nodes-catalog, RF-03): propagates the input unchanged
- * through its single output when its condition matches; otherwise activates
- * no output, silently halting the branch (RN-02) — same as n8n's Filter node.
+ * Filter (004-core-nodes-catalog, RF-03): propagates the input unchanged through its single output
+ * when its conditions match; otherwise activates no output, silently halting the branch (RN-02).
  */
 export const manifest: PluginModule['manifest'] = {
   id: 'filter',
@@ -22,12 +18,4 @@ export const manifest: PluginModule['manifest'] = {
   outputs: ['main'],
 };
 
-export const generators = createCodeGenerators(manifest, generateFilterCode);
-
-export const execute: PluginModule['execute'] = (params, input) => {
-  const conditions = Array.isArray(params.conditions) ? (params.conditions as ConditionRule[]) : [];
-  const combinator = (params.combinator as string | undefined) ?? 'and';
-  const matched = matchRule(conditions, combinator);
-  return { value: input, activeOutput: matched ? 'main' : null };
-};
-
+export const runtimeModule = new URL('./runtime.ts', import.meta.url);

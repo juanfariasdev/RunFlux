@@ -9,6 +9,4 @@ export const manifest: PluginModule['manifest'] = {
   supportedPlatforms: ['local'],
 };
 
-export const generators: PluginModule['generators'] = {
-  local: () => ({ files: [{ path: 'index.ts', content: '// ok' }], infra: [] }),
-};
+export const runtimeModule = new URL('./runtime.ts', import.meta.url);

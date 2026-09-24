@@ -1,5 +1,5 @@
 import type { Plugin } from 'vite';
-import { PluginRegistry, pushTestWebhook, clearPendingWebhooks } from '@runflux/plugin-system/node';
+import { PluginRegistry, WebhookTestHub } from '@runflux/plugin-system/node';
 import { runNode, runWorkflow, type NodeResult, type PluginExecutionMode, type WorkflowDefinition } from '@runflux/validation-runtime/node';
 
 /**
@@ -12,6 +12,8 @@ import { runNode, runWorkflow, type NodeResult, type PluginExecutionMode, type W
  */
 export function runfluxValidationPlugin(pluginDirectories: string[]): Plugin {
   const urlPath = '/runflux-validate';
+  // Webhook triggers of test runs wait on this hub for the requests sent to their test URL.
+  const webhooks = WebhookTestHub.shared();
 
   async function discoverRegistry(): Promise<PluginRegistry> {
     const registry = new PluginRegistry();
@@ -24,7 +26,7 @@ export function runfluxValidationPlugin(pluginDirectories: string[]): Plugin {
     configureServer(server) {
       // Cancel active waiting webhooks
       server.middlewares.use('/runflux-webhook-cancel', (_req, res) => {
-        clearPendingWebhooks();
+        webhooks.cancelAll();
         res.statusCode = 200;
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify({ success: true, message: 'Listening cancelled' }));
@@ -68,7 +70,7 @@ export function runfluxValidationPlugin(pluginDirectories: string[]): Plugin {
               method: req.method || 'POST',
             };
 
-            const delivered = pushTestWebhook(subPath, payload);
+            const delivered = webhooks.deliver(subPath, payload);
 
             res.statusCode = 200;
             res.setHeader('Content-Type', 'application/json');
@@ -112,9 +114,10 @@ export function runfluxValidationPlugin(pluginDirectories: string[]): Plugin {
             };
             const registry = await discoverRegistry();
             const cache = new Map((payload.cachedResults ?? []).map((result) => [result.nodeId, result]));
+            const options = { mode: payload.mode, services: { triggerEvents: webhooks } };
             const result = payload.nodeId
-              ? await runNode(payload.workflow, payload.nodeId, registry, { mode: payload.mode }, cache)
-              : await runWorkflow(payload.workflow, registry, { mode: payload.mode });
+              ? await runNode(payload.workflow, payload.nodeId, registry, options, cache)
+              : await runWorkflow(payload.workflow, registry, options);
             res.setHeader('Content-Type', 'application/json');
             res.end(JSON.stringify(result));
           })().catch((err: Error) => {

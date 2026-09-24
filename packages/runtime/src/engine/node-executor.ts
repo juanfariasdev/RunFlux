@@ -35,12 +35,22 @@ export interface NodeExecutorSettings {
 export class NodeExecutor {
   private readonly handlers = new Map<string, NodeHandler<unknown>>();
 
+  private readonly catalog: NodeCatalog;
+  private readonly services: RuntimeServices;
+  private readonly parameters: ParameterResolver;
+  private readonly settings: NodeExecutorSettings;
+
   constructor(
-    private readonly catalog: NodeCatalog,
-    private readonly services: RuntimeServices,
-    private readonly parameters: ParameterResolver,
-    private readonly settings: NodeExecutorSettings,
-  ) {}
+    catalog: NodeCatalog,
+    services: RuntimeServices,
+    parameters: ParameterResolver,
+    settings: NodeExecutorSettings,
+  ) {
+    this.catalog = catalog;
+    this.services = services;
+    this.parameters = parameters;
+    this.settings = settings;
+  }
 
   async execute(node: ExecutableNode, input: unknown, outputs: NodeOutputsById, signal: AbortSignal): Promise<NodeRecord> {
     const startedAt = this.timestamp();

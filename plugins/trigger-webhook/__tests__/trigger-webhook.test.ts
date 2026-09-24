@@ -1,127 +1,100 @@
-import { describe, it, expect, afterEach } from 'vitest';
-import { manifest, execute, pushTestWebhook, clearPendingWebhooks } from '../index.js';
+import { validateManifest } from '@runflux/plugin-system/manifest-validator';
+import { WebhookTestHub } from '@runflux/plugin-system/webhook-test-hub';
+import { ParameterReader } from '@runflux/runtime';
+import { executeNode } from '@runflux/runtime/testing';
+import { describe, expect, it, vi } from 'vitest';
+import { deployment, manifest } from '../index';
+import webhook from '../runtime';
 
-const testContext = {
-  workflowId: 'wf-test',
-  nodeId: 'node-webhook',
-  mode: 'sandbox' as const,
-};
+const run = (parameters: Record<string, unknown>, input?: unknown, extra: Parameters<typeof executeNode>[1] = {}) =>
+  executeNode(webhook, { parameters, input, outputs: manifest.outputs, pluginId: 'trigger-webhook', ...extra });
+const reader = (values: Record<string, unknown>) => new ParameterReader(values, 'trigger-webhook');
 
-describe('trigger-webhook plugin', () => {
-  afterEach(() => {
-    clearPendingWebhooks();
-    delete process.env.RUNFLUX_WAIT_WEBHOOK_TEST;
+describe('trigger-webhook runtime', () => {
+  it('declares a valid trigger manifest with a main output', () => {
+    expect(validateManifest(manifest).success).toBe(true);
+    expect(manifest.outputs).toEqual(['main']);
   });
 
-  it('defines valid manifest metadata', () => {
-    expect(manifest.id).toBe('trigger-webhook');
-    expect(manifest.category).toBe('trigger');
-    expect(manifest.supportedPlatforms).toContain('local');
-    expect(manifest.supportedPlatforms).toContain('aws');
-    expect(manifest.parameters.some((p) => p.name === 'path')).toBe(true);
-    expect(manifest.parameters.some((p) => p.name === 'httpMethod')).toBe(true);
-    expect(manifest.parameters.some((p) => p.name === 'authentication')).toBe(true);
-    expect(manifest.parameters.some((p) => p.name === 'rawBody')).toBe(true);
+  it('exposes the JSON body fields next to the headers and query of a request', async () => {
+    const record = await run({}, { body: { id: 42 }, headers: { authorization: 'Bearer 1' }, query: { page: '2' } });
+    expect(record).toMatchObject({ activeOutput: 'main', output: { id: 42, _headers: { authorization: 'Bearer 1' }, _query: { page: '2' } } });
   });
 
-  // manifest.outputs is declared (['main']), so validation-runtime's engine (executeNode,
-  // packages/validation-runtime/src/engine.ts) reads `raw.value`/`raw.activeOutput` off
-  // whatever execute() returns — a plugin that forgets this wrapper silently collapses to
-  // `output: null` for every real run, even though execute() itself "succeeded" (a bug this
-  // plugin actually shipped with). Every case below asserts the wrapper, not just the payload.
-
-  it('passes incoming body fields directly forward in output', async () => {
-    expect(execute).toBeDefined();
-    const result = (await execute!(
-      { path: '/orders', httpMethod: 'POST', sampleBody: { id: 42, customer: 'Alice' } },
-      {},
-      testContext
-    )) as any;
-    expect(result.activeOutput).toBe('main');
-    expect(result.value.id).toBe(42);
-    expect(result.value.customer).toBe('Alice');
-    expect(result.value._headers).toBeDefined();
+  it.each([
+    [{ body: 'plain text' }, { data: 'plain text', _headers: {}, _query: {} }],
+    [{ body: [1, 2] }, { data: [1, 2], _headers: {}, _query: {} }],
+    [{ headers: { a: '1' } }, { data: undefined, _headers: { a: '1' }, _query: {} }],
+    [{ id: 42 }, { id: 42, _headers: {}, _query: {} }],
+    ['raw', { data: 'raw', _headers: {}, _query: {} }],
+  ])('treats %j as a request (non-request payloads become its body)', async (input, output) => {
+    expect((await run({}, input)).output).toEqual(output);
   });
 
-  it('composes an array-of-fields sampleBody (rowSchema shape) into the flat simulated body', async () => {
-    expect(execute).toBeDefined();
-    const result = (await execute!(
-      {
-        path: '/orders',
-        httpMethod: 'POST',
-        sampleBody: [
-          { name: 'id', value: 42, type: 'number' },
-          { name: 'customer', value: 'Alice', type: 'string' },
-        ],
-      },
-      {},
-      testContext
-    )) as any;
-    expect(result.activeOutput).toBe('main');
-    expect(result.value.id).toBe(42);
-    expect(result.value.customer).toBe('Alice');
-    expect(result.value._headers).toBeDefined();
+  it('uses its sample when a test run has no request and nothing delivers one', async () => {
+    const rows = [{ name: 'id', value: '42', type: 'number' }, { name: 'customer', value: 'Alice', type: 'string' }];
+    expect((await run({ sampleBody: rows, sampleHeaders: { 'x-sample': '1' }, sampleQuery: { q: 'a' } })).output)
+      .toEqual({ id: 42, customer: 'Alice', _headers: { 'x-sample': '1' }, _query: { q: 'a' } });
+    expect((await run({ sampleBody: { literal: true } })).output).toEqual({ literal: true, _headers: {}, _query: {} });
+    expect((await run({})).output).toEqual({ message: 'Sample webhook payload', _headers: {}, _query: {} });
   });
 
-  it('preserves real input data when passed from an actual HTTP caller', async () => {
-    expect(execute).toBeDefined();
-    const realInput = {
-      body: { customer: 'Alice', total: 99 },
-      headers: { authorization: 'Bearer 123' },
-      query: { filter: 'active' },
-    };
-    const result = (await execute!({ path: '/hook' }, realInput, testContext)) as any;
-    expect(result.activeOutput).toBe('main');
-    expect(result.value.customer).toBe('Alice');
-    expect(result.value.total).toBe(99);
-    expect(result.value._headers.authorization).toBe('Bearer 123');
-    expect(result.value._query.filter).toBe('active');
+  it('waits for a test request on its path when the editor delivers them', async () => {
+    const hub = new WebhookTestHub();
+    const pending = run({ path: '/orders' }, undefined, { services: { triggerEvents: hub } });
+    await vi.waitFor(() => expect(hub.pending).toBe(1));
+    expect(hub.deliver('/unrelated', { body: { wrong: true } })).toBe(false);
+    expect(hub.deliver('/orders', { body: { paymentId: 'pay-1' }, headers: { 'x-event': 'paid' }, query: { live: 'false' } })).toBe(true);
+    expect((await pending).output).toEqual({ paymentId: 'pay-1', _headers: { 'x-event': 'paid' }, _query: { live: 'false' } });
   });
 
-  it('waits for incoming webhook when active and resolves body directly', async () => {
-    process.env.RUNFLUX_WAIT_WEBHOOK_TEST = 'true';
-
-    const testPromise = execute!({ path: '/test-event', httpMethod: 'POST' }, {}, testContext);
-
-    setTimeout(() => {
-      const delivered = pushTestWebhook('/test-event', {
-        body: { paymentId: 'pay-999', amount: 150 },
-        headers: { 'x-event': 'payment.succeeded' },
-        query: { live: 'false' },
-        method: 'POST',
-      });
-      expect(delivered).toBe(true);
-    }, 50);
-
-    const result = (await testPromise) as any;
-    expect(result.activeOutput).toBe('main');
-    expect(result.value.paymentId).toBe('pay-999');
-    expect(result.value.amount).toBe(150);
-    expect(result.value._headers['x-event']).toBe('payment.succeeded');
-    expect(result.value._query.live).toBe('false');
-  });
-
-  // RN-08: a whole-workflow run races multiple triggers — validation-runtime's engine
-  // fires `context.signal` for every execution still in flight the moment any trigger
-  // settles, so a still-waiting Webhook Trigger abandons its own wait instead of the
-  // caller having to satisfy every trigger just to see a result.
-  it('abandons its wait and rejects when context.signal aborts, without leaking its pending-webhook entry', async () => {
-    process.env.RUNFLUX_WAIT_WEBHOOK_TEST = 'true';
+  it('stops waiting when its run no longer needs it', async () => {
+    const hub = new WebhookTestHub();
     const controller = new AbortController();
-
-    const testPromise = execute!(
-      { path: '/never-fires', httpMethod: 'POST' },
-      {},
-      { ...testContext, signal: controller.signal },
-    );
-
+    const pending = run({ path: '/cancelled' }, undefined, { services: { triggerEvents: hub }, signal: controller.signal });
+    await vi.waitFor(() => expect(hub.pending).toBe(1));
     controller.abort();
+    expect((await pending).error).toMatch(/another trigger.*already fired/);
+    expect(hub.pending).toBe(0);
+  });
 
-    await expect(testPromise).rejects.toThrow(/another trigger.*already fired/i);
+  it.each([
+    [{ path: 'orders' }, 'trigger-webhook: parameter "path" must be an absolute URL path without query or fragment'],
+    [{ path: '/orders?x=1' }, 'must be an absolute URL path without query or fragment'],
+    [{ sampleBody: [{ name: 'n', value: 'x', type: 'number' }] }, 'Field "n" must be a number'],
+  ])('reports invalid configuration %j', async (parameters, message) => {
+    expect((await run(parameters)).error).toContain(message);
+  });
+});
 
-    // The now-cancelled wait must not still be sitting in the pending list — otherwise
-    // a later, unrelated webhook test could be misdelivered to this dead listener.
-    const delivered = pushTestWebhook('/never-fires', { body: { late: true } });
-    expect(delivered).toBe(false);
+describe('trigger-webhook deployment', () => {
+  it('declares its endpoint with defaults', () => {
+    expect(deployment?.triggers?.(reader({}))).toEqual([{ kind: 'http', path: '/webhook', method: 'POST', authentication: { type: 'none' }, rawBody: false }]);
+  });
+
+  it.each(['secret', 'headerAuth'])('maps %s authentication to a header secret and declares its variable', (authentication) => {
+    const parameters = reader({ path: '/orders', httpMethod: 'put', authentication, headerName: 'X-Orders-Key', secretEnvVar: 'ORDERS_KEY', rawBody: true });
+    expect(deployment?.triggers?.(parameters)).toEqual([{
+      kind: 'http', path: '/orders', method: 'PUT', rawBody: true,
+      authentication: { type: 'header', headerName: 'X-Orders-Key', secretEnvVar: 'ORDERS_KEY' },
+    }]);
+    expect(deployment?.environment?.(parameters)).toEqual([{ key: 'ORDERS_KEY', description: 'Secret expected in X-Orders-Key' }]);
+  });
+
+  it('reads the legacy auth parameter and needs no variable without authentication', () => {
+    expect(deployment?.triggers?.(reader({ auth: 'secret' }))?.[0]).toMatchObject({ authentication: { type: 'header', headerName: 'X-Webhook-Secret', secretEnvVar: 'WEBHOOK_SECRET' } });
+    expect(deployment?.environment?.(reader({}))).toEqual([]);
+  });
+
+  it.each([
+    [{ httpMethod: 'FETCH' }, 'parameter "httpMethod" "FETCH" is not an HTTP method'],
+    [{ authentication: 'oauth' }, 'parameter "authentication" must be one of "none", "secret", "headerAuth"'],
+    [{ path: '/with space' }, 'parameter "path" must be an absolute URL path'],
+  ])('rejects %j', (parameters, message) => {
+    expect(() => deployment?.triggers?.(reader(parameters))).toThrow(message);
+  });
+
+  it('accepts ANY as a method', () => {
+    expect(deployment?.triggers?.(reader({ httpMethod: 'any' }))?.[0]).toMatchObject({ method: 'ANY' });
   });
 });

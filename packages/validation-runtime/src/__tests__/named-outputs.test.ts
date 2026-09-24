@@ -1,23 +1,10 @@
-import { PluginRegistry } from '@runflux/plugin-system/plugin-registry';
-import type { DiscoveredPlugin, ExecutorFn, PluginManifest } from '@runflux/plugin-system/types';
+import type { PluginManifest } from '@runflux/plugin-system/types';
 import { describe, expect, it } from 'vitest';
 import { runWorkflow } from '../engine';
 import type { WorkflowDefinition } from '@runflux/workflow-model/types';
+import { behaviourPlugin, registryWith, type TestBehaviour } from './support';
 
-function plugin(id: string, manifestOverrides: Partial<PluginManifest>, execute: ExecutorFn): DiscoveredPlugin {
-  return {
-    manifest: { id, name: id, category: 'action', version: '1.0.0', parameters: [], supportedPlatforms: ['local'], ...manifestOverrides },
-    generators: { local: () => ({ files: [], infra: [] }) },
-    execute,
-    sourcePath: `/plugins/${id}`,
-  };
-}
-
-function registryWith(...plugins: DiscoveredPlugin[]): PluginRegistry {
-  const registry = new PluginRegistry();
-  for (const p of plugins) registry.register(p);
-  return registry;
-}
+const plugin = (id: string, manifest: Partial<PluginManifest>, behaviour: TestBehaviour) => behaviourPlugin({ id, ...manifest }, behaviour);
 
 describe('named-output propagation (004-core-nodes-catalog, D-03, D-04, RN-02, RN-05, RF-07)', () => {
   it('propagates only through the output the executor activated, and skips the other named branch', async () => {

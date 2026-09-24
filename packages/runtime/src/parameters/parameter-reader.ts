@@ -1,3 +1,5 @@
+import { isRecord } from '../values.js';
+
 export class ParameterError extends Error {
   constructor(message: string) {
     super(message);
@@ -10,14 +12,25 @@ export class ParameterError extends Error {
  * to the given default; a value of the wrong type raises a ParameterError that names the node type.
  */
 export class ParameterReader {
+  private readonly values: Readonly<Record<string, unknown>>;
+  private readonly owner: string;
+
   constructor(
-    private readonly values: Readonly<Record<string, unknown>>,
-    private readonly owner: string,
-  ) {}
+    values: Readonly<Record<string, unknown>>,
+    owner: string,
+  ) {
+    this.values = values;
+    this.owner = owner;
+  }
 
   /** The value exactly as configured, for parameters that accept any JSON. */
   raw(name: string): unknown {
     return this.values[name];
+  }
+
+  /** Every parameter exactly as configured, for nodes that accept arbitrary parameters. */
+  all(): Readonly<Record<string, unknown>> {
+    return this.values;
   }
 
   string(name: string, fallback: string): string {
@@ -63,8 +76,8 @@ export class ParameterReader {
   record(name: string): Record<string, unknown> {
     const value = this.values[name];
     if (isMissing(value)) return {};
-    if (typeof value !== 'object' || Array.isArray(value)) throw this.error(name, 'must be an object');
-    return value as Record<string, unknown>;
+    if (!isRecord(value)) throw this.error(name, 'must be an object');
+    return value;
   }
 
   /** Raises a ParameterError for a problem found while interpreting a parameter's value. */

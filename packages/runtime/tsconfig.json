@@ -3,8 +3,13 @@
     "target": "ES2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "lib": ["ES2022", "DOM"],
-    "types": ["node"],
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
+    "types": [
+      "node"
+    ],
     "rootDir": "src",
     "outDir": "dist",
     "strict": true,
@@ -16,7 +21,10 @@
     "verbatimModuleSyntax": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+    "erasableSyntaxOnly": true
   },
-  "include": ["src/**/*.ts"]
+  "include": [
+    "src/**/*.ts"
+  ]
 }

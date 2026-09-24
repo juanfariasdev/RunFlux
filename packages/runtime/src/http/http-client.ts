@@ -16,13 +16,18 @@ export interface HttpResponse {
 }
 
 export class HttpRequestError extends Error {
+  readonly url: string;
+  readonly status: number;
+
   constructor(
-    readonly url: string,
-    readonly status: number,
+    url: string,
+    status: number,
     responseText: string,
   ) {
     super(`request to ${url} failed with status ${status}: ${responseText.slice(0, 200)}`);
     this.name = 'HttpRequestError';
+    this.url = url;
+    this.status = status;
   }
 }
 
@@ -30,7 +35,11 @@ const BODYLESS_METHODS = new Set(['GET', 'HEAD']);
 
 export class HttpClient {
   /** The default transport reads `fetch` on every call, so replacing the global takes effect. */
-  constructor(private readonly transport: HttpTransport = (url, init) => globalThis.fetch(url, init)) {}
+  private readonly transport: HttpTransport;
+
+  constructor(transport: HttpTransport = (url, init) => globalThis.fetch(url, init)) {
+    this.transport = transport;
+  }
 
   async send(request: HttpRequest): Promise<HttpResponse> {
     const response = await this.transport(request.url, this.createInit(request));

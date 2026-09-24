@@ -1,3 +1,4 @@
+import { isRecord } from '../values.js';
 import { HTTP_METHODS, type HttpTrigger, type ScheduleTrigger, type WorkflowTriggers } from './triggers.js';
 
 export const WORKFLOW_SCHEMA_VERSION = 1;
@@ -116,8 +117,7 @@ function parseSchedule(value: unknown, path: string): ScheduleTrigger {
 }
 
 function record(value: unknown, path: string): Record<string, unknown> {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return fail(`${path} must be an object`);
-  return value as Record<string, unknown>;
+  return isRecord(value) ? value : fail(`${path} must be an object`);
 }
 
 function list(value: unknown, path: string): unknown[] {

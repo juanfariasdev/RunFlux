@@ -1,84 +1,45 @@
+import { validateManifest } from '@runflux/plugin-system/manifest-validator';
+import { executeNode } from '@runflux/runtime/testing';
 import { describe, expect, it } from 'vitest';
-import { execute, manifest } from '../index';
+import { manifest } from '../index';
+import code from '../runtime';
 
-const testContext = { workflowId: 'wf-1', nodeId: 'n1', mode: 'sandbox' as const };
+const run = (source: unknown, input?: unknown, extra: Parameters<typeof executeNode>[1] = {}) =>
+  executeNode(code, { parameters: { code: source }, literalParameters: ['code'], input, ...extra });
 
-describe('code-javascript plugin (010-code-node-plugin)', () => {
-  it('declares a valid manifest with category "action"', () => {
-    expect(manifest.id).toBe('code-javascript');
-    expect(manifest.name).toBe('Code');
-    expect(manifest.category).toBe('action');
-    expect(manifest.supportedPlatforms).toContain('local');
-    expect(manifest.supportedPlatforms).toContain('aws');
-    const codeParam = manifest.parameters.find((p) => p.name === 'code');
-    expect(codeParam).toBeDefined();
-    expect(codeParam?.type).toBe('string');
-    expect(codeParam?.required).toBe(true);
+describe('code-javascript', () => {
+  it('declares its source as a literal parameter', () => {
+    expect(validateManifest(manifest).success).toBe(true);
+    expect(manifest.parameters.find((parameter) => parameter.name === 'code')?.expressions).toBe(false);
   });
 
-  it('executes user JavaScript returning transformed $json synchronously', async () => {
-    const code = `
-      return {
-        total: $json.items.reduce((acc, item) => acc + item.price, 0),
-        count: $json.items.length
-      };
-    `;
-    const input = { items: [{ price: 10 }, { price: 25 }] };
-    const result = await execute!({ code }, input, testContext);
-
-    expect(result).toEqual({ total: 35, count: 2 });
-  });
-
-  it('supports async functions and Promise resolutions', async () => {
-    const code = `
-      const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-      await delay(5);
-      return { asyncWorked: true, upper: $json.name.toUpperCase() };
-    `;
-    const input = { name: 'runflux' };
-    const result = await execute!({ code }, input, testContext);
-
-    expect(result).toEqual({ asyncWorked: true, upper: 'RUNFLUX' });
-  });
-
-  it('accesses $node and $env in the execution context', async () => {
-    const code = `
-      return {
-        fromTrigger: $node['Webhook']?.json?.userId,
-        apiKey: $env.TEST_API_KEY,
-        current: $json.item
-      };
-    `;
-    const input = { item: 'sample' };
-    const context = {
-      ...testContext,
-      $node: {
-        Webhook: { json: { userId: 'usr-888' } },
-      },
-      $env: {
-        TEST_API_KEY: 'secret-xyz',
-      },
-    };
-
-    const result = await execute!({ code }, input, context);
-    expect(result).toEqual({
-      fromTrigger: 'usr-888',
-      apiKey: 'secret-xyz',
-      current: 'sample',
+  it('runs async user code with $json, $node and $env', async () => {
+    const record = await run('return { doubled: await Promise.resolve($json.count * 2), previous: $node.start.json.label, env: $env.TOKEN };', { count: 4 }, {
+      nodes: { start: { label: 'Source' } },
+      env: { TOKEN: 'secret' },
     });
+    expect(record).toMatchObject({ error: null, output: { doubled: 8, previous: 'Source', env: 'secret' } });
   });
 
-  it('throws friendly descriptive errors on runtime exceptions', async () => {
-    const code = `
-      $json.missing.deepProp;
-      return $json;
-    `;
-    await expect(execute!({ code }, {}, testContext)).rejects.toThrow(/\[code-javascript\]/);
+  it('reads missing nodes as { json: undefined } instead of throwing', async () => {
+    expect((await run('return $node["absent"].json;')).output).toBeUndefined();
   });
 
-  it('returns $json unchanged when code is empty or fallback', async () => {
-    const input = { status: 'pass' };
-    const result = await execute!({ code: '' }, input, testContext);
-    expect(result).toEqual({ status: 'pass' });
+  it('never interpolates {{ }} inside the source', async () => {
+    expect((await run('return "{{ $json.secret }}";', { secret: 'leaked' })).output).toBe('{{ $json.secret }}');
+  });
+
+  it('returns its input by default', async () => {
+    expect((await run(undefined, { id: 1 })).output).toEqual({ id: 1 });
+    expect((await run('   ', { id: 2 })).output).toEqual({ id: 2 });
+  });
+
+  it.each([
+    ['throw new Error("broken");', '[code-javascript]: Execution error: broken'],
+    ['return $json.missing.field;', '[code-javascript]: Execution error: Cannot read properties of undefined'],
+    ['return {', '[code-javascript]: Execution error: Unexpected'],
+    ['throw "plain";', '[code-javascript]: Execution error: plain'],
+  ])('reports failures of %j', async (source, message) => {
+    expect((await run(source, {})).error).toContain(message);
   });
 });

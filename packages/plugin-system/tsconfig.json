@@ -3,7 +3,9 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "lib": ["ES2022"],
+    "lib": [
+      "ES2022"
+    ],
     "rootDir": "src",
     "outDir": "dist",
     "strict": true,
@@ -13,7 +15,15 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "verbatimModuleSyntax": true
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true
   },
-  "include": ["src/**/*.ts"]
+  "include": [
+    "src/**/*.ts"
+  ],
+  "references": [
+    {
+      "path": "../runtime"
+    }
+  ]
 }

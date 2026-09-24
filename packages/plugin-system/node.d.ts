@@ -6,12 +6,9 @@
  * type-checked as part of a consumer whose moduleResolution is
  * node16/nodenext (e.g. apps/workflow-editor's tsconfig.node.json, which
  * type-checks vite.config.ts), TS re-applies that consumer's extension
- * rules to every file it pulls in — including this package's own internal
- * relative imports, which are written extensionless for its own
- * moduleResolution: "bundler" setup. A self-contained .d.ts with no
- * relative imports of its own sidesteps that entirely. Keep this in sync
- * with the real PluginRegistry/listPlugins signatures in src/ by hand —
- * only the narrow surface vite-plugin-plugin-catalog.ts actually needs.
+ * rules to every file it pulls in. A self-contained .d.ts sidesteps that.
+ * Keep this in sync with src/ by hand — only the narrow surface the Vite
+ * plugins and plain-Node scripts actually need.
  */
 
 export type PluginCategory = 'trigger' | 'action' | 'output' | 'control-flow' | 'subworkflow';
@@ -23,6 +20,7 @@ export interface ParameterSchema {
   required: boolean;
   default?: unknown;
   sensitive?: boolean;
+  expressions?: boolean;
 }
 
 export interface PluginManifest {
@@ -32,6 +30,7 @@ export interface PluginManifest {
   version: string;
   parameters: ParameterSchema[];
   supportedPlatforms: string[];
+  outputs?: string[];
 }
 
 export interface DiscoverOptions {
@@ -53,6 +52,18 @@ export class PluginRegistry {
 
 export function listPlugins(registry: PluginRegistry): Record<string, PluginManifest[]>;
 
-// This module is self-contained and already compatible with NodeNext resolution.
-export { pushTestWebhook, clearPendingWebhooks } from './src/webhook-listener.js';
-export type { WebhookRequest, PendingWebhook } from './src/webhook-listener.js';
+export interface WebhookTestRequest {
+  body?: unknown;
+  headers?: unknown;
+  query?: unknown;
+  method?: string;
+}
+
+export class WebhookTestHub {
+  constructor(timeoutMs?: number);
+  static shared(): WebhookTestHub;
+  readonly pending: number;
+  waitFor(path: string, signal: AbortSignal): Promise<WebhookTestRequest>;
+  deliver(path: string, request: WebhookTestRequest): boolean;
+  cancelAll(): void;
+}

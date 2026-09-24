@@ -6,7 +6,7 @@ import type { JsonRowFieldSchema, JsonRowOption } from './types';
  * operator values in their own `compare()`.
  */
 export const OPERATOR_OPTIONS: JsonRowOption[] = [
-  { value: 'equals', label: 'Equalss' },
+  { value: 'equals', label: 'Equals' },
   { value: 'notEquals', label: 'Not equals' },
   { value: 'contains', label: 'Contains' },
   { value: 'greaterThan', label: 'Greater than' },

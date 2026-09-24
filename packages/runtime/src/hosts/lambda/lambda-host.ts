@@ -35,10 +35,13 @@ export class LambdaHost {
   private readonly router: HttpTriggerRouter;
   private readonly authenticator: HttpTriggerAuthenticator;
 
+  private readonly engine: WorkflowEngine;
+
   constructor(
-    private readonly engine: WorkflowEngine,
+    engine: WorkflowEngine,
     options: LambdaHostOptions = {},
   ) {
+    this.engine = engine;
     this.router = new HttpTriggerRouter(engine.workflow.triggers.http);
     this.authenticator = options.authenticator ?? new HttpTriggerAuthenticator();
   }

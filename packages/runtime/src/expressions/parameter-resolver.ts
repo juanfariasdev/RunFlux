@@ -2,7 +2,11 @@ import { ExpressionEvaluator, type ExpressionScope } from './expression-evaluato
 
 /** Resolves a node's parameters before execution, keeping literal ones (source code, SQL) verbatim. */
 export class ParameterResolver {
-  constructor(private readonly expressions: ExpressionEvaluator = new ExpressionEvaluator()) {}
+  private readonly expressions: ExpressionEvaluator;
+
+  constructor(expressions: ExpressionEvaluator = new ExpressionEvaluator()) {
+    this.expressions = expressions;
+  }
 
   resolve(
     parameters: Readonly<Record<string, unknown>>,

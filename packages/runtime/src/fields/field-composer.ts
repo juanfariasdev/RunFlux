@@ -1,4 +1,5 @@
 import type { ParameterReader } from '../parameters/parameter-reader.js';
+import { isRecord } from '../values.js';
 
 export const FIELD_TYPES = ['string', 'number', 'boolean', 'null', 'array', 'object'] as const;
 
@@ -42,7 +43,7 @@ const NORMALIZERS: Readonly<Record<FieldType, FieldNormalizer>> = {
     return value;
   },
   object: (value, field) => {
-    if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new FieldTypeError(field, 'an object');
+    if (!isRecord(value)) throw new FieldTypeError(field, 'an object');
     return value;
   },
 };
@@ -66,8 +67,8 @@ export class FieldComposer {
 /** Reads a list of field rows (`name`, `value`, `type`). Rows without a name are skipped. */
 export function readFields(parameters: ParameterReader, name: string): FieldDefinition[] {
   return parameters.list(name).flatMap((row, index): FieldDefinition[] => {
-    if (row === null || typeof row !== 'object' || Array.isArray(row)) throw parameters.error(name, `row ${index + 1} must be an object`);
-    const field = row as Record<string, unknown>;
+    if (!isRecord(row)) throw parameters.error(name, `row ${index + 1} must be an object`);
+    const field = row;
     if (typeof field.name !== 'string') return [];
     const type = field.type ?? undefined;
     if (type !== undefined && !FIELD_TYPES.includes(type as FieldType)) {

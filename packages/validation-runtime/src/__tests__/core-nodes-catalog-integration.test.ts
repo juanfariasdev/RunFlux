@@ -1,33 +1,30 @@
-import { PluginRegistry } from '@runflux/plugin-system/plugin-registry';
-import type { DiscoveredPlugin } from '@runflux/plugin-system/types';
+import type { NodeDefinition } from '@runflux/runtime';
+import type { PluginModule } from '@runflux/plugin-system/types';
 import type { WorkflowDefinition } from '@runflux/workflow-model/types';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as conditionIf from '@runflux/plugin-condition-if';
+import conditionIfRuntime from '@runflux/plugin-condition-if/runtime';
 import * as httpOutput from '@runflux/plugin-http-output';
+import httpOutputRuntime from '@runflux/plugin-http-output/runtime';
 import * as setPlugin from '@runflux/plugin-set';
+import setRuntime from '@runflux/plugin-set/runtime';
 import { runWorkflow } from '../engine';
+import { behaviourPlugin, registryWith } from './support';
 
 /**
  * End-to-end coverage of the 3 acceptance scenarios in
  * `requirements.md#7` (004-core-nodes-catalog), against the *real* plugins —
  * not stand-ins — wired through the actual validation engine.
  */
-function triggerPlugin(): DiscoveredPlugin {
-  return {
-    manifest: { id: 'trigger', name: 'Trigger', category: 'trigger', version: '1.0.0', parameters: [], supportedPlatforms: ['local'] },
-    generators: { local: () => ({ files: [], infra: [] }) },
-    execute: (params) => params.seed,
-    sourcePath: '/plugins/trigger',
-  };
-}
+const real = (module: PluginModule, definition: NodeDefinition) => ({ ...module, definition, sourcePath: `/plugins/${module.manifest.id}` });
 
-function registryWithRealPlugins(): PluginRegistry {
-  const registry = new PluginRegistry();
-  registry.register(triggerPlugin());
-  registry.register({ manifest: conditionIf.manifest, generators: conditionIf.generators, execute: conditionIf.execute, sourcePath: '/plugins/condition-if' });
-  registry.register({ manifest: setPlugin.manifest, generators: setPlugin.generators, execute: setPlugin.execute, sourcePath: '/plugins/set' });
-  registry.register({ manifest: httpOutput.manifest, generators: httpOutput.generators, execute: httpOutput.execute, sourcePath: '/plugins/http-output' });
-  return registry;
+function registryWithRealPlugins() {
+  return registryWith(
+    behaviourPlugin({ id: 'trigger', category: 'trigger' }, (parameters) => parameters.seed),
+    real(conditionIf, conditionIfRuntime),
+    real(setPlugin, setRuntime),
+    real(httpOutput, httpOutputRuntime),
+  );
 }
 
 describe('core-nodes-catalog acceptance scenarios (004-core-nodes-catalog, requirements.md#7)', () => {

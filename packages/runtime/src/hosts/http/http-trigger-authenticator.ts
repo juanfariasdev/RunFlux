@@ -8,7 +8,11 @@ import type { HttpTrigger } from '../../workflow/triggers.js';
  */
 export class HttpTriggerAuthenticator {
   /** The environment is read on every request, so rotated secrets apply without a restart. */
-  constructor(private readonly environment: () => EnvironmentVariables = systemEnvironment) {}
+  private readonly environment: () => EnvironmentVariables;
+
+  constructor(environment: () => EnvironmentVariables = systemEnvironment) {
+    this.environment = environment;
+  }
 
   authorize(trigger: HttpTrigger, header: (name: string) => string | undefined): boolean {
     const { authentication } = trigger;

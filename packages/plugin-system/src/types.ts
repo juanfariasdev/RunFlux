@@ -3,6 +3,8 @@
  * See _reversa_sdd/sdd/plugin-system.md#9 (Modelo de Dados) in the RunFlux
  * planning repo for the spec these types implement.
  */
+import type { NodeDefinition } from '@runflux/runtime';
+import type { PluginDeployment } from './deployment.js';
 
 export type PluginCategory = 'trigger' | 'action' | 'output' | 'control-flow' | 'subworkflow';
 
@@ -17,8 +19,7 @@ export interface JsonRowOption {
  * typed `value`). A plugin declares this on its own `rowSchema` to opt an
  * array parameter into a structured row form in the editor UI, instead of
  * the generic free-form key/value editor — without the UI needing to
- * recognize the parameter by name (previously the only mechanism: see
- * apps/workflow-editor JsonFieldEditor's old name-keyed LIST_ROW_FIELDS).
+ * recognize the parameter by name.
  */
 export interface JsonRowFieldSchema {
   key: string;
@@ -63,92 +64,26 @@ export interface PluginManifest {
   supportedPlatforms: string[];
   /**
    * Named output ports (004-core-nodes-catalog, D-03). Absent = one implicit
-   * "main" output, always active (legacy behavior, e.g. trigger-manual-example).
-   * Present = `execute()` returns an `ExecutorResult` object instead of a raw
-   * value, and the validation engine only propagates through the output it names.
+   * "main" output. The node's handler names the port it activates on every run.
    */
   outputs?: string[];
 }
 
-export interface InfraFragment {
-  kind: string;
-  content: string;
-}
-
-export interface GeneratedArtifact {
-  files: Array<{ path: string; content: string }>;
-  infra: InfraFragment[];
-}
-
-export interface WorkflowContext {
-  workflowId: string;
-  nodeId: string;
-}
-
-export type GeneratorFn = (
-  nodeConfig: Record<string, unknown>,
-  workflowContext: WorkflowContext,
-) => GeneratedArtifact;
-
 /**
- * Context passed to a plugin's `execute` function (003-validation-runtime,
- * D-03/RN-04). Distinct from `WorkflowContext`: this one carries `mode`,
- * needed only at runtime, never at compile-time code generation.
+ * What a plugin module exports.
+ *
+ * `runtimeModule` locates the module whose default export is the plugin's NodeDefinition. The
+ * editor imports it to run nodes; the compiler bundles it into exported backends. It must import
+ * only `@runflux/runtime`, its own files and the npm packages it declares in `deployment`.
  */
-export interface PluginExecutionContext {
-  workflowId: string;
-  nodeId: string;
-  mode: 'sandbox' | 'production';
-  $node?: Record<string, { json: unknown }>;
-  $env?: Record<string, string | undefined>;
-  /**
-   * Fires when this node's wait no longer matters — e.g. a whole-workflow
-   * run raced two independent triggers (RN-08) and a different one already
-   * fired. A plugin that waits on a real external event (trigger-webhook)
-   * should abandon that wait and reject when this fires; a plugin that
-   * doesn't wait on anything can ignore it entirely.
-   */
-  signal?: AbortSignal;
-}
-
-/**
- * Runs a plugin's actual logic against real/mock data (003-validation-runtime,
- * D-03). Deliberately a third, independent function from `GeneratorFn`:
- * `GeneratorFn` takes config and produces file/infra text for a compile
- * target; `ExecutorFn` takes data and produces data, for interactive
- * validation before anything is compiled. Optional — a plugin without
- * `execute` simply cannot be validated at runtime yet (still fully usable for
- * compilation via its generators).
- */
-/**
- * What `ExecutorFn` returns (004-core-nodes-catalog, D-03). The engine decides
- * which shape to expect by checking the plugin's own `manifest.outputs`, not
- * by inspecting the returned value: absent `outputs` means the plain `unknown`
- * form; present `outputs` means the `{ value, activeOutput }` form, where
- * `activeOutput: null` means no output was activated — propagation stops here.
- */
-export type ExecutorResult = unknown | { value: unknown; activeOutput: string | null };
-
-export type ExecutorFn = (
-  params: Record<string, unknown>,
-  input: unknown,
-  context: PluginExecutionContext,
-) => ExecutorResult | Promise<ExecutorResult>;
-
-/**
- * A discovered plugin, pairing its manifest with one generator per platform it
- * declares support for, plus an optional local executor (D-03).
- */
-export interface DiscoveredPlugin {
-  manifest: PluginManifest;
-  generators: Record<string, GeneratorFn>;
-  execute?: ExecutorFn;
-  sourcePath: string;
-}
-
-/** What a plugin module must export to be discoverable (RF-01, RF-02, RF-03). */
 export interface PluginModule {
   manifest: PluginManifest;
-  generators: Record<string, GeneratorFn>;
-  execute?: ExecutorFn;
+  runtimeModule: URL | string;
+  deployment?: PluginDeployment;
+}
+
+/** A plugin loaded by the registry, with its runtime definition imported. */
+export interface DiscoveredPlugin extends PluginModule {
+  definition: NodeDefinition;
+  sourcePath: string;
 }

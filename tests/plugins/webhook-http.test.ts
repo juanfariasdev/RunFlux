@@ -1,35 +1,61 @@
 import { createServer as createViteServer } from 'vite';
 import request from 'supertest';
 import { resolve } from 'node:path';
-import { expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
+import { WebhookTestHub } from '@runflux/plugin-system/webhook-test-hub';
 import { runfluxValidationPlugin } from '../../apps/workflow-editor/vite-plugin-validation-runtime';
 import { createServer } from '../../apps/project-server/src/server';
-import { execute, clearPendingWebhooks } from '../../plugins/trigger-webhook/index';
-import { context } from './helpers';
 
-it.each(['editor', 'server'])('%s delivers test webhooks only to the requested endpoint', async (target) => {
-  vi.stubEnv('RUNFLUX_WAIT_WEBHOOK_TEST', '1');
-  const vite = target === 'editor' ? await createViteServer({
-    configFile: false, server: { middlewareMode: true },
-    plugins: [runfluxValidationPlugin([])],
-  }) : undefined;
+afterEach(() => {
+  WebhookTestHub.shared().cancelAll();
+  vi.restoreAllMocks();
+});
+
+it.each(['editor', 'server'])('%s delivers test webhooks only to the trigger waiting on that path', async (target) => {
+  const vite = target === 'editor' ? await createViteServer({ configFile: false, server: { middlewareMode: true }, plugins: [runfluxValidationPlugin([])] }) : undefined;
   const app = vite?.middlewares ?? createServer();
   if (target === 'server') vi.spyOn(process, 'cwd').mockReturnValue(resolve('apps/project-server'));
-  const pending = Promise.resolve(execute!({ path: '/orders' }, undefined, context));
-  const observed = pending.catch((error) => error);
+  const waiting = WebhookTestHub.shared().waitFor('/orders', new AbortController().signal);
   try {
     const unrelated = await request(app).post('/api/webhooks/test/unrelated').send({ wrong: true });
-    expect(unrelated.status).toBe(200);
-    expect(unrelated.body.captured).toBe(false);
+    expect(unrelated.body).toMatchObject({ success: true, captured: false });
     const matching = await request(app).post('/api/webhooks/test/orders?source=test').send({ id: 42 });
-    expect(matching.status).toBe(200);
-    expect(matching.body.captured).toBe(true);
-    await expect(pending).resolves.toMatchObject({ value: { id: 42, _query: { source: 'test' } }, activeOutput: 'main' });
+    expect(matching.body).toMatchObject({ success: true, captured: true });
+    await expect(waiting).resolves.toMatchObject({ body: { id: 42 }, query: { source: 'test' } });
   } finally {
-    clearPendingWebhooks();
-    await observed;
     await vite?.close();
-    vi.unstubAllEnvs();
-    vi.restoreAllMocks();
+  }
+});
+
+it('lets the editor cancel every waiting test webhook', async () => {
+  const vite = await createViteServer({ configFile: false, server: { middlewareMode: true }, plugins: [runfluxValidationPlugin([])] });
+  const waiting = WebhookTestHub.shared().waitFor('/orders', new AbortController().signal);
+  const observed = waiting.catch((error: Error) => error.message);
+  try {
+    expect((await request(vite.middlewares).post('/runflux-webhook-cancel')).body).toEqual({ success: true, message: 'Listening cancelled' });
+    expect(await observed).toBe('Webhook listener cancelled');
+  } finally {
+    await vite.close();
+  }
+});
+
+it('runs a whole workflow whose webhook waits for the test request (editor)', async () => {
+  const vite = await createViteServer({ configFile: false, server: { middlewareMode: true }, plugins: [runfluxValidationPlugin([resolve('plugins')])] });
+  const definition = {
+    id: 'wf', name: 'Waiting webhook', connections: [{ sourceNodeId: 'hook', sourceOutput: 'main', targetNodeId: 'total', targetInput: 'main' }],
+    nodes: [
+      { id: 'hook', pluginId: 'trigger-webhook', pluginVersion: '1.0.0', parameters: { path: '/checkout' }, position: { x: 0, y: 0 } },
+      { id: 'total', pluginId: 'set', pluginVersion: '1.0.0', parameters: { fields: [{ name: 'total', value: '{{ $json.amount * 2 }}', type: 'number' }] }, position: { x: 0, y: 0 } },
+    ],
+  };
+  try {
+    const run = request(vite.middlewares).post('/runflux-validate').send({ workflow: definition, mode: 'sandbox' }).then((response) => response.body);
+    await vi.waitFor(() => expect(WebhookTestHub.shared().pending).toBe(1), { timeout: 5000 });
+    await request(vite.middlewares).post('/runflux-webhook-test/checkout').send({ amount: 21 });
+    const result = await run;
+    expect(result.status).toBe('success');
+    expect(result.nodeResults.find((node: { nodeId: string }) => node.nodeId === 'total')).toMatchObject({ output: { total: 42 } });
+  } finally {
+    await vite.close();
   }
 });

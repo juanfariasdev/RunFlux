@@ -1,35 +1,34 @@
-import { describe, it, expect } from 'vitest';
-import { manifest, execute } from '../index.js';
+import { validateManifest } from '@runflux/plugin-system/manifest-validator';
+import { ParameterReader } from '@runflux/runtime';
+import { executeNode } from '@runflux/runtime/testing';
+import { describe, expect, it } from 'vitest';
+import { deployment, manifest } from '../index';
+import cron from '../runtime';
 
-const testContext = {
-  workflowId: 'wf-test',
-  nodeId: 'node-cron',
-  mode: 'sandbox' as const,
-};
+const clock = { now: () => new Date('2026-01-01T12:00:00.000Z') };
+const reader = (values: Record<string, unknown>) => new ParameterReader(values, 'trigger-cron');
 
-describe('trigger-cron plugin', () => {
-  it('defines valid manifest metadata', () => {
-    expect(manifest.id).toBe('trigger-cron');
-    expect(manifest.category).toBe('trigger');
-    expect(manifest.supportedPlatforms).toContain('local');
-    expect(manifest.supportedPlatforms).toContain('aws');
-    expect(manifest.parameters.some((p) => p.name === 'expression')).toBe(true);
-    expect(manifest.parameters.some((p) => p.name === 'timezone')).toBe(true);
+describe('trigger-cron', () => {
+  it('declares a valid trigger manifest with a main output', () => {
+    expect(validateManifest(manifest).success).toBe(true);
+    expect(manifest.outputs).toEqual(['main']);
   });
 
-  it('executes in sandbox and returns structured cron payload', () => {
-    expect(execute).toBeDefined();
-    const result = execute!({ expression: '0 0 * * *', timezone: 'America/New_York' }, { previous: 123 }, testContext);
-    expect(result).toHaveProperty('value.triggeredAt');
-    expect(result).toHaveProperty('value.cronExpression', '0 0 * * *');
-    expect(result).toHaveProperty('value.timezone', 'America/New_York');
-    expect(result).toHaveProperty('value.previous', 123);
+  it('stamps the scheduled payload with the firing time and its schedule', async () => {
+    const record = await executeNode(cron, { parameters: { expression: '0 * * * *', timezone: 'America/Sao_Paulo' }, input: { job: 'sync' }, services: { clock } });
+    expect(record).toMatchObject({ activeOutput: 'main', output: { job: 'sync', triggeredAt: '2026-01-01T12:00:00.000Z', cronExpression: '0 * * * *', timezone: 'America/Sao_Paulo' } });
   });
 
-  it('applies fallback defaults when params are omitted', () => {
-    expect(execute).toBeDefined();
-    const result = execute!({}, {}, testContext);
-    expect(result).toHaveProperty('value.cronExpression', '*/15 * * * *');
-    expect(result).toHaveProperty('value.timezone', 'UTC');
+  it('defaults to every fifteen minutes in UTC', async () => {
+    expect((await executeNode(cron, { services: { clock } })).output).toEqual({ triggeredAt: '2026-01-01T12:00:00.000Z', cronExpression: '*/15 * * * *', timezone: 'UTC' });
+  });
+
+  it('declares its schedule for exported backends', () => {
+    expect(deployment?.triggers?.(reader({ expression: '0 9 * * 1-5', timezone: 'UTC' }))).toEqual([{ kind: 'schedule', expression: '0 9 * * 1-5', timezone: 'UTC' }]);
+    expect(deployment?.triggers?.(reader({}))).toEqual([{ kind: 'schedule', expression: '*/15 * * * *', timezone: 'UTC' }]);
+  });
+
+  it('rejects an expression that is not text', async () => {
+    expect((await executeNode(cron, { parameters: { expression: 15 }, pluginId: 'trigger-cron' })).error).toBe('trigger-cron: parameter "expression" must be text');
   });
 });
