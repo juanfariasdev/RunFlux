@@ -97,7 +97,7 @@ export class ProjectService {
   constructor(private readonly repo = new ProjectRepository()) {}
 
   async createProject(data: { name: string; definition?: WorkflowDefinition; envVars?: ProjectEnvVar[] }) {
-    const trimmedName = data.name.trim();
+    const trimmedName = typeof data.name === 'string' ? data.name.trim() : '';
     if (!trimmedName) {
       throw new ValidationError('Nome do projeto não pode ser vazio');
     }
@@ -212,7 +212,7 @@ export class ProjectService {
 
     let updatedName = project.name;
     if (data.name !== undefined) {
-      const trimmed = data.name.trim();
+      const trimmed = typeof data.name === 'string' ? data.name.trim() : '';
       if (!trimmed) {
         throw new ValidationError('Nome do projeto não pode ser vazio');
       }

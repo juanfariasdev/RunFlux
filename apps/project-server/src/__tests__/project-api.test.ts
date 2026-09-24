@@ -118,4 +118,14 @@ describe('Project REST API', () => {
     expect(duplicate.status).toBe(409);
     expect(duplicate.body.error.code).toBe('PROJECT_NAME_CONFLICT');
   });
+
+  it('returns 400 when the project name is missing or not a string', async () => {
+    for (const body of [{}, { name: 42 }]) {
+      const res = await request(app).post('/api/projects').send(body);
+      expect(res.status).toBe(400);
+    }
+    const created = await request(app).post('/api/projects').send({ name: 'Renomear' });
+    const renamed = await request(app).put(`/api/projects/${created.body.id}`).send({ name: 42 });
+    expect(renamed.status).toBe(400);
+  });
 });
