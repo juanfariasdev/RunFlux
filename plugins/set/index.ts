@@ -1,5 +1,6 @@
 import type { PluginModule } from '@runflux/plugin-system/types';
 import { FIELDS_ROW_SCHEMA, composeFields, type FieldConfig } from '@runflux/plugin-system/fields-row-schema';
+import { STANDALONE_EXPRESSION_EVALUATOR_CODE } from '@runflux/plugin-system/snippets';
 
 /**
  * Set (004-core-nodes-catalog, RF-11): composes an output object from
@@ -39,27 +40,8 @@ export const generators: PluginModule['generators'] = {
 const FIELDS = ${fields};
 const INCLUDE_OTHER_FIELDS = ${includeOtherFields};
 
-// Standalone {{ }} evaluator copy (004-core-nodes-catalog, D-08, 009-expression-global-context)
-function evaluateExpression(expr, $json, $node, $env) {
-  const safeNode = new Proxy($node || {}, {
-    get(target, prop) {
-      if (typeof prop === 'string') {
-        if (prop in target) return target[prop];
-        return { json: undefined };
-      }
-      return undefined;
-    }
-  });
-  const safeEnv = $env || (typeof process !== 'undefined' ? process.env : {});
-  return new Function('$json', '$node', '$env', 'return (' + expr + ')')($json, safeNode, safeEnv);
-}
-function resolveValue(raw, $json, $node, $env) {
-  if (typeof raw !== 'string') return raw;
-  const trimmed = raw.trim();
-  const whole = /^{{([\\s\\S]*)}}\$/.exec(trimmed);
-  if (whole) return evaluateExpression(whole[1].trim(), $json, $node, $env);
-  return raw.replace(/{{([\\s\\S]*?)}}/g, (_m, expr) => String(evaluateExpression(expr.trim(), $json, $node, $env)));
-}
+${STANDALONE_EXPRESSION_EVALUATOR_CODE}
+
 function normalizeFieldValue(field, value) {
   if (field.type === 'null') return null;
   if (field.type === 'array') {

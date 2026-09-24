@@ -1,12 +1,12 @@
 import type { PluginModule } from '@runflux/plugin-system/types';
 import { CONDITION_ROW_SCHEMA } from '@runflux/plugin-system/condition-row-schema';
+import { matchRule, type ConditionRule } from '@runflux/plugin-system/operators';
+import { STANDALONE_OPERATOR_CODE, STANDALONE_EXPRESSION_EVALUATOR_CODE } from '@runflux/plugin-system/snippets';
 
 /**
  * Filter (004-core-nodes-catalog, RF-03): propagates the input unchanged
  * through its single output when its condition matches; otherwise activates
  * no output, silently halting the branch (RN-02) — same as n8n's Filter node.
- * Declares `outputs: ['main']` (not the legacy absent form) specifically so
- * it can use the `{ value, activeOutput: null }` gate (D-03).
  */
 export const manifest: PluginModule['manifest'] = {
   id: 'filter',
@@ -21,36 +21,6 @@ export const manifest: PluginModule['manifest'] = {
   outputs: ['main'],
 };
 
-interface ConditionRule {
-  leftValue: unknown;
-  operator: 'equals' | 'notEquals' | 'contains' | 'greaterThan' | 'lessThan' | 'isEmpty';
-  rightValue?: unknown;
-}
-
-function compare(left: unknown, operator: ConditionRule['operator'], right: unknown): boolean {
-  switch (operator) {
-    case 'equals':
-      return left === right || String(left) === String(right);
-    case 'notEquals':
-      return !(left === right || String(left) === String(right));
-    case 'contains':
-      return String(left).includes(String(right));
-    case 'greaterThan':
-      return Number(left) > Number(right);
-    case 'lessThan':
-      return Number(left) < Number(right);
-    case 'isEmpty':
-      return left === undefined || left === null || left === '' || (Array.isArray(left) && left.length === 0);
-    default:
-      return false;
-  }
-}
-
-function combine(results: boolean[], combinator: string): boolean {
-  if (results.length === 0) return true;
-  return combinator === 'or' ? results.some(Boolean) : results.every(Boolean);
-}
-
 export const generators: PluginModule['generators'] = {
   aws: (nodeConfig, ctx) => generators.local(nodeConfig, ctx),
   local: (nodeConfig) => {
@@ -64,42 +34,8 @@ export const generators: PluginModule['generators'] = {
 const CONDITIONS = ${conditions};
 const COMBINATOR = ${combinator};
 
-// Standalone {{ }} evaluator copy (004-core-nodes-catalog, D-08, 009-expression-global-context)
-function evaluateExpression(expr, $json, $node, $env) {
-  const safeNode = new Proxy($node || {}, {
-    get(target, prop) {
-      if (typeof prop === 'string') {
-        if (prop in target) return target[prop];
-        return { json: undefined };
-      }
-      return undefined;
-    }
-  });
-  const safeEnv = $env || (typeof process !== 'undefined' ? process.env : {});
-  return new Function('$json', '$node', '$env', 'return (' + expr + ')')($json, safeNode, safeEnv);
-}
-function resolveValue(raw, $json, $node, $env) {
-  if (typeof raw !== 'string') return raw;
-  const trimmed = raw.trim();
-  const whole = /^{{([\\s\\S]*)}}\$/.exec(trimmed);
-  if (whole) return evaluateExpression(whole[1].trim(), $json, $node, $env);
-  return raw.replace(/{{([\\s\\S]*?)}}/g, (_m, expr) => String(evaluateExpression(expr.trim(), $json, $node, $env)));
-}
-function compare(left, operator, right) {
-  switch (operator) {
-    case 'equals': return left === right || String(left) === String(right);
-    case 'notEquals': return !(left === right || String(left) === String(right));
-    case 'contains': return String(left).includes(String(right));
-    case 'greaterThan': return Number(left) > Number(right);
-    case 'lessThan': return Number(left) < Number(right);
-    case 'isEmpty': return left === undefined || left === null || left === '' || (Array.isArray(left) && left.length === 0);
-    default: return false;
-  }
-}
-function combine(results, combinator) {
-  if (results.length === 0) return true;
-  return combinator === 'or' ? results.some(Boolean) : results.every(Boolean);
-}
+${STANDALONE_EXPRESSION_EVALUATOR_CODE}
+${STANDALONE_OPERATOR_CODE}
 
 export function run($json, context) {
   const $node = context?.$node || {};
@@ -119,7 +55,6 @@ export function run($json, context) {
 export const execute: PluginModule['execute'] = (params, input) => {
   const conditions = Array.isArray(params.conditions) ? (params.conditions as ConditionRule[]) : [];
   const combinator = (params.combinator as string | undefined) ?? 'and';
-  const results = conditions.map((c) => compare(c.leftValue, c.operator, c.rightValue));
-  const matched = combine(results, combinator);
+  const matched = matchRule(conditions, combinator);
   return { value: input, activeOutput: matched ? 'main' : null };
 };

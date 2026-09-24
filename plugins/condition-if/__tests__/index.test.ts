@@ -45,6 +45,14 @@ describe('condition-if plugin (004-core-nodes-catalog, RF-01, RN-01)', () => {
     });
   }
 
+  it('strictly separates types: "1" (string) is NOT equal to 1 (number)', async () => {
+    const params = { combinator: 'and', conditions: [{ leftValue: '1', operator: 'equals', rightValue: 1 }] };
+    const result = (await execute!(params, { test: true }, { workflowId: 'wf-1', nodeId: 'n1', mode: 'sandbox' })) as {
+      activeOutput: string | null;
+    };
+    expect(result.activeOutput).toBe('false');
+  });
+
   it('combines multiple conditions with "and"', async () => {
     const params = {
       combinator: 'and',

@@ -20,7 +20,11 @@
     "./discovery/logger": "./src/discovery/logger.ts",
     "./api/list-plugins": "./src/api/list-plugins.ts",
     "./api/resolve-generator": "./src/api/resolve-generator.ts",
-    "./api/resolve-executor": "./src/api/resolve-executor.ts"
+    "./api/resolve-executor": "./src/api/resolve-executor.ts",
+    "./operators": "./src/operators.ts",
+    "./context-helpers": "./src/context-helpers.ts",
+    "./evaluator": "./src/evaluator.ts",
+    "./snippets": "./src/snippets.ts"
   },
   "scripts": {
     "test": "vitest run",

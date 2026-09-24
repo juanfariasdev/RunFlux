@@ -1,18 +1,12 @@
 import type { PluginModule } from '@runflux/plugin-system/types';
 import { RULE_ROW_SCHEMA } from '@runflux/plugin-system/condition-row-schema';
+import { matchRule, type ConditionRule } from '@runflux/plugin-system/operators';
+import { STANDALONE_OPERATOR_CODE, STANDALONE_EXPRESSION_EVALUATOR_CODE } from '@runflux/plugin-system/snippets';
 
 /**
  * Switch (004-core-nodes-catalog, RF-02): evaluates a list of rules in
  * order, routing to the first one that matches (or "fallback" if enabled and
- * none match). Modeled after n8n's Switch node's "rules" mode
- * (packages/nodes-base/nodes/Switch/V3/SwitchV3.node.ts) — the "expression"
- * mode (output count computed by an expression) is out of scope for v1.
- *
- * `PluginManifest.outputs` is authored once, statically, at plugin-definition
- * time (004-core-nodes-catalog, D-03) — it cannot vary per node instance. A
- * fixed set of positional rule slots (RULE_OUTPUTS) plus "fallback" is the v1
- * compromise: a node's Nth configured rule activates RULE_OUTPUTS[N] when it
- * matches (rules beyond RULE_OUTPUTS.length are never reachable).
+ * none match). Modeled after n8n's Switch node's "rules" mode.
  */
 const RULE_OUTPUTS = ['output1', 'output2', 'output3', 'output4', 'output5'];
 
@@ -29,45 +23,9 @@ export const manifest: PluginModule['manifest'] = {
   outputs: [...RULE_OUTPUTS, 'fallback'],
 };
 
-interface ConditionRule {
-  leftValue: unknown;
-  operator: 'equals' | 'notEquals' | 'contains' | 'greaterThan' | 'lessThan' | 'isEmpty';
-  rightValue?: unknown;
-}
-
-interface SwitchRule {
+export interface SwitchRule {
   combinator?: string;
   conditions?: ConditionRule[];
-}
-
-function compare(left: unknown, operator: ConditionRule['operator'], right: unknown): boolean {
-  switch (operator) {
-    case 'equals':
-      return left === right || String(left) === String(right);
-    case 'notEquals':
-      return !(left === right || String(left) === String(right));
-    case 'contains':
-      return String(left).includes(String(right));
-    case 'greaterThan':
-      return Number(left) > Number(right);
-    case 'lessThan':
-      return Number(left) < Number(right);
-    case 'isEmpty':
-      return left === undefined || left === null || left === '' || (Array.isArray(left) && left.length === 0);
-    default:
-      return false;
-  }
-}
-
-function combine(results: boolean[], combinator: string): boolean {
-  if (results.length === 0) return true;
-  return combinator === 'or' ? results.some(Boolean) : results.every(Boolean);
-}
-
-function matchRule(rule: SwitchRule): boolean {
-  const conditions = Array.isArray(rule.conditions) ? rule.conditions : [];
-  const results = conditions.map((c) => compare(c.leftValue, c.operator, c.rightValue));
-  return combine(results, rule.combinator ?? 'and');
 }
 
 export const generators: PluginModule['generators'] = {
@@ -85,43 +43,10 @@ const RULES = ${rules};
 const FALLBACK_ENABLED = ${fallbackEnabled};
 const RULE_OUTPUTS = ${ruleOutputs};
 
-// Standalone {{ }} evaluator copy (004-core-nodes-catalog, D-08, 009-expression-global-context)
-function evaluateExpression(expr, $json, $node, $env) {
-  const safeNode = new Proxy($node || {}, {
-    get(target, prop) {
-      if (typeof prop === 'string') {
-        if (prop in target) return target[prop];
-        return { json: undefined };
-      }
-      return undefined;
-    }
-  });
-  const safeEnv = $env || (typeof process !== 'undefined' ? process.env : {});
-  return new Function('$json', '$node', '$env', 'return (' + expr + ')')($json, safeNode, safeEnv);
-}
-function resolveValue(raw, $json, $node, $env) {
-  if (typeof raw !== 'string') return raw;
-  const trimmed = raw.trim();
-  const whole = /^{{([\\s\\S]*)}}\$/.exec(trimmed);
-  if (whole) return evaluateExpression(whole[1].trim(), $json, $node, $env);
-  return raw.replace(/{{([\\s\\S]*?)}}/g, (_m, expr) => String(evaluateExpression(expr.trim(), $json, $node, $env)));
-}
-function compare(left, operator, right) {
-  switch (operator) {
-    case 'equals': return left === right || String(left) === String(right);
-    case 'notEquals': return !(left === right || String(left) === String(right));
-    case 'contains': return String(left).includes(String(right));
-    case 'greaterThan': return Number(left) > Number(right);
-    case 'lessThan': return Number(left) < Number(right);
-    case 'isEmpty': return left === undefined || left === null || left === '' || (Array.isArray(left) && left.length === 0);
-    default: return false;
-  }
-}
-function combine(results, combinator) {
-  if (results.length === 0) return true;
-  return combinator === 'or' ? results.some(Boolean) : results.every(Boolean);
-}
-function matchRule(rule, $json, $node, $env) {
+${STANDALONE_EXPRESSION_EVALUATOR_CODE}
+${STANDALONE_OPERATOR_CODE}
+
+function matchSwitchRule(rule, $json, $node, $env) {
   const conditions = Array.isArray(rule && rule.conditions) ? rule.conditions : [];
   const results = conditions.map((c) => compare(resolveValue(c.leftValue, $json, $node, $env), c.operator, resolveValue(c.rightValue, $json, $node, $env)));
   return combine(results, (rule && rule.combinator) || 'and');
@@ -131,7 +56,7 @@ export function run($json, context) {
   const $node = context?.$node || {};
   const $env = context?.$env || (typeof process !== 'undefined' ? process.env : {});
   for (let i = 0; i < RULES.length && i < RULE_OUTPUTS.length; i++) {
-    if (matchRule(RULES[i], $json, $node, $env)) {
+    if (matchSwitchRule(RULES[i], $json, $node, $env)) {
       return { value: $json, activeOutput: RULE_OUTPUTS[i] };
     }
   }
@@ -151,7 +76,8 @@ export const execute: PluginModule['execute'] = (params, input) => {
   const fallbackEnabled = Boolean(params.fallbackEnabled);
 
   for (let i = 0; i < rules.length && i < RULE_OUTPUTS.length; i++) {
-    if (matchRule(rules[i])) {
+    const rule = rules[i];
+    if (matchRule(rule?.conditions, rule?.combinator ?? 'and')) {
       return { value: input, activeOutput: RULE_OUTPUTS[i] };
     }
   }

@@ -1,4 +1,5 @@
 import type { PluginModule } from '@runflux/plugin-system/types';
+import { STANDALONE_EXPRESSION_EVALUATOR_CODE } from '@runflux/plugin-system/snippets';
 
 /**
  * HTTP Request (Output) (004-core-nodes-catalog, RF-04): fires a real HTTP
@@ -78,35 +79,7 @@ const URL_TEMPLATE = ${url};
 const HEADERS_TEMPLATE = ${headers};
 const BODY_TEMPLATE = ${body};
 
-// Standalone {{ }} evaluator copy (004-core-nodes-catalog, D-08, 009-expression-global-context)
-function evaluateExpression(expr, $json, $node, $env) {
-  const safeNode = new Proxy($node || {}, {
-    get(target, prop) {
-      if (typeof prop === 'string') {
-        if (prop in target) return target[prop];
-        return { json: undefined };
-      }
-      return undefined;
-    }
-  });
-  const safeEnv = $env || (typeof process !== 'undefined' ? process.env : {});
-  return new Function('$json', '$node', '$env', 'return (' + expr + ')')($json, safeNode, safeEnv);
-}
-function resolveValue(raw, $json, $node, $env) {
-  if (typeof raw !== 'string') {
-    if (Array.isArray(raw)) return raw.map((v) => resolveValue(v, $json, $node, $env));
-    if (raw !== null && typeof raw === 'object') {
-      const out = {};
-      for (const [k, v] of Object.entries(raw)) out[k] = resolveValue(v, $json, $node, $env);
-      return out;
-    }
-    return raw;
-  }
-  const trimmed = raw.trim();
-  const whole = /^{{([\\s\\S]*)}}\$/.exec(trimmed);
-  if (whole) return evaluateExpression(whole[1].trim(), $json, $node, $env);
-  return raw.replace(/{{([\\s\\S]*?)}}/g, (_m, expr) => String(evaluateExpression(expr.trim(), $json, $node, $env)));
-}
+${STANDALONE_EXPRESSION_EVALUATOR_CODE}
 
 export async function run($json, context) {
   const $node = context?.$node || {};

@@ -30,3 +30,24 @@ export { listPlugins } from './api/list-plugins';
 export { resolveGenerator, checkPluginReference } from './api/resolve-generator';
 export type { PluginReferenceStatus } from './api/resolve-generator';
 export { resolveExecutor } from './api/resolve-executor';
+
+export {
+  evaluateOperator,
+  combineConditions,
+  matchRule,
+  compare,
+  combine,
+  deepEqual,
+  isEmptyValue,
+} from './operators';
+export type { ConditionOperator, Combinator, ConditionRule, CompareOptions } from './operators';
+
+export { getSafeEnv, getSafeNode, createSafeNodeProxy } from './context-helpers';
+
+export { evaluateExpression, resolveValue, resolveTemplateObject } from './evaluator';
+export type { EvaluatorContext } from './evaluator';
+
+export {
+  STANDALONE_OPERATOR_CODE,
+  STANDALONE_EXPRESSION_EVALUATOR_CODE,
+} from './snippets';

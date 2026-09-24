@@ -1,4 +1,5 @@
 import type { PluginModule } from '@runflux/plugin-system/types';
+import { getSafeNode, getSafeEnv } from '@runflux/plugin-system/context-helpers';
 
 /**
  * Code Node (010-code-node-plugin): executes arbitrary user-authored
@@ -52,8 +53,8 @@ export async function run($json: any, context?: any) {
 export const execute: PluginModule['execute'] = async (params, input, context) => {
   const rawCode = (params.code as string | undefined)?.trim() || 'return $json;';
   try {
-    const $node = (context as any)?.$node ?? {};
-    const $env = (context as any)?.$env ?? (typeof process !== 'undefined' ? process.env : {});
+    const $node = getSafeNode(context);
+    const $env = getSafeEnv(context);
     // eslint-disable-next-line @typescript-eslint/no-empty-function
     const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
     const fn = new AsyncFunction('$json', '$node', '$env', rawCode);
