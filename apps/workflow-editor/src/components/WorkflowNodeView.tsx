@@ -1,10 +1,16 @@
-import { Handle, NodeResizer, Position, type NodeProps } from '@xyflow/react';
-import type { CSSProperties } from 'react';
+import { Handle, NodeResizer, Position, useUpdateNodeInternals, type NodeProps } from '@xyflow/react';
+import { useEffect, type CSSProperties } from 'react';
 import type { FlowNode } from '../adapters/react-flow-adapter';
 
 const CATEGORY_LABELS: Record<string, string> = { trigger: 'Trigger', action: 'Action', output: 'Output', 'control-flow': 'Control', subworkflow: 'Subflow' };
 
-export function WorkflowNodeView({ data, selected, dragging }: NodeProps<FlowNode>) {
+export function WorkflowNodeView({ id, data, selected, dragging }: NodeProps<FlowNode>) {
+  const updateNodeInternals = useUpdateNodeInternals();
+  const isVertical = data?.layout === 'vertical';
+  useEffect(() => {
+    updateNodeInternals(id);
+  }, [id, isVertical, updateNodeInternals]);
+
   const status = data?.referenceStatus?.status ?? 'missing';
   const appearance = data?.appearance ?? {};
   const legacyLabel = data?.parameters?.label;
@@ -28,7 +34,17 @@ export function WorkflowNodeView({ data, selected, dragging }: NodeProps<FlowNod
         data-status={status}
         style={style}
       >
-        {category !== 'trigger' && <Handle id="main" type="target" position={Position.Left} className="!h-3 !w-3 !border-[3px] !border-white !bg-[var(--node-accent)] !shadow-md transition hover:scale-125" />}
+        {category !== 'trigger' && (
+          <Handle
+            id="main"
+            type="target"
+            position={isVertical ? Position.Top : Position.Left}
+            style={HANDLE_ANCHOR_STYLE}
+            className="nodrag nopan"
+          >
+            <ConnectionDot />
+          </Handle>
+        )}
         {!isDiamond && <span className="absolute bottom-3 left-[-1px] top-3 w-1 rounded-r bg-[var(--node-accent)]" />}
 
         <div className={`flex h-full min-h-20 items-center ${isDiamond ? 'justify-center px-[25%] py-4 text-center' : 'gap-3 px-4 py-3'}`}>
@@ -43,7 +59,7 @@ export function WorkflowNodeView({ data, selected, dragging }: NodeProps<FlowNod
 
         {status === 'missing' && <div className="absolute -bottom-2 right-2 rounded-md bg-red-100 px-1.5 py-0.5 text-[8px] font-bold text-red-700 shadow" role="alert">Plugin not found</div>}
         {status === 'outdated' && <div className="absolute -bottom-2 right-2 rounded-md bg-amber-100 px-1.5 py-0.5 text-[8px] font-bold text-amber-800 shadow">Update available · v{data.referenceStatus.status === 'outdated' ? data.referenceStatus.installedVersion : ''}</div>}
-        {category !== 'output' && <OutputHandles outputs={data?.manifest?.outputs} />}
+        <OutputHandles outputs={data?.manifest?.outputs} isVertical={isVertical} />
         {data?.isTesting && (
           <div
             className="absolute -top-2.5 right-2 grid h-5 w-5 place-items-center rounded-full bg-indigo-600 text-white shadow-md ring-2 ring-indigo-200"
@@ -90,7 +106,25 @@ export function SubflowNodeView({ data, selected, dragging }: NodeProps<FlowNode
 }
 
 const OUTPUT_HANDLE_CLASSNAME =
-  '!h-3 !w-3 !border-[3px] !border-white !bg-[var(--node-accent)] !shadow-md transition hover:scale-125';
+  'nodrag nopan';
+
+const HANDLE_ANCHOR_STYLE: CSSProperties = {
+  width: 0,
+  height: 0,
+  minWidth: 0,
+  minHeight: 0,
+  border: 'none',
+  background: 'transparent',
+  boxShadow: 'none',
+  zIndex: 1,
+};
+
+const HANDLE_DOT_CLASSNAME =
+  'pointer-events-auto absolute left-0 top-0 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-white bg-[var(--node-accent)] shadow-md transition hover:scale-125';
+
+function ConnectionDot() {
+  return <span className={HANDLE_DOT_CLASSNAME} data-testid="connection-dot" aria-hidden="true" />;
+}
 
 /**
  * Renders one source handle per entry in `manifest.outputs` (004-core-nodes-catalog,
@@ -98,9 +132,14 @@ const OUTPUT_HANDLE_CLASSNAME =
  * `outputs` keeps the single unlabeled `id="main"` handle every plugin had
  * before this feature (backward compatibility).
  */
-function OutputHandles({ outputs }: { outputs?: string[] }) {
+function OutputHandles({ outputs, isVertical }: { outputs?: string[]; isVertical: boolean }) {
+  const position = isVertical ? Position.Bottom : Position.Right;
   if (!outputs || outputs.length === 0) {
-    return <Handle id="main" type="source" position={Position.Right} className={OUTPUT_HANDLE_CLASSNAME} data-testid="output-handle" />;
+    return (
+      <Handle id="main" type="source" position={position} style={HANDLE_ANCHOR_STYLE} className={OUTPUT_HANDLE_CLASSNAME} data-testid="output-handle">
+        <ConnectionDot />
+      </Handle>
+    );
   }
 
   return (
@@ -110,13 +149,17 @@ function OutputHandles({ outputs }: { outputs?: string[] }) {
           key={outputId}
           id={outputId}
           type="source"
-          position={Position.Right}
-          style={{ top: `${((index + 1) / (outputs.length + 1)) * 100}%` }}
+          position={position}
+          style={{
+            ...HANDLE_ANCHOR_STYLE,
+            ...(isVertical ? { left: `${((index + 1) / (outputs.length + 1)) * 100}%` } : { top: `${((index + 1) / (outputs.length + 1)) * 100}%` }),
+          }}
           className={OUTPUT_HANDLE_CLASSNAME}
           data-testid="output-handle"
         >
+          <ConnectionDot />
           <span
-            className="pointer-events-none absolute right-[14px] top-1/2 -translate-y-1/2 whitespace-nowrap rounded bg-slate-800/90 px-1 py-0.5 text-[7px] font-bold text-white"
+            className={`pointer-events-none absolute whitespace-nowrap rounded bg-slate-800/90 px-1 py-0.5 text-[7px] font-bold text-white ${isVertical ? 'left-1/2 top-[14px] -translate-x-1/2' : 'right-[14px] top-1/2 -translate-y-1/2'}`}
             data-testid="output-handle-label"
           >
             {outputId}

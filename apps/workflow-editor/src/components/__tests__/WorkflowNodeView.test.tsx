@@ -17,6 +17,7 @@ function makeProps(
   parameters: Record<string, unknown> = {},
   result?: NodeResult,
   isTesting = false,
+  layout: 'horizontal' | 'vertical' | 'grid' = 'horizontal',
 ): NodeProps<FlowNode> {
   return {
     id: 'node-1',
@@ -30,14 +31,15 @@ function makeProps(
       referenceStatus: manifestOrUndefined ? { status: 'ok' as const } : { status: 'missing' as const },
       result,
       isTesting,
+      layout,
     },
   } as NodeProps<FlowNode>;
 }
 
-function renderNode(manifestOrUndefined: PluginManifest | undefined, parameters: Record<string, unknown> = {}, result?: NodeResult, isTesting = false) {
+function renderNode(manifestOrUndefined: PluginManifest | undefined, parameters: Record<string, unknown> = {}, result?: NodeResult, isTesting = false, layout: 'horizontal' | 'vertical' | 'grid' = 'horizontal') {
   return render(
     <ReactFlowProvider>
-      <WorkflowNodeView {...makeProps(manifestOrUndefined, false, parameters, result, isTesting)} />
+      <WorkflowNodeView {...makeProps(manifestOrUndefined, false, parameters, result, isTesting, layout)} />
     </ReactFlowProvider>,
   );
 }
@@ -53,9 +55,9 @@ describe('WorkflowNodeView — handle layout by category', () => {
     expect(container.querySelector('.react-flow__handle-right')).not.toBeNull();
   });
 
-  it('an output node has no source (output) handle, only a target (input) handle', () => {
+  it('an output-category node has a target handle and its default main source handle', () => {
     const { container } = renderNode(manifest('output'));
-    expect(container.querySelector('.react-flow__handle-right')).toBeNull();
+    expect(container.querySelector('.react-flow__handle-right')).not.toBeNull();
     expect(container.querySelector('.react-flow__handle-left')).not.toBeNull();
   });
 
@@ -69,6 +71,21 @@ describe('WorkflowNodeView — handle layout by category', () => {
     const { container } = renderNode(undefined);
     expect(container.querySelector('.react-flow__handle-left')).not.toBeNull();
     expect(container.querySelector('.react-flow__handle-right')).not.toBeNull();
+  });
+
+  it('keeps the main source handle on output-category nodes that have downstream connections', () => {
+    const { container, getByTestId } = renderNode(manifest('output'), {}, undefined, false, 'vertical');
+    expect(container.querySelector('.react-flow__handle-top')).not.toBeNull();
+    expect(getByTestId('output-handle').classList).toContain('react-flow__handle-bottom');
+    expect(getByTestId('output-handle').getAttribute('data-handleid')).toBe('main');
+  });
+
+  it('places vertical layout handles on top and bottom', () => {
+    const { container } = renderNode(manifest('action', ['true', 'false']), {}, undefined, false, 'vertical');
+    expect(container.querySelector('.react-flow__handle-top')).not.toBeNull();
+    expect(container.querySelectorAll('.react-flow__handle-bottom')).toHaveLength(2);
+    expect(container.querySelector('.react-flow__handle-left')).toBeNull();
+    expect(container.querySelector('.react-flow__handle-right')).toBeNull();
   });
 });
 
@@ -84,6 +101,13 @@ describe('WorkflowNodeView — named output handles (004-core-nodes-catalog, RF-
     expect(container.querySelectorAll('.react-flow__handle-right')).toHaveLength(2);
     const labels = getAllByTestId('output-handle-label').map((el) => el.textContent);
     expect(labels).toEqual(['true', 'false']);
+  });
+
+  it('places labels below output handles in vertical layout', () => {
+    const { getAllByTestId } = renderNode(manifest('control-flow', ['true', 'false']), {}, undefined, false, 'vertical');
+    for (const label of getAllByTestId('output-handle-label')) {
+      expect(label.className).toContain('top-[14px]');
+    }
   });
 
   it('gives each named output handle a distinct id matching its manifest.outputs entry', () => {

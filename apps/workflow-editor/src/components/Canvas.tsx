@@ -52,6 +52,7 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge, testingNodeIds }: 
   const [isDragActive, setIsDragActive] = useState(false);
   const [dragPoint, setDragPoint] = useState({ x: 0, y: 0 });
   const [draggedPlugin, setDraggedPlugin] = useState<DraggedPlugin>();
+  const [layout, setLayout] = useState<WorkflowLayout>('horizontal');
   const canvasRef = useRef<HTMLDivElement>(null);
   const dragDepth = useRef(0);
   const { fitView, screenToFlowPosition } = useReactFlow();
@@ -59,8 +60,8 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge, testingNodeIds }: 
 
   const manifestFor = useCallback((pluginId: string) => manifests[pluginId], [manifests]);
   const nodes: FlowNode[] = useMemo(
-    () => workflow.nodes.map((node) => toReactFlowNode(node, manifestFor(node.pluginId), node.appearance?.shape === 'subflow' ? { status: 'ok' } : { status: manifestFor(node.pluginId) ? 'ok' : 'missing' }, nodeResults[node.id], testingNodeIds?.has(node.id) ?? false)),
-    [workflow.nodes, manifestFor, nodeResults, testingNodeIds],
+    () => workflow.nodes.map((node) => toReactFlowNode(node, manifestFor(node.pluginId), node.appearance?.shape === 'subflow' ? { status: 'ok' } : { status: manifestFor(node.pluginId) ? 'ok' : 'missing' }, nodeResults[node.id], testingNodeIds?.has(node.id) ?? false, layout)),
+    [workflow.nodes, manifestFor, nodeResults, testingNodeIds, layout],
   );
   const edges = useMemo(() => workflow.connections.map(toReactFlowEdge), [workflow.connections]);
 
@@ -330,6 +331,7 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge, testingNodeIds }: 
   }, [updateNodeGeometry, workflow.nodes]);
 
   const applyLayout = useCallback((layout: WorkflowLayout) => {
+    setLayout(layout);
     replaceNodes(layoutWorkflowNodes(workflow.nodes, workflow.connections, layout));
     requestAnimationFrame(() => void fitView({ padding: 0.2, duration: 550 }));
   }, [fitView, replaceNodes, workflow.connections, workflow.nodes]);
@@ -449,7 +451,7 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge, testingNodeIds }: 
           <span className="px-1.5 text-[9px] font-extrabold uppercase tracking-wider text-slate-400 max-[1120px]:hidden">Layout</span>
           <button type="button" className="h-7 rounded-lg px-2.5 text-[10px] font-semibold text-slate-600 transition hover:bg-indigo-50 hover:text-indigo-800" onClick={() => applyLayout('horizontal')} title="Arrange from left to right">Horizontal</button>
           <button type="button" className="h-7 rounded-lg px-2.5 text-[10px] font-semibold text-slate-600 transition hover:bg-indigo-50 hover:text-indigo-800" onClick={() => applyLayout('vertical')} title="Arrange from top to bottom">Vertical</button>
-          <button type="button" className="h-7 rounded-lg px-2.5 text-[10px] font-semibold text-slate-600 transition hover:bg-indigo-50 hover:text-indigo-800" onClick={() => applyLayout('grid')} title="Arrange in a grid">Grid</button>
+          <button type="button" className="h-7 rounded-lg px-2.5 text-[10px] font-semibold text-slate-600 transition hover:bg-indigo-50 hover:text-indigo-800" onClick={() => applyLayout('grid')} title="Arrange connected workflows as a grid of groups">Grid</button>
           <span className="mx-1 h-[18px] w-px bg-slate-200" />
           <button type="button" className="h-7 rounded-lg bg-indigo-600 px-2.5 text-[10px] font-semibold text-white transition hover:bg-indigo-700" onClick={addSubflow}>＋ Subflow</button>
         </Panel>

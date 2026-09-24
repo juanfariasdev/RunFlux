@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { Position } from '@xyflow/react';
 import {
   fromReactFlowEdge,
   fromReactFlowNode,
@@ -50,6 +51,13 @@ describe('toReactFlowNode / fromReactFlowNode round-trip', () => {
     const flowNode = toReactFlowNode(node, undefined, { status: 'missing' });
     expect(flowNode.data.manifest).toBeUndefined();
     expect(flowNode.data.referenceStatus).toEqual({ status: 'missing' });
+  });
+
+  it('uses top and bottom node positions for vertical layouts', () => {
+    const flowNode = toReactFlowNode(node, manifest, { status: 'ok' }, undefined, false, 'vertical');
+    expect(flowNode.targetPosition).toBe(Position.Top);
+    expect(flowNode.sourcePosition).toBe(Position.Bottom);
+    expect(flowNode.data.layout).toBe('vertical');
   });
 });
 

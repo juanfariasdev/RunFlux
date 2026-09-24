@@ -1,8 +1,9 @@
-import { MarkerType, type Edge as ReactFlowEdge, type Node as ReactFlowNode } from '@xyflow/react';
+import { MarkerType, Position, type Edge as ReactFlowEdge, type Node as ReactFlowNode } from '@xyflow/react';
 import type { PluginManifest } from '@runflux/plugin-system/types';
 import type { PluginReferenceStatus } from '@runflux/plugin-system/api/check-plugin-reference';
 import type { NodeResult } from '@runflux/validation-runtime';
 import type { WorkflowConnection, WorkflowNode, WorkflowNodeAppearance } from '@runflux/workflow-model/types';
+import type { WorkflowLayout } from '../domain/layout';
 
 /**
  * Data carried on every React Flow node (D-05). Keeps the canonical
@@ -21,6 +22,7 @@ export interface WorkflowNodeData extends Record<string, unknown> {
   appearance: WorkflowNodeAppearance;
   result: NodeResult | undefined;
   isTesting?: boolean;
+  layout: WorkflowLayout;
 }
 
 export type FlowNode = ReactFlowNode<WorkflowNodeData>;
@@ -32,6 +34,7 @@ export function toReactFlowNode(
   referenceStatus: PluginReferenceStatus,
   result?: NodeResult,
   isTesting?: boolean,
+  layout: WorkflowLayout = 'horizontal',
 ): FlowNode {
   const appearance = node.appearance ?? {};
   const isSubflow = appearance.shape === 'subflow';
@@ -43,6 +46,8 @@ export function toReactFlowNode(
     position: node.position,
     type: isSubflow ? 'subflowNode' : 'workflowNode',
     parentId: node.parentId,
+    sourcePosition: layout === 'vertical' ? Position.Bottom : Position.Right,
+    targetPosition: layout === 'vertical' ? Position.Top : Position.Left,
     extent: node.parentId ? 'parent' : undefined,
     expandParent: node.parentId ? true : undefined,
     width,
@@ -64,6 +69,7 @@ export function toReactFlowNode(
       appearance,
       result,
       isTesting: Boolean(isTesting),
+      layout,
     },
   };
 }

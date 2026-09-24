@@ -45,6 +45,14 @@ describe('layoutWorkflowNodes', () => {
     expect(result.find((node) => node.id === 'child')!.position).toEqual({ x: 32, y: 48 });
   });
 
+  it('packs connected workflows into grid cells without separating connected nodes', () => {
+    const input = [node('first', 100, 100), node('first-child', 400, 100), node('second', 100, 700)];
+    const result = layoutWorkflowNodes(input, [connect('first', 'first-child')], 'grid');
+    expect(coordinate(result, 'first-child', 'x') - coordinate(result, 'first', 'x')).toBe(300);
+    expect(coordinate(result, 'second', 'x')).toBeGreaterThan(coordinate(result, 'first-child', 'x') + 220);
+    expect(result.map((item) => item.id)).toEqual(input.map((item) => item.id));
+  });
+
   it.each<WorkflowLayout>(['horizontal', 'vertical', 'grid'])('preserves the node array order in %s mode', (layout) => {
     const input = [node('group', 0, 0), { ...node('child', 32, 48), parentId: 'group' }, nodes[2], nodes[0], nodes[1]];
     const result = layoutWorkflowNodes(input, connections, layout);

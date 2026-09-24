@@ -92,21 +92,69 @@ function alignLayer(layer: LayoutNode[], neighbors: (item: LayoutNode) => Layout
   }
 }
 
-function gridPositions(nodes: WorkflowNode[]) {
-  const ordered = [...nodes].sort((a, b) => a.position.y - b.position.y || a.position.x - b.position.x);
-  const columns = Math.ceil(Math.sqrt(ordered.length));
+function gridPositions(nodes: WorkflowNode[], connections: WorkflowConnection[]) {
+  const nodesById = new Map(nodes.map((node) => [node.id, node]));
+  const adjacent = new Map(nodes.map((node) => [node.id, new Set<string>()]));
+  for (const connection of connections) {
+    if (!adjacent.has(connection.sourceNodeId) || !adjacent.has(connection.targetNodeId)) continue;
+    adjacent.get(connection.sourceNodeId)!.add(connection.targetNodeId);
+    adjacent.get(connection.targetNodeId)!.add(connection.sourceNodeId);
+  }
+
+  const seen = new Set<string>();
+  const groups: WorkflowNode[][] = [];
+  for (const node of nodes) {
+    if (seen.has(node.id)) continue;
+    const group: WorkflowNode[] = [];
+    const pending = [node.id];
+    seen.add(node.id);
+    while (pending.length > 0) {
+      const id = pending.pop()!;
+      const member = nodesById.get(id);
+      if (member) group.push(member);
+      for (const nextId of adjacent.get(id) ?? []) {
+        if (seen.has(nextId)) continue;
+        seen.add(nextId);
+        pending.push(nextId);
+      }
+    }
+    groups.push(group);
+  }
+
+  groups.sort((a, b) =>
+    Math.min(...a.map((node) => node.position.y)) - Math.min(...b.map((node) => node.position.y)) ||
+    Math.min(...a.map((node) => node.position.x)) - Math.min(...b.map((node) => node.position.x)),
+  );
+  const arranged = groups.map((group) => {
+    const members = layoutWorkflowNodes(group, connections, 'horizontal');
+    const minX = Math.min(...members.map((node) => node.position.x));
+    const minY = Math.min(...members.map((node) => node.position.y));
+    const maxX = Math.max(...members.map((node) => node.position.x + dimensions(node).width));
+    const maxY = Math.max(...members.map((node) => node.position.y + dimensions(node).height));
+    return { members, minX, minY, width: maxX - minX, height: maxY - minY };
+  });
+
+  const columns = Math.ceil(Math.sqrt(arranged.length));
+  const rowCount = Math.ceil(arranged.length / columns);
   const widths = Array<number>(columns).fill(0);
-  const heights = Array<number>(Math.ceil(ordered.length / columns)).fill(0);
-  ordered.forEach((node, index) => {
-    const { width, height } = dimensions(node);
-    widths[index % columns] = Math.max(widths[index % columns], width);
-    heights[Math.floor(index / columns)] = Math.max(heights[Math.floor(index / columns)], height);
+  const heights = Array<number>(rowCount).fill(0);
+  arranged.forEach((group, index) => {
+    widths[index % columns] = Math.max(widths[index % columns], group.width);
+    heights[Math.floor(index / columns)] = Math.max(heights[Math.floor(index / columns)], group.height);
   });
   const xOffsets = [Math.min(...nodes.map((node) => node.position.x))];
   const yOffsets = [Math.min(...nodes.map((node) => node.position.y))];
   for (let index = 1; index < widths.length; index += 1) xOffsets[index] = xOffsets[index - 1] + widths[index - 1] + FLOW_GAP;
-  for (let index = 1; index < heights.length; index += 1) yOffsets[index] = yOffsets[index - 1] + heights[index - 1] + SIBLING_GAP;
-  return new Map(ordered.map((node, index) => [node.id, { x: xOffsets[index % columns], y: yOffsets[Math.floor(index / columns)] }]));
+  for (let index = 1; index < heights.length; index += 1) yOffsets[index] = yOffsets[index - 1] + heights[index - 1] + FLOW_GAP;
+
+  return new Map(arranged.flatMap((group, index) => {
+    const x = xOffsets[index % columns];
+    const y = yOffsets[Math.floor(index / columns)];
+    return group.members.map((node) => [node.id, {
+      x: x + node.position.x - group.minX,
+      y: y + node.position.y - group.minY,
+    }] as const);
+  }));
 }
 
 /**
@@ -125,7 +173,7 @@ export function layoutWorkflowNodes(
     const position = positions.get(node.id);
     return position ? { ...node, position } : node;
   });
-  if (layout === 'grid') return applyPositions(gridPositions(topLevel));
+  if (layout === 'grid') return applyPositions(gridPositions(topLevel, connections));
 
   const main = layout === 'horizontal' ? 'x' : 'y';
   const cross = layout === 'horizontal' ? 'y' : 'x';
