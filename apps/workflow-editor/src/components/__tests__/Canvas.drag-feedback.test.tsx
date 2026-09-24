@@ -15,7 +15,7 @@ vi.mock('@xyflow/react', async () => {
 
   return {
     ...actual,
-    ReactFlow: ({ children, onDrop, nodes = [], fitView: shouldFitView, selectionOnDrag, panOnDrag, selectionKeyCode, multiSelectionKeyCode }: React.HTMLAttributes<HTMLDivElement> & { nodes?: unknown[]; fitView?: boolean; selectionOnDrag?: boolean; panOnDrag?: boolean; selectionKeyCode?: string | string[] | null; multiSelectionKeyCode?: string | string[] | null }) => (
+    ReactFlow: ({ children, onDrop, nodes = [], fitView: shouldFitView, selectionOnDrag, panOnDrag, selectionKeyCode, multiSelectionKeyCode, onSelectionContextMenu }: React.HTMLAttributes<HTMLDivElement> & { nodes?: Array<{ id: string }>; fitView?: boolean; selectionOnDrag?: boolean; panOnDrag?: boolean; selectionKeyCode?: string | string[] | null; multiSelectionKeyCode?: string | string[] | null; onSelectionContextMenu?: (event: React.MouseEvent, nodes: Array<{ id: string }>) => void }) => (
       <div
         data-testid="react-flow-pane"
         data-node-count={nodes.length}
@@ -29,6 +29,10 @@ vi.mock('@xyflow/react', async () => {
           event.stopPropagation();
         }}
       >
+        <div
+          data-testid="react-flow-selection-overlay"
+          onContextMenu={(event) => onSelectionContextMenu?.(event, nodes)}
+        />
         {children}
       </div>
     ),
@@ -83,6 +87,28 @@ describe('Canvas external drag feedback', () => {
     const pane = screen.getByTestId('react-flow-pane');
     expect(pane).toHaveAttribute('data-selection-key', 'Meta,Control');
     expect(pane).toHaveAttribute('data-multi-selection-key', 'Meta,Control');
+  });
+
+  it('opens the context menu from React Flow multi-selection overlay', () => {
+    useWorkflowStore.setState({
+      workflow: {
+        id: 'wf-context-selection',
+        name: 'Context selection',
+        nodes: [
+          { id: 'a', pluginId: 'trigger-manual-example', pluginVersion: '1.0.0', parameters: {}, position: { x: 100, y: 100 } },
+          { id: 'b', pluginId: 'trigger-manual-example', pluginVersion: '1.0.0', parameters: {}, position: { x: 400, y: 100 } },
+        ],
+        connections: [],
+      },
+      selectedNodeId: undefined,
+    });
+    render(<Canvas catalog={catalog} onSelectNode={vi.fn()} />);
+
+    fireEvent.contextMenu(screen.getByTestId('react-flow-selection-overlay'), { clientX: 300, clientY: 180 });
+
+    expect(screen.getByRole('menu', { name: /menu de contexto/i })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /Copiar 2 itens/i })).toBeEnabled();
+    expect(screen.getByRole('menuitem', { name: /Excluir 2 itens/i })).toBeEnabled();
   });
 
   it('visually marks the canvas as an active drop target while a palette item is over it', () => {

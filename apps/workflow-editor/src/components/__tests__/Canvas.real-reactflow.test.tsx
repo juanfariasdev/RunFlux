@@ -37,6 +37,85 @@ const catalogWithHttpOutput: PluginCatalogAdapter = {
 };
 
 describe('Canvas with REAL React Flow', () => {
+  it('opens a context menu on right click and acts on the clicked node', async () => {
+    useWorkflowStore.setState({
+      workflow: {
+        id: 'wf-context-menu',
+        name: 'Context menu',
+        nodes: [
+          { id: 'a', pluginId: 'trigger-manual-example', pluginVersion: '1.0.0', parameters: {}, position: { x: 100, y: 100 } },
+          { id: 'b', pluginId: 'trigger-manual-example', pluginVersion: '1.0.0', parameters: {}, position: { x: 400, y: 100 } },
+        ],
+        connections: [],
+      },
+      selectedNodeId: undefined,
+      nodeResults: {},
+      historyPast: [],
+      historyFuture: [],
+      historyTransactionBase: undefined,
+    });
+
+    const { container } = render(
+      <div style={{ width: 1000, height: 800 }}>
+        <ReactFlowProvider>
+          <Canvas catalog={catalog} onSelectNode={() => {}} />
+        </ReactFlowProvider>
+      </div>
+    );
+
+    const nodeB = await waitFor(() => container.querySelector('.react-flow__node[data-id="b"]') as HTMLElement);
+    fireEvent.contextMenu(nodeB, { clientX: 500, clientY: 200 });
+
+    const menu = await screen.findByRole('menu', { name: /menu de contexto/i });
+    expect(menu).toBeInTheDocument();
+    expect(nodeB).toHaveClass('selected');
+    expect(screen.getByRole('menuitem', { name: /copiar/i })).toBeEnabled();
+    expect(screen.getByRole('menuitem', { name: /colar/i })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('menuitem', { name: /^Excluir/i }));
+    await waitFor(() => expect(useWorkflowStore.getState().workflow.nodes.map((node) => node.id)).toEqual(['a']));
+    expect(screen.queryByRole('menu', { name: /menu de contexto/i })).not.toBeInTheDocument();
+  });
+
+  it('keeps a multi-selection when right-clicking one of its nodes', async () => {
+    useWorkflowStore.setState({
+      workflow: {
+        id: 'wf-context-multi',
+        name: 'Context multi',
+        nodes: [
+          { id: 'a', pluginId: 'trigger-manual-example', pluginVersion: '1.0.0', parameters: {}, position: { x: 100, y: 100 } },
+          { id: 'b', pluginId: 'trigger-manual-example', pluginVersion: '1.0.0', parameters: {}, position: { x: 400, y: 100 } },
+        ],
+        connections: [],
+      },
+      selectedNodeId: undefined,
+      nodeResults: {},
+      historyPast: [],
+      historyFuture: [],
+      historyTransactionBase: undefined,
+    });
+
+    const { container } = render(
+      <div style={{ width: 1000, height: 800 }}>
+        <ReactFlowProvider>
+          <Canvas catalog={catalog} onSelectNode={() => {}} />
+        </ReactFlowProvider>
+      </div>
+    );
+
+    const nodeA = await waitFor(() => container.querySelector('.react-flow__node[data-id="a"]') as HTMLElement);
+    const nodeB = container.querySelector('.react-flow__node[data-id="b"]') as HTMLElement;
+    fireEvent.click(nodeA);
+    fireEvent.keyDown(window, { key: 'Control', code: 'ControlLeft', ctrlKey: true });
+    fireEvent.click(nodeB, { ctrlKey: true });
+    fireEvent.keyUp(window, { key: 'Control', code: 'ControlLeft' });
+    await waitFor(() => expect(screen.getByTestId('multi-selection-count')).toHaveTextContent('2 selecionados'));
+
+    fireEvent.contextMenu(nodeA, { clientX: 300, clientY: 180 });
+    expect(await screen.findByRole('menuitem', { name: /Copiar 2 itens/i })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /Excluir 2 itens/i })).toBeInTheDocument();
+  });
+
   it('multi-selects nodes and copies/pastes their internal connections, then undoes the paste', async () => {
     useWorkflowStore.setState({
       workflow: {

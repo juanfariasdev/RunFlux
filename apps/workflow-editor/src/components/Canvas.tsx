@@ -30,6 +30,7 @@ const PLUGIN_DRAG_TYPE = 'application/runflux-plugin-id';
 const DEFAULT_NODE_WIDTH = 220;
 const DEFAULT_NODE_HEIGHT = 104;
 type DraggedPlugin = Pick<PluginManifest, 'id' | 'name' | 'category' | 'version'>;
+type ContextMenuState = { x: number; y: number } | undefined;
 
 export interface CanvasProps {
   catalog: PluginCatalogAdapter;
@@ -51,6 +52,8 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge, testingNodeIds }: 
   const replaceNodes = useWorkflowStore((state) => state.replaceNodes);
   const undo = useWorkflowStore((state) => state.undo);
   const redo = useWorkflowStore((state) => state.redo);
+  const canUndo = useWorkflowStore((state) => state.historyPast.length > 0);
+  const canRedo = useWorkflowStore((state) => state.historyFuture.length > 0);
   const beginHistoryTransaction = useWorkflowStore((state) => state.beginHistoryTransaction);
   const endHistoryTransaction = useWorkflowStore((state) => state.endHistoryTransaction);
   const [manifests, setManifests] = useState<Record<string, PluginManifest>>({});
@@ -61,7 +64,9 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge, testingNodeIds }: 
   const [layout, setLayout] = useState<WorkflowLayout>('horizontal');
   const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(new Set());
   const [multiSelectMode, setMultiSelectMode] = useState(false);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>();
   const canvasRef = useRef<HTMLDivElement>(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
   const dragDepth = useRef(0);
   const clipboardRef = useRef<{
     nodes: WorkflowNode[];
@@ -81,6 +86,62 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge, testingNodeIds }: 
   );
   const edges = useMemo(() => workflow.connections.map(toReactFlowEdge), [workflow.connections]);
 
+  const cloneNode = useCallback((node: WorkflowNode): WorkflowNode => ({
+    ...node,
+    parameters: structuredClone(node.parameters),
+    position: { ...node.position },
+    ...(node.appearance ? { appearance: { ...node.appearance } } : {}),
+  }), []);
+
+  const copySelection = useCallback(() => {
+    const selected = workflow.nodes.filter((node) => selectedNodeIds.has(node.id));
+    if (selected.length === 0) return false;
+    const ids = new Set(selected.map((node) => node.id));
+    clipboardRef.current = {
+      nodes: selected.map(cloneNode),
+      connections: workflow.connections
+        .filter((connection) => ids.has(connection.sourceNodeId) && ids.has(connection.targetNodeId))
+        .map((connection) => ({ ...connection })),
+      pasteCount: 0,
+    };
+    return true;
+  }, [cloneNode, selectedNodeIds, workflow.connections, workflow.nodes]);
+
+  const pasteClipboard = useCallback(() => {
+    const clipboard = clipboardRef.current;
+    if (!clipboard || clipboard.nodes.length === 0) return false;
+    clipboard.pasteCount += 1;
+    const offset = clipboard.pasteCount * 32;
+    const idMap = new Map(clipboard.nodes.map((node) => [node.id, crypto.randomUUID()]));
+    const pastedNodes = clipboard.nodes.map((node) => {
+      const copiedParent = node.parentId ? idMap.get(node.parentId) : undefined;
+      return {
+        ...cloneNode(node),
+        id: idMap.get(node.id)!,
+        position: copiedParent ? { ...node.position } : { x: node.position.x + offset, y: node.position.y + offset },
+        ...(copiedParent ? { parentId: copiedParent } : node.parentId ? { parentId: node.parentId } : {}),
+      };
+    });
+    const pastedConnections = clipboard.connections.map((connection) => ({
+      ...connection,
+      sourceNodeId: idMap.get(connection.sourceNodeId)!,
+      targetNodeId: idMap.get(connection.targetNodeId)!,
+    }));
+    addSubgraph(pastedNodes, pastedConnections);
+    setSelectedNodeIds(new Set(pastedNodes.map((node) => node.id)));
+    onSelectEdge?.(undefined);
+    onSelectNode(pastedNodes.length === 1 ? pastedNodes[0].id : undefined);
+    return true;
+  }, [addSubgraph, cloneNode, onSelectEdge, onSelectNode]);
+
+  const openContextMenu = useCallback((clientX: number, clientY: number) => {
+    const bounds = canvasRef.current?.getBoundingClientRect();
+    setContextMenu({
+      x: Math.max(8, clientX - (bounds?.left ?? 0)),
+      y: Math.max(8, clientY - (bounds?.top ?? 0)),
+    });
+  }, []);
+
   useEffect(() => {
     setSelectedNodeIds((current) => {
       const existing = new Set(workflow.nodes.map((node) => node.id));
@@ -88,6 +149,21 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge, testingNodeIds }: 
       return next.size === current.size ? current : next;
     });
   }, [workflow.nodes]);
+
+  useEffect(() => {
+    const closeOnPointerDown = (event: PointerEvent) => {
+      if (!contextMenuRef.current?.contains(event.target as globalThis.Node | null)) setContextMenu(undefined);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setContextMenu(undefined);
+    };
+    window.addEventListener('pointerdown', closeOnPointerDown);
+    window.addEventListener('keydown', closeOnEscape);
+    return () => {
+      window.removeEventListener('pointerdown', closeOnPointerDown);
+      window.removeEventListener('keydown', closeOnEscape);
+    };
+  }, []);
 
   // A panel edits one node, so it closes once the selection is not exactly one node.
   useEffect(() => {
@@ -99,13 +175,6 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge, testingNodeIds }: 
       const element = target instanceof Element ? target : null;
       return Boolean(element?.closest('input, textarea, select, [contenteditable="true"]'));
     };
-    const cloneNode = (node: WorkflowNode): WorkflowNode => ({
-      ...node,
-      parameters: structuredClone(node.parameters),
-      position: { ...node.position },
-      ...(node.appearance ? { appearance: { ...node.appearance } } : {}),
-    });
-
     const handleKeyboard = (event: KeyboardEvent) => {
       if (isEditableTarget(event.target)) return;
       const modifier = event.metaKey || event.ctrlKey;
@@ -130,51 +199,26 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge, testingNodeIds }: 
         return;
       }
       if (key === 'c') {
-        const selected = workflow.nodes.filter((node) => selectedNodeIds.has(node.id));
-        if (selected.length === 0) return;
+        if (!copySelection()) return;
         event.preventDefault();
-        const ids = new Set(selected.map((node) => node.id));
-        clipboardRef.current = {
-          nodes: selected.map(cloneNode),
-          connections: workflow.connections
-            .filter((connection) => ids.has(connection.sourceNodeId) && ids.has(connection.targetNodeId))
-            .map((connection) => ({ ...connection })),
-          pasteCount: 0,
-        };
         return;
       }
       if (key === 'v') {
-        const clipboard = clipboardRef.current;
-        if (!clipboard || clipboard.nodes.length === 0) return;
+        if (!pasteClipboard()) return;
         event.preventDefault();
-        clipboard.pasteCount += 1;
-        const offset = clipboard.pasteCount * 32;
-        const idMap = new Map(clipboard.nodes.map((node) => [node.id, crypto.randomUUID()]));
-        const pastedNodes = clipboard.nodes.map((node) => {
-          const copiedParent = node.parentId ? idMap.get(node.parentId) : undefined;
-          return {
-            ...cloneNode(node),
-            id: idMap.get(node.id)!,
-            position: copiedParent ? { ...node.position } : { x: node.position.x + offset, y: node.position.y + offset },
-            ...(copiedParent ? { parentId: copiedParent } : node.parentId ? { parentId: node.parentId } : {}),
-          };
-        });
-        const pastedConnections = clipboard.connections.map((connection) => ({
-          ...connection,
-          sourceNodeId: idMap.get(connection.sourceNodeId)!,
-          targetNodeId: idMap.get(connection.targetNodeId)!,
-        }));
-        addSubgraph(pastedNodes, pastedConnections);
-        const pastedIds = new Set(pastedNodes.map((node) => node.id));
-        setSelectedNodeIds(pastedIds);
+        return;
+      }
+      if (key === 'a') {
+        event.preventDefault();
+        setSelectedNodeIds(new Set(workflow.nodes.map((node) => node.id)));
+        onSelectNode(undefined);
         onSelectEdge?.(undefined);
-        onSelectNode(pastedNodes.length === 1 ? pastedNodes[0].id : undefined);
       }
     };
 
     window.addEventListener('keydown', handleKeyboard);
     return () => window.removeEventListener('keydown', handleKeyboard);
-  }, [addSubgraph, onSelectEdge, onSelectNode, redo, selectedNodeIds, undo, workflow]);
+  }, [copySelection, onSelectEdge, onSelectNode, pasteClipboard, redo, undo, workflow.nodes]);
 
   useEffect(() => {
     let cancelled = false;
@@ -484,6 +528,46 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge, testingNodeIds }: 
     requestAnimationFrame(() => onSelectNode(node.id));
   }, [addNode, onSelectNode, screenToFlowPosition]);
 
+  const deleteSelection = useCallback(() => {
+    if (selectedNodeIds.size === 0) return;
+    removeNodes([...selectedNodeIds]);
+    setSelectedNodeIds(new Set());
+    onSelectNode(undefined);
+    onSelectEdge?.(undefined);
+  }, [onSelectEdge, onSelectNode, removeNodes, selectedNodeIds]);
+
+  const selectAllNodes = useCallback(() => {
+    setSelectedNodeIds(new Set(workflow.nodes.map((node) => node.id)));
+    onSelectNode(undefined);
+    onSelectEdge?.(undefined);
+  }, [onSelectEdge, onSelectNode, workflow.nodes]);
+
+  const onNodeContextMenu = useCallback((event: React.MouseEvent, node: FlowNode) => {
+    event.preventDefault();
+    if (!selectedNodeIds.has(node.id)) {
+      setSelectedNodeIds(new Set([node.id]));
+      onSelectNode(node.id);
+    } else if (selectedNodeIds.size !== 1) {
+      onSelectNode(undefined);
+    }
+    onSelectEdge?.(undefined);
+    openContextMenu(event.clientX, event.clientY);
+  }, [onSelectEdge, onSelectNode, openContextMenu, selectedNodeIds]);
+
+  const onPaneContextMenu = useCallback((event: MouseEvent | React.MouseEvent) => {
+    event.preventDefault();
+    onSelectEdge?.(undefined);
+    openContextMenu(event.clientX, event.clientY);
+  }, [onSelectEdge, openContextMenu]);
+
+  const onSelectionContextMenu = useCallback((event: React.MouseEvent, selectedNodes: FlowNode[]) => {
+    event.preventDefault();
+    setSelectedNodeIds(new Set(selectedNodes.map((node) => node.id)));
+    onSelectNode(undefined);
+    onSelectEdge?.(undefined);
+    openContextMenu(event.clientX, event.clientY);
+  }, [onSelectEdge, onSelectNode, openContextMenu]);
+
   return (
     <main
       ref={canvasRef}
@@ -555,8 +639,11 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge, testingNodeIds }: 
         onNodeDragStop={onNodeDragStop}
         onConnect={onConnect}
         onNodeClick={(_event, node) => { onSelectEdge?.(undefined); onSelectNode(node.id); }}
+        onNodeContextMenu={onNodeContextMenu}
+        onSelectionContextMenu={onSelectionContextMenu}
         onEdgeClick={(_event, edge) => { onSelectNode(undefined); onSelectEdge?.(edge.id); }}
         onPaneClick={() => { setSelectedNodeIds(new Set()); onSelectNode(undefined); onSelectEdge?.(undefined); }}
+        onPaneContextMenu={onPaneContextMenu}
         connectionLineType={ConnectionLineType.SmoothStep}
         connectionLineStyle={{ stroke: '#4f46e5', strokeWidth: 2 }}
         defaultEdgeOptions={{ type: 'smoothstep' }}
@@ -609,7 +696,89 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge, testingNodeIds }: 
           <button type="button" className="h-7 rounded-lg bg-indigo-600 px-2.5 text-[10px] font-semibold text-white transition hover:bg-indigo-700" onClick={addSubflow}>＋ Subflow</button>
         </Panel>
       </ReactFlow>
+
+      {contextMenu && (
+        <div
+          ref={contextMenuRef}
+          role="menu"
+          aria-label="Menu de contexto"
+          data-testid="canvas-context-menu"
+          className="absolute z-[60] w-56 overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 text-[11px] shadow-2xl shadow-slate-900/15"
+          style={{
+            left: Math.min(contextMenu.x, Math.max(8, (canvasRef.current?.clientWidth ?? contextMenu.x + 232) - 232)),
+            top: Math.min(contextMenu.y, Math.max(8, (canvasRef.current?.clientHeight ?? contextMenu.y + 300) - 300)),
+          }}
+          onContextMenu={(event) => event.preventDefault()}
+        >
+          <ContextMenuButton
+            label={selectedNodeIds.size > 1 ? `Copiar ${selectedNodeIds.size} itens` : 'Copiar'}
+            shortcut="Ctrl/Cmd+C"
+            disabled={selectedNodeIds.size === 0}
+            onClick={() => { copySelection(); setContextMenu(undefined); }}
+          />
+          <ContextMenuButton
+            label="Colar"
+            shortcut="Ctrl/Cmd+V"
+            disabled={!clipboardRef.current?.nodes.length}
+            onClick={() => { pasteClipboard(); setContextMenu(undefined); }}
+          />
+          <ContextMenuButton
+            label={selectedNodeIds.size > 1 ? `Excluir ${selectedNodeIds.size} itens` : 'Excluir'}
+            shortcut="Delete"
+            disabled={selectedNodeIds.size === 0}
+            danger
+            onClick={() => { deleteSelection(); setContextMenu(undefined); }}
+          />
+          <div className="my-1 h-px bg-slate-100" role="separator" />
+          <ContextMenuButton
+            label="Selecionar todos"
+            shortcut="Ctrl/Cmd+A"
+            disabled={workflow.nodes.length === 0}
+            onClick={() => { selectAllNodes(); setContextMenu(undefined); }}
+          />
+          <div className="my-1 h-px bg-slate-100" role="separator" />
+          <ContextMenuButton
+            label="Desfazer"
+            shortcut="Ctrl/Cmd+Z"
+            disabled={!canUndo}
+            onClick={() => { undo(); setSelectedNodeIds(new Set()); onSelectNode(undefined); setContextMenu(undefined); }}
+          />
+          <ContextMenuButton
+            label="Refazer"
+            shortcut="Ctrl/Cmd+Shift+Z"
+            disabled={!canRedo}
+            onClick={() => { redo(); setSelectedNodeIds(new Set()); onSelectNode(undefined); setContextMenu(undefined); }}
+          />
+        </div>
+      )}
     </main>
+  );
+}
+
+function ContextMenuButton({
+  label,
+  shortcut,
+  disabled = false,
+  danger = false,
+  onClick,
+}: {
+  label: string;
+  shortcut?: string;
+  disabled?: boolean;
+  danger?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      disabled={disabled}
+      onClick={onClick}
+      className={`flex w-full items-center justify-between gap-4 rounded-lg px-2.5 py-2 text-left font-semibold transition ${danger ? 'text-red-600 hover:bg-red-50' : 'text-slate-700 hover:bg-slate-50'} disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent`}
+    >
+      <span>{label}</span>
+      {shortcut && <span className="text-[9px] font-medium text-slate-400">{shortcut}</span>}
+    </button>
   );
 }
 
