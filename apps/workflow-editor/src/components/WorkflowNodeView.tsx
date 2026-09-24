@@ -11,7 +11,7 @@ export function WorkflowNodeView({ data, selected, dragging }: NodeProps<FlowNod
   const label = appearance.label?.trim() || (typeof legacyLabel === 'string' && legacyLabel.trim() ? legacyLabel : undefined) || data?.manifest?.name || data?.pluginId || 'Plugin';
   const category = data?.manifest?.category;
   const shape = appearance.shape ?? 'card';
-  const color = appearance.color ?? categoryColor(category);
+  const color = appearance.color ?? categoryColor(category, data?.pluginId);
   const isDiamond = shape === 'diamond';
   const style = {
     '--node-accent': color,
@@ -32,7 +32,7 @@ export function WorkflowNodeView({ data, selected, dragging }: NodeProps<FlowNod
         {!isDiamond && <span className="absolute bottom-3 left-[-1px] top-3 w-1 rounded-r bg-[var(--node-accent)]" />}
 
         <div className={`flex h-full min-h-20 items-center ${isDiamond ? 'justify-center px-[25%] py-4 text-center' : 'gap-3 px-4 py-3'}`}>
-          {!isDiamond && <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-indigo-50 text-[var(--node-accent)]"><svg className="h-[19px] w-[19px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><CategoryIcon category={category} /></svg></span>}
+          {!isDiamond && <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-indigo-50 text-[var(--node-accent)]"><svg className="h-[19px] w-[19px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><CategoryIcon category={category} pluginId={data?.pluginId} /></svg></span>}
           <span className={`flex min-w-0 flex-1 flex-col ${isDiamond ? 'items-center' : ''}`}>
             <small className="text-[8px] font-extrabold uppercase tracking-[.11em] text-[var(--node-accent)]">{CATEGORY_LABELS[category ?? ''] ?? 'Plugin'}</small>
             <strong className="mt-px max-w-full truncate text-xs leading-tight text-slate-800">{label}</strong>
@@ -134,7 +134,9 @@ function shapeClasses(shape: string) {
   return 'rounded-[14px] border shadow-lg';
 }
 
-function categoryColor(category: string | undefined) {
+function categoryColor(category: string | undefined, pluginId?: string) {
+  if (pluginId === 'database-query') return '#0891b2';
+  if (pluginId === 'code-javascript') return '#8b5cf6';
   if (category === 'trigger') return '#10b981';
   if (category === 'output') return '#f97316';
   if (category === 'control-flow') return '#8b5cf6';
@@ -142,7 +144,9 @@ function categoryColor(category: string | undefined) {
   return '#4f46e5';
 }
 
-function CategoryIcon({ category }: { category: string | undefined }) {
+function CategoryIcon({ category, pluginId }: { category: string | undefined; pluginId?: string }) {
+  if (pluginId === 'database-query') return <><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" /><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" /></>;
+  if (pluginId === 'code-javascript') return <path d="m16 18 6-6-6-6M8 6l-6 6 6 6" />;
   if (category === 'trigger') return <path d="M13 2 4.5 13H11l-1 9 8.5-12H12l1-8Z" />;
   if (category === 'output') return <><path d="M5 12h14" /><path d="m14 7 5 5-5 5" /></>;
   if (category === 'control-flow') return <><path d="M6 3v12a4 4 0 0 0 4 4h8" /><path d="m14 15 4 4-4 4" /></>;

@@ -24,6 +24,7 @@ export function generateLocalProject(context: LocalGeneratorContext): GeneratedF
   // Detect special trigger nodes in workflow
   const cronNode = workflow.nodes.find((n) => n.pluginId === 'trigger-cron');
   const webhookNodes = workflow.nodes.filter((n) => n.pluginId === 'trigger-webhook');
+  const hasDatabase = workflow.nodes.some((n) => n.pluginId === 'database-query');
 
   const hasCron = Boolean(cronNode);
   const hasWebhook = webhookNodes.length > 0;
@@ -68,6 +69,11 @@ export function generateLocalProject(context: LocalGeneratorContext): GeneratedF
   if (hasCron) {
     dependencies['node-cron'] = '^3.0.3';
     devDependencies['@types/node-cron'] = '^3.0.11';
+  }
+
+  if (hasDatabase) {
+    dependencies['pg'] = '^8.13.0';
+    devDependencies['@types/pg'] = '^8.11.10';
   }
 
   const packageJsonContent = JSON.stringify(

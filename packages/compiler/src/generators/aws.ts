@@ -25,6 +25,7 @@ export function generateAwsProject(context: AwsGeneratorContext): GeneratedFile[
   // Detect triggers
   const cronNode = workflow.nodes.find((n) => n.pluginId === 'trigger-cron');
   const webhookNode = workflow.nodes.find((n) => n.pluginId === 'trigger-webhook');
+  const hasDatabase = workflow.nodes.some((n) => n.pluginId === 'database-query');
 
   const hasCron = Boolean(cronNode);
   const hasWebhook = Boolean(webhookNode);
@@ -33,6 +34,15 @@ export function generateAwsProject(context: AwsGeneratorContext): GeneratedFile[
   const webhookSecretEnvVar = (webhookNode?.parameters?.secretEnvVar as string) || 'WEBHOOK_SECRET';
   const webhookAuth = (webhookNode?.parameters?.authentication as string) || (webhookNode?.parameters?.auth as string) || "none";
   const webhookHeaderName = (webhookNode?.parameters?.headerName as string) || "X-Webhook-Secret";
+
+  const dependencies: Record<string, string> = {
+    'aws-cdk-lib': '^2.155.0',
+    constructs: '^10.3.0',
+    'source-map-support': '^0.5.21',
+  };
+  if (hasDatabase) {
+    dependencies['pg'] = '^8.13.0';
+  }
 
   const packageJsonContent = JSON.stringify(
     {
@@ -50,17 +60,14 @@ export function generateAwsProject(context: AwsGeneratorContext): GeneratedFile[
         cdk: 'cdk',
         deploy: 'cdk deploy',
       },
-      dependencies: {
-        'aws-cdk-lib': '^2.155.0',
-        constructs: '^10.3.0',
-        'source-map-support': '^0.5.21',
-      },
+      dependencies,
       devDependencies: {
         '@types/aws-lambda': '^8.10.145',
         '@types/node': '^22.5.0',
         'aws-cdk': '^2.155.0',
         esbuild: '^0.28.2',
         typescript: '^5.5.4',
+        ...(hasDatabase ? { '@types/pg': '^8.11.10' } : {}),
       },
     },
     null,

@@ -131,6 +131,7 @@ function PaletteItem({ manifest }: { manifest: PluginManifest }) {
 }
 
 function categoryClasses(category: PluginManifest['category'], pluginId?: string) {
+  if (pluginId === 'database-query') return 'bg-cyan-50 text-cyan-600';
   if (pluginId === 'code-javascript') return 'bg-violet-50 text-violet-600';
   if (category === 'trigger') return 'bg-emerald-50 text-emerald-600';
   if (category === 'output') return 'bg-orange-50 text-orange-600';
@@ -139,6 +140,7 @@ function categoryClasses(category: PluginManifest['category'], pluginId?: string
 }
 
 function PluginIcon({ category, pluginId }: { category: PluginManifest['category']; pluginId?: string }) {
+  if (pluginId === 'database-query') return <svg className="h-[18px] w-[18px] fill-none stroke-current stroke-[1.8]" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" /><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" /></svg>;
   if (pluginId === 'code-javascript') return <svg className="h-[18px] w-[18px] fill-none stroke-current stroke-[1.8]" viewBox="0 0 24 24"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6" /></svg>;
   if (category === 'trigger') return <svg className="h-[18px] w-[18px] fill-none stroke-current stroke-[1.8]" viewBox="0 0 24 24"><path d="M13 2 4.5 13H11l-1 9 8.5-12H12l1-8Z" /></svg>;
   if (category === 'output') return <svg className="h-[18px] w-[18px] fill-none stroke-current stroke-[1.8]" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5" /></svg>;
