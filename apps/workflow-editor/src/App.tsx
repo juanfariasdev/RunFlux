@@ -25,6 +25,7 @@ function WorkflowEditorContent() {
   const nodes = workflow.nodes;
   const connections = workflow.connections;
   const nodeResults = useWorkflowStore((s) => s.nodeResults);
+  const setNodeResults = useWorkflowStore((s) => s.setNodeResults);
   const setNodeResult = useWorkflowStore((s) => s.setNodeResult);
   const clearNodeResult = useWorkflowStore((s) => s.clearNodeResult);
   const updateNodeParameters = useWorkflowStore((s) => s.updateNodeParameters);
@@ -81,6 +82,18 @@ function WorkflowEditorContent() {
     }
   }, [workflow, nodeResults, setNodeResult, clearNodeResult, envScope]);
 
+  const handleTestToNode = useCallback(async (nodeId: string) => {
+    const pathNodeIds = upstreamNodeIds(workflow, nodeId);
+    for (const id of pathNodeIds) clearNodeResult(id);
+    setTestingNodeIds(pathNodeIds);
+    try {
+      const result = await validation.runToNode(workflow, nodeId, { mode: 'sandbox', environment: envScope });
+      setNodeResults(result.nodeResults ?? []);
+    } finally {
+      setTestingNodeIds(new Set());
+    }
+  }, [workflow, setNodeResults, clearNodeResult, envScope]);
+
   useEffect(() => {
     let cancelled = false;
     catalog.listPlugins().then((grouped) => {
@@ -110,7 +123,14 @@ function WorkflowEditorContent() {
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <Palette catalog={catalog} />
         <ReactFlowProvider>
-          <Canvas catalog={catalog} onSelectNode={setSelectedNodeId} onSelectEdge={setSelectedEdgeId} testingNodeIds={testingNodeIds} />
+          <Canvas
+            catalog={catalog}
+            onSelectNode={setSelectedNodeId}
+            onSelectEdge={setSelectedEdgeId}
+            onTestNode={handleTestNode}
+            onTestToNode={handleTestToNode}
+            testingNodeIds={testingNodeIds}
+          />
         </ReactFlowProvider>
         {selectedNode && (
           <Suspense fallback={null}>
@@ -165,4 +185,22 @@ export function App() {
       <WorkflowEditorContent />
     </ProjectProvider>
   );
+}
+
+function upstreamNodeIds(workflow: { nodes: Array<{ id: string }>; connections: Array<{ sourceNodeId: string; targetNodeId: string }> }, nodeId: string): Set<string> {
+  const incoming = new Map<string, string[]>();
+  for (const connection of workflow.connections) {
+    const sources = incoming.get(connection.targetNodeId);
+    if (sources) sources.push(connection.sourceNodeId);
+    else incoming.set(connection.targetNodeId, [connection.sourceNodeId]);
+  }
+  const found = new Set<string>();
+  const queue = [nodeId];
+  while (queue.length > 0) {
+    const current = queue.pop()!;
+    if (found.has(current)) continue;
+    found.add(current);
+    for (const source of incoming.get(current) ?? []) queue.push(source);
+  }
+  return found;
 }

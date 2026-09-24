@@ -34,6 +34,36 @@ export function WorkflowNodeView({ id, data, selected, dragging }: NodeProps<Flo
         data-status={status}
         style={style}
       >
+        {selected && status !== 'missing' && (data?.onTestNode || data?.onTestToNode) && (
+          <div
+            className="nodrag nopan absolute -top-10 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-lg border border-slate-200 bg-white p-1 shadow-lg"
+            data-testid="node-test-actions"
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            {data.onTestNode && (
+              <button
+                type="button"
+                className="nodrag nopan whitespace-nowrap rounded-md px-2 py-1 text-[9px] font-semibold text-slate-700 transition hover:bg-indigo-50 hover:text-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={(event) => { event.stopPropagation(); data.onTestNode?.(); }}
+                disabled={data.isTesting}
+                title="Execute only this node using cached upstream results"
+              >
+                ▶ Test this node
+              </button>
+            )}
+            {data.onTestToNode && (
+              <button
+                type="button"
+                className="nodrag nopan whitespace-nowrap rounded-md bg-indigo-600 px-2 py-1 text-[9px] font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={(event) => { event.stopPropagation(); data.onTestToNode?.(); }}
+                disabled={data.isTesting}
+                title="Execute the workflow from its trigger up to this node"
+              >
+                ▶ Test up to this node
+              </button>
+            )}
+          </div>
+        )}
         {category !== 'trigger' && (
           <Handle
             id="main"

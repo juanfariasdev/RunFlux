@@ -36,11 +36,13 @@ export interface CanvasProps {
   catalog: PluginCatalogAdapter;
   onSelectNode: (nodeId: string | undefined) => void;
   onSelectEdge?: (edgeId: string | undefined) => void;
+  onTestNode?: (nodeId: string) => void;
+  onTestToNode?: (nodeId: string) => void;
   /** Node ids currently being tested (single node in isolation, or every Webhook Trigger in a whole-workflow run) — each shows the waiting/spinning badge. */
   testingNodeIds?: Set<string>;
 }
 
-export function Canvas({ catalog, onSelectNode, onSelectEdge, testingNodeIds }: CanvasProps) {
+export function Canvas({ catalog, onSelectNode, onSelectEdge, onTestNode, onTestToNode, testingNodeIds }: CanvasProps) {
   const workflow = useWorkflowStore((state) => state.workflow);
   const nodeResults = useWorkflowStore((state) => state.nodeResults);
   const addNode = useWorkflowStore((state) => state.addNode);
@@ -78,11 +80,21 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge, testingNodeIds }: 
 
   const manifestFor = useCallback((pluginId: string) => manifests[pluginId], [manifests]);
   const nodes: FlowNode[] = useMemo(
-    () => workflow.nodes.map((node) => ({
-      ...toReactFlowNode(node, manifestFor(node.pluginId), node.appearance?.shape === 'subflow' ? { status: 'ok' } : { status: manifestFor(node.pluginId) ? 'ok' : 'missing' }, nodeResults[node.id], testingNodeIds?.has(node.id) ?? false, layout),
-      selected: selectedNodeIds.has(node.id),
-    })),
-    [workflow.nodes, manifestFor, nodeResults, testingNodeIds, layout, selectedNodeIds],
+    () => workflow.nodes.map((node) => {
+      const flowNode = toReactFlowNode(node, manifestFor(node.pluginId), node.appearance?.shape === 'subflow' ? { status: 'ok' } : { status: manifestFor(node.pluginId) ? 'ok' : 'missing' }, nodeResults[node.id], testingNodeIds?.has(node.id) ?? false, layout);
+      return {
+        ...flowNode,
+        selected: selectedNodeIds.has(node.id),
+        data: {
+          ...flowNode.data,
+          ...(node.appearance?.shape === 'subflow' ? {} : {
+            onTestNode: onTestNode ? () => onTestNode(node.id) : undefined,
+            onTestToNode: onTestToNode ? () => onTestToNode(node.id) : undefined,
+          }),
+        },
+      };
+    }),
+    [workflow.nodes, manifestFor, nodeResults, testingNodeIds, layout, selectedNodeIds, onTestNode, onTestToNode],
   );
   const edges = useMemo(() => workflow.connections.map(toReactFlowEdge), [workflow.connections]);
 

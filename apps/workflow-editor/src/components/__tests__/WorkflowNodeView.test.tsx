@@ -1,6 +1,6 @@
 import { ReactFlowProvider, type NodeProps } from '@xyflow/react';
-import { render } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import { WorkflowNodeView } from '../WorkflowNodeView';
 import type { FlowNode } from '../../adapters/react-flow-adapter';
 import type { PluginManifest } from '@runflux/plugin-system/types';
@@ -186,5 +186,41 @@ describe('WorkflowNodeView — testing badge (waiting for a webhook)', () => {
     const { getByTestId, queryByTestId } = renderNode(manifest('trigger'), {}, nodeResult(), true);
     expect(getByTestId('node-testing-badge')).toBeInTheDocument();
     expect(queryByTestId('node-result-badge')).toBeNull();
+  });
+});
+
+describe('WorkflowNodeView — inline test actions', () => {
+  it('shows both test actions above a selected node and calls the matching handlers', () => {
+    const onTestNode = vi.fn();
+    const onTestToNode = vi.fn();
+    const props = makeProps(manifest('action'), true);
+    props.data.onTestNode = onTestNode;
+    props.data.onTestToNode = onTestToNode;
+
+    render(
+      <ReactFlowProvider>
+        <WorkflowNodeView {...props} />
+      </ReactFlowProvider>,
+    );
+
+    expect(screen.getByTestId('node-test-actions')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /test this node/i }));
+    fireEvent.click(screen.getByRole('button', { name: /test up to this node/i }));
+    expect(onTestNode).toHaveBeenCalledTimes(1);
+    expect(onTestToNode).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps inline test actions hidden when the node is not selected', () => {
+    const props = makeProps(manifest('action'), false);
+    props.data.onTestNode = vi.fn();
+    props.data.onTestToNode = vi.fn();
+
+    render(
+      <ReactFlowProvider>
+        <WorkflowNodeView {...props} />
+      </ReactFlowProvider>,
+    );
+
+    expect(screen.queryByTestId('node-test-actions')).toBeNull();
   });
 });

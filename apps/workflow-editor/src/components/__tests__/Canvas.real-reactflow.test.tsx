@@ -37,6 +37,43 @@ const catalogWithHttpOutput: PluginCatalogAdapter = {
 };
 
 describe('Canvas with REAL React Flow', () => {
+  it('shows inline node test actions and forwards the selected node id', async () => {
+    useWorkflowStore.setState({
+      workflow: {
+        id: 'wf-inline-test-actions',
+        name: 'Inline test actions',
+        nodes: [
+          { id: 'a', pluginId: 'trigger-manual-example', pluginVersion: '1.0.0', parameters: {}, position: { x: 100, y: 100 } },
+        ],
+        connections: [],
+      },
+      selectedNodeId: undefined,
+      nodeResults: {},
+      historyPast: [],
+      historyFuture: [],
+      historyTransactionBase: undefined,
+    });
+    const onTestNode = vi.fn();
+    const onTestToNode = vi.fn();
+
+    const { container } = render(
+      <div style={{ width: 1000, height: 800 }}>
+        <ReactFlowProvider>
+          <Canvas catalog={catalog} onSelectNode={() => {}} onTestNode={onTestNode} onTestToNode={onTestToNode} />
+        </ReactFlowProvider>
+      </div>
+    );
+
+    const node = await waitFor(() => container.querySelector('.react-flow__node[data-id="a"]') as HTMLElement);
+    fireEvent.click(node);
+    await screen.findByRole('button', { name: /test this node/i });
+
+    fireEvent.click(screen.getByRole('button', { name: /test this node/i }));
+    fireEvent.click(screen.getByRole('button', { name: /test up to this node/i }));
+    expect(onTestNode).toHaveBeenCalledWith('a');
+    expect(onTestToNode).toHaveBeenCalledWith('a');
+  });
+
   it('opens a context menu on right click and acts on the clicked node', async () => {
     useWorkflowStore.setState({
       workflow: {
