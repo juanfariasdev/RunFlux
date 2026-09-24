@@ -184,7 +184,7 @@ export function EnvVarsModal({ isOpen, onClose }: EnvVarsModalProps) {
             <div className="mt-3 flex justify-end">
               <Button
                 type="button"
-                variant="primary"
+                variant="default"
                 onClick={handleAdd}
                 className="!h-7 text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-medium"
               >
@@ -277,7 +277,7 @@ export function EnvVarsModal({ isOpen, onClose }: EnvVarsModalProps) {
             </Button>
             <Button
               type="button"
-              variant="primary"
+              variant="default"
               onClick={handleSave}
               disabled={isSaving}
               className="!h-8 text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-medium"

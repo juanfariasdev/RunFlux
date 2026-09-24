@@ -111,9 +111,10 @@ function resolveExpressionPreview(
   text: string,
   sampleJson: unknown,
   nodeScope?: Record<string, { json: unknown }>,
+  envScope?: Record<string, string>,
 ): ExpressionPreview {
   try {
-    const resolved = resolveExpressions({ value: text }, { $json: sampleJson ?? {}, $node: nodeScope ?? {} });
+    const resolved = resolveExpressions({ value: text }, { $json: sampleJson ?? {}, $node: nodeScope ?? {}, $env: envScope ?? {} });
     return { ok: true, value: resolved.value };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
@@ -135,6 +136,7 @@ export interface NodeConfigPanelProps {
   testResult?: NodeResult;
   onCancelTest?: () => void;
   nodeScope?: Record<string, { json: unknown }>;
+  envScope?: Record<string, string>;
 }
 
 export function NodeConfigPanel({
@@ -150,6 +152,7 @@ export function NodeConfigPanel({
   testResult,
   onCancelTest,
   nodeScope,
+  envScope,
 }: NodeConfigPanelProps) {
   const parameters = manifest?.parameters ?? [];
   const schema = buildZodSchema(parameters);
@@ -272,7 +275,7 @@ export function NodeConfigPanel({
               }
               const liveValue = param.type === 'string' ? watch(param.name) : undefined;
               const preview =
-                typeof liveValue === 'string' && hasExpressionSyntax(liveValue) ? resolveExpressionPreview(liveValue, displayedTestInput, nodeScope) : undefined;
+                typeof liveValue === 'string' && hasExpressionSyntax(liveValue) ? resolveExpressionPreview(liveValue, displayedTestInput, nodeScope, envScope) : undefined;
 
               return (
                 <div key={param.name}>
@@ -301,7 +304,7 @@ export function NodeConfigPanel({
                     <Controller
                       name={param.name}
                       control={control}
-                      render={({ field }) => <JsonFieldEditor id={param.name} value={field.value} onChange={field.onChange} sampleJson={displayedTestInput} nodeScope={nodeScope} rowSchema={param.rowSchema} disabled={isTesting} />}
+                      render={({ field }) => <JsonFieldEditor id={param.name} value={field.value} onChange={field.onChange} sampleJson={displayedTestInput} nodeScope={nodeScope} envScope={envScope} rowSchema={param.rowSchema} disabled={isTesting} />}
                     />
                   ) : param.sensitive ? (
                     <div className="flex gap-1.5">

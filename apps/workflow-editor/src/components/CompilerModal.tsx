@@ -12,7 +12,7 @@ export interface CompilerModalProps {
 }
 
 export function CompilerModal({ isOpen, onClose, onCompile, projectName }: CompilerModalProps) {
-  const { currentProject } = useProject();
+  const { currentProject, envVars } = useProject();
   const workflow = useWorkflowStore((s) => s.workflow);
 
   const [targetPlatform, setTargetPlatform] = useState<TargetPlatform>('local');
@@ -36,8 +36,15 @@ export function CompilerModal({ isOpen, onClose, onCompile, projectName }: Compi
         res = await onCompile(targetPlatform);
       } else {
         const adapter = new HttpCompilerApiAdapter();
+        const workflowWithSettings = {
+          ...workflow,
+          settings: {
+            ...workflow.settings,
+            envVars: envVars || [],
+          },
+        };
         res = await adapter.compile({
-          workflow,
+          workflow: workflowWithSettings,
           targetPlatform,
           projectName: effectiveProjectName,
           skipTests,

@@ -37,7 +37,15 @@ function WorkflowEditorContent() {
   // on one. Each shows the same waiting/spinning badge on its canvas box.
   const [testingNodeIds, setTestingNodeIds] = useState<Set<string>>(new Set());
 
-  const { isDirty } = useProject();
+  const { isDirty, envVars } = useProject();
+
+  const envScope = useMemo(() => {
+    const scope: Record<string, string> = {};
+    for (const v of envVars || []) {
+      scope[v.key] = v.value || '';
+    }
+    return scope;
+  }, [envVars]);
 
   // T021: Previne fechamento acidental da aba se houver alterações não salvas (RF-11)
   useEffect(() => {
@@ -125,6 +133,7 @@ function WorkflowEditorContent() {
             isTesting={testingNodeIds.has(selectedNode.id)}
             testResult={nodeResults[selectedNode.id]}
             nodeScope={nodeScope}
+            envScope={envScope}
           />
         )}
         {selectedConnection && (

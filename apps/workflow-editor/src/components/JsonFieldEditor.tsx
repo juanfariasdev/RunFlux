@@ -7,6 +7,7 @@ import { Input } from './ui/input';
 interface ExpressionScopeContextValue {
   sampleJson?: unknown;
   nodeScope?: Record<string, { json: unknown }>;
+  envScope?: Record<string, string>;
 }
 
 const ExpressionScopeContext = createContext<ExpressionScopeContextValue>({});
@@ -17,6 +18,7 @@ export interface JsonFieldEditorProps {
   onChange: (value: unknown) => void;
   sampleJson?: unknown;
   nodeScope?: Record<string, { json: unknown }>;
+  envScope?: Record<string, string>;
   /** Row shape for an array-of-objects value, authored on the plugin's own parameter (rowSchema). */
   rowSchema?: JsonRowFieldSchema[];
   /** Freezes every input/button in this editor — e.g. while a webhook test is in flight. */
@@ -115,7 +117,7 @@ function detectShape(value: unknown): Shape {
  * a key/value list. No per-plugin schema is involved: this stays generic
  * across `conditions`/`fields`/`rules`/`headers`/`body`.
  */
-export function JsonFieldEditor({ id, value, onChange, sampleJson, rowSchema, disabled, nodeScope }: JsonFieldEditorProps) {
+export function JsonFieldEditor({ id, value, onChange, sampleJson, rowSchema, disabled, nodeScope, envScope }: JsonFieldEditorProps) {
   const shape = detectShape(value);
   const [mode, setMode] = useState<Mode>(shape === 'unknown' ? 'json' : 'fields');
   const [jsonDraft, setJsonDraft] = useState<string | null>(null);
@@ -124,7 +126,7 @@ export function JsonFieldEditor({ id, value, onChange, sampleJson, rowSchema, di
   const jsonText = jsonDraft ?? JSON.stringify(value ?? null, null, 2);
 
   return (
-    <ExpressionScopeContext.Provider value={{ sampleJson, nodeScope }}>
+    <ExpressionScopeContext.Provider value={{ sampleJson, nodeScope, envScope }}>
       <div>
       {shape !== 'unknown' && (
         <div className="mb-1.5 flex gap-1" role="group" aria-label="Edit mode">
@@ -623,11 +625,15 @@ function resolveExpressionPreview(
   value: string,
   sampleJson: unknown,
   nodeScope?: Record<string, { json: unknown }>,
+  envScope?: Record<string, string>,
 ): ExpressionPreview {
   try {
     return {
       ok: true,
-      value: resolveExpressions({ value }, { $json: sampleJson ?? {}, $node: nodeScope ?? {} }).value,
+      value: resolveExpressions(
+        { value },
+        { $json: sampleJson ?? {}, $node: nodeScope ?? {}, $env: envScope ?? {} },
+      ).value,
     };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
@@ -695,10 +701,11 @@ function ValueInput({
   const exprContext = useContext(ExpressionScopeContext);
   const effectiveSampleJson = sampleJson ?? exprContext.sampleJson;
   const nodeScope = exprContext.nodeScope;
+  const envScope = exprContext.envScope;
   const inferredType = useRef<PrimitiveType>(getPrimitiveType(value)).current;
   const outputType = conversionType ?? inferredType;
   const text = value === null || value === undefined ? '' : String(value);
-  const preview = hasExpressionSyntax(text) ? resolveExpressionPreview(text, effectiveSampleJson, nodeScope) : undefined;
+  const preview = hasExpressionSyntax(text) ? resolveExpressionPreview(text, effectiveSampleJson, nodeScope, envScope) : undefined;
   const previewId = `expression-preview-${ariaLabel.toLowerCase().replaceAll(' ', '-')}`;
 
   return (
