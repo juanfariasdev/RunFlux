@@ -150,12 +150,14 @@ export class CompilerService {
       throw new CompilerValidationError(result.error.message);
     }
 
-    // 2. Preparação dos diretórios de saída físicos
+    // 2. Preparação dos diretórios de saída físicos (sempre vazios, para não herdar
+    //    entrypoints e bundles de uma compilação anterior)
     const sanitizedProjectName = projectName.replace(/[^a-zA-Z0-9_\-]/g, '_');
     const folderName = `${sanitizedProjectName}-${targetPlatform}`;
     const baseDir = this.getOutputDir();
     const outputDir = path.join(baseDir, folderName);
 
+    await fs.promises.rm(outputDir, { recursive: true, force: true });
     await fs.promises.mkdir(outputDir, { recursive: true });
 
     // 3. Gravação física de cada arquivo fonte na pasta
@@ -236,8 +238,9 @@ export class CompilerService {
     const functionZipPath = path.join(compiledDir, 'function.zip');
     await fs.promises.writeFile(functionZipPath, zipBuffer);
 
-    // Grava <projeto>.zip na raiz da pasta do backend
-    const zipFilename = `${projectName.replace(/[\\/<>:"|?*\x00-\x1f]/g, '_') || 'backend'}.zip`;
+    // Grava <projeto>-<plataforma>.zip na raiz da pasta do backend; a plataforma no nome
+    // impede que o download local e o AWS do mesmo fluxo se confundam em findZipFile
+    const zipFilename = `${projectName.replace(/[\\/<>:"|?*\x00-\x1f]/g, '_') || 'backend'}-${targetPlatform}.zip`;
     const zipPath = path.join(outputDir, zipFilename);
     const projectZip = await createZipArchive([
       ...result.files,

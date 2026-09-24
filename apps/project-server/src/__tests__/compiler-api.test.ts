@@ -48,8 +48,8 @@ describe('Compiler REST API', () => {
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('success');
     expect(res.body.targetPlatform).toBe('local');
-    expect(res.body.zipFilename).toBe('Backend Test API.zip');
-    expect(res.body.downloadUrl).toBe('/api/compiler/downloads/Backend%20Test%20API.zip');
+    expect(res.body.zipFilename).toBe('Backend Test API-local.zip');
+    expect(res.body.downloadUrl).toBe('/api/compiler/downloads/Backend%20Test%20API-local.zip');
 
     const outputDir = res.body.outputDirectory;
     expect(fs.existsSync(outputDir)).toBe(true);

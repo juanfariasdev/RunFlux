@@ -8,7 +8,7 @@ import { CompilerService } from '../compiler-service';
 const directories: string[] = [];
 afterEach(() => { for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true }); });
 
-function fixture(source: string) {
+function fixture(source: string, platforms: string[] = ['local']) {
   const directory = mkdtempSync(join(tmpdir(), 'runflux-compiler-'));
   directories.push(directory);
   const plugins = join(directory, 'plugins');
@@ -16,8 +16,8 @@ function fixture(source: string) {
   mkdirSync(plugin, { recursive: true });
   writeFileSync(join(plugin, 'package.json'), '{"type":"module"}');
   writeFileSync(join(plugin, 'index.js'), `
-    export const manifest = { id: 'example', name: 'Example', version: '1.0.0', category: 'trigger', parameters: [], supportedPlatforms: ['local'] };
-    export const generators = { local: () => ({ files: [{ path: 'example.ts', content: ${JSON.stringify(source)} }], infra: [] }) };
+    export const manifest = { id: 'example', name: 'Example', version: '1.0.0', category: 'trigger', parameters: [], supportedPlatforms: ${JSON.stringify(platforms)} };
+    export const generators = Object.fromEntries(manifest.supportedPlatforms.map((platform) => [platform, () => ({ files: [{ path: 'example.ts', content: ${JSON.stringify(source)} }], infra: [] })]));
   `);
   return new CompilerService(plugins, join(directory, 'output'));
 }
@@ -50,6 +50,15 @@ it('recompiles without carrying removed entrypoints and bundles into the new dow
   const zip = await JSZip.loadAsync(readFileSync(join(next.outputDirectory, next.zipFilename)));
   expect(Object.keys(zip.files)).not.toContain('dist/removed.mjs');
   expect(Object.keys(zip.files)).not.toContain('dist/run-cron.mjs');
+});
+
+it('serves the download of the requested target when the same workflow was compiled for local and AWS', async () => {
+  const service = fixture('export function run(input: unknown) { return input; }', ['local', 'aws']);
+  const aws = await service.compile({ workflow, targetPlatform: 'aws' });
+  const local = await service.compile({ workflow, targetPlatform: 'local' });
+  expect(local.zipFilename).not.toBe(aws.zipFilename);
+  expect(await service.findZipFile(local.zipFilename)).toBe(join(local.outputDirectory, local.zipFilename));
+  expect(await service.findZipFile(aws.zipFilename)).toBe(join(aws.outputDirectory, aws.zipFilename));
 });
 
 it('rejects download paths outside the generated output', async () => {
