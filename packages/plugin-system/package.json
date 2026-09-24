@@ -28,7 +28,8 @@
     "./code-generators": "./src/code-generators.ts",
     "./generators": "./src/code-generators.ts",
     "./standalone": "./src/standalone.ts",
-    "./http-client": "./src/http-client.ts"
+    "./http-client": "./src/http-client.ts",
+    "./webhook-config": "./src/webhook-config.ts"
   },
   "scripts": {
     "test": "vitest run",

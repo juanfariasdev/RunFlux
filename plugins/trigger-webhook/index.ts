@@ -1,3 +1,7 @@
+import { getWebhookConfig } from '@runflux/plugin-system/webhook-config';
+import { getGlobalPendingWebhooks, type PendingWebhook } from './listener.js';
+export { pushTestWebhook, clearPendingWebhooks } from './listener.js';
+export type { PendingWebhook } from './listener.js';
 import type { PluginModule, PluginExecutionContext } from '@runflux/plugin-system/types';
 import { FIELDS_ROW_SCHEMA, composeFields, type FieldConfig } from '@runflux/plugin-system/fields-row-schema';
 
@@ -78,12 +82,7 @@ export const manifest: PluginModule['manifest'] = {
 
 export const generators: PluginModule['generators'] = {
   local: (nodeConfig) => {
-    const path = (nodeConfig.path as string) || '/webhook';
-    const method = ((nodeConfig.httpMethod as string) || 'POST').toUpperCase();
-    const auth = (nodeConfig.authentication as string) || (nodeConfig.auth as string) || 'none';
-    const headerName = (nodeConfig.headerName as string) || 'X-Webhook-Secret';
-    const secretEnvVar = (nodeConfig.secretEnvVar as string) || 'WEBHOOK_SECRET';
-    const rawBody = Boolean(nodeConfig.rawBody);
+    const { path, method, authentication: auth, headerName, secretEnvVar, rawBody } = getWebhookConfig(nodeConfig);
 
     return {
       files: [
@@ -113,59 +112,6 @@ export function run(input: any) {
   },
   aws: (nodeConfig, ctx) => generators.local(nodeConfig, ctx),
 };
-
-export interface PendingWebhook {
-  path: string;
-  resolve: (data: any) => void;
-  reject: (err: any) => void;
-  timer: any;
-}
-
-function getGlobalPendingWebhooks(): PendingWebhook[] {
-  const g = globalThis as any;
-  if (!g.__RUNFLUX_PENDING_WEBHOOKS__) {
-    g.__RUNFLUX_PENDING_WEBHOOKS__ = [];
-  }
-  return g.__RUNFLUX_PENDING_WEBHOOKS__;
-}
-
-export function pushTestWebhook(targetPath: string, payload: any): boolean {
-  const list = getGlobalPendingWebhooks();
-  if (list.length === 0) {
-    return false;
-  }
-
-  const cleanTarget = targetPath.replace(/^\/+/, '').toLowerCase();
-
-  let idx = list.findIndex((p) => {
-    const cleanP = (p.path || '').replace(/^\/+/, '').toLowerCase();
-    return cleanP === cleanTarget || cleanP === '*' || cleanTarget.endsWith(cleanP) || cleanP.endsWith(cleanTarget);
-  });
-
-  if (idx === -1 && list.length > 0) {
-    idx = 0;
-  }
-
-  if (idx !== -1) {
-    const pending = list.splice(idx, 1)[0];
-    clearTimeout(pending.timer);
-    pending.resolve(payload);
-    return true;
-  }
-
-  return false;
-}
-
-export function clearPendingWebhooks(): void {
-  const list = getGlobalPendingWebhooks();
-  while (list.length > 0) {
-    const p = list.pop();
-    if (p) {
-      clearTimeout(p.timer);
-      p.reject(new Error('Webhook listener cancelled'));
-    }
-  }
-}
 
 function formatWebhookOutput(body: any, headers: any, query: any) {
   if (typeof body === 'object' && body !== null && !Array.isArray(body)) {

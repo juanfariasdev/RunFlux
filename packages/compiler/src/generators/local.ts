@@ -1,3 +1,4 @@
+import { buildLocalApp } from './templates/local-app.js';
 import { generateRunnerRuntime } from './templates/runner-template.js';
 import type { WorkflowDefinition } from '@runflux/workflow-model';
 import type { GeneratedFile, CompilationOptions, CompiledNodeEntry } from '../types.js';
@@ -222,7 +223,7 @@ npm run start
     webhookNodes.forEach((node) => {
       const p = (node.parameters?.path as string) || '/webhook';
       const m = ((node.parameters?.httpMethod as string) || 'POST').toUpperCase();
-      const auth = (node.parameters?.auth as string) || 'none';
+      const auth = (node.parameters?.authentication as string) || (node.parameters?.auth as string) || 'none';
       readmeContent += `- \`${m} http://localhost:${port}${p}\` (Auth: ${auth})\n`;
     });
   }
@@ -265,51 +266,6 @@ docker run -d -p ${port}:${port} --env-file .env ${sanitizedPkgName}
   const runnerTsContent = generateGraphRunner(workflow, nodeFiles, context.nodeEntries);
 
 
-  // Webhook express routes
-  let webhookRoutesCode = '';
-  if (hasWebhook) {
-    webhookNodes.forEach((wn) => {
-      const p = (wn.parameters?.path as string) || '/webhook';
-      const m = ((wn.parameters?.httpMethod as string) || 'POST').toLowerCase();
-      const method = m === 'any' ? 'all' : m;
-      const auth = (wn.parameters?.auth as string) || 'none';
-      const secretEnvVar = (wn.parameters?.secretEnvVar as string) || 'WEBHOOK_SECRET';
-
-      webhookRoutesCode += `
-app.${method}('${p}', async (req: Request, res: Response) => {
-  ${
-    auth === 'secret'
-      ? `const expectedSecret = process.env.${secretEnvVar};
-  const clientSecret = req.headers['x-webhook-secret'];
-  if (!expectedSecret || clientSecret !== expectedSecret) {
-    return res.status(401).json({ error: 'Unauthorized: invalid or missing X-Webhook-Secret header' });
-  }`
-      : ''
-  }
-
-  try {
-    const webhookPayload = {
-      body: req.body,
-      headers: req.headers,
-      query: req.query,
-      path: '${p}',
-      method: req.method,
-      receivedAt: new Date().toISOString(),
-    };
-    const execution = await runWorkflow(webhookPayload);
-    if (!execution.success) {
-      return res.status(500).json(execution);
-    }
-    return res.status(200).json(execution);
-  } catch (err: any) {
-    console.error('[RunFlux Webhook Error]', err);
-    return res.status(500).json({ success: false, error: err.message || 'Error processing webhook' });
-  }
-});
-`;
-    });
-  }
-
   let cronInlineCode = '';
   if (hasCron) {
     cronInlineCode = `
@@ -334,48 +290,14 @@ if (process.env.ENABLE_INLINE_CRON === 'true') {
 `;
   }
 
-  const serverTsContent = `import express, { Request, Response } from 'express';
-import cors from 'cors';
-import dotenv from 'dotenv';
+  const appTsContent = buildLocalApp(workflow, projectName);
+  const serverTsContent = `import 'dotenv/config';
+import { app } from './app.js';
 ${hasCron ? "import cron from 'node-cron';" : ''}
 import { runWorkflow } from './runner.js';
-
-dotenv.config();
-
-const app = express();
-const port = process.env.PORT || ${port};
-
-app.use(cors());
-app.use(express.json());
-
-app.get('/health', (_req: Request, res: Response) => {
-  res.json({
-    status: 'ok',
-    project: '${projectName}',
-    workflowId: '${workflow.id}',
-    nodeCount: ${workflow.nodes.length},
-    timestamp: new Date().toISOString()
-  });
-});
-
-app.post('/api/execute', async (req: Request, res: Response) => {
-  try {
-    const payload = req.body || {};
-    const execution = await runWorkflow(payload);
-    res.json(execution);
-  } catch (error: any) {
-    console.error('[RunFlux Server Error]', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || 'Error during workflow execution'
-    });
-  }
-});
-${webhookRoutesCode}
+const port = Number(process.env.PORT || ${port});
 ${cronInlineCode}
-app.listen(port, () => {
-  console.log(\`[RunFlux Server] Compiled server running on port \${port}\`);
-});
+app.listen(port, () => console.log('[RunFlux] Listening on port', port));
 `;
 
   const runTsContent = `import dotenv from 'dotenv';
@@ -423,6 +345,7 @@ if (isDirectRun) {
     { path: 'README.md', content: readmeContent, type: 'asset' },
     { path: 'src/runtime.js', content: generateRunnerRuntime(), type: 'source' },
     { path: 'src/runner.ts', content: runnerTsContent, type: 'source' },
+    { path: 'src/app.ts', content: appTsContent, type: 'source' },
     { path: 'src/server.ts', content: serverTsContent, type: 'source' },
     { path: 'src/run.ts', content: runTsContent, type: 'source' },
     ...nodeFiles,

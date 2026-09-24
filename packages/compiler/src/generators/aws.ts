@@ -1,3 +1,4 @@
+import { buildAwsHandler } from './templates/aws-handler.js';
 import { generateRunnerRuntime } from './templates/runner-template.js';
 import type { WorkflowDefinition } from '@runflux/workflow-model';
 import type { GeneratedFile, CompilationOptions, CompiledNodeEntry } from '../types.js';
@@ -216,84 +217,7 @@ ${cronCdkBlock}
   const runnerTsContent = generateGraphRunner(workflow, nodeFiles, context.nodeEntries);
 
 
-  let webhookAuthCheck = '';
-  if (hasWebhook && (webhookAuth === "secret" || webhookAuth === "headerAuth")) {
-    webhookAuthCheck = `
-    const expectedSecret = process.env.${webhookSecretEnvVar};
-    if (expectedSecret) {
-      const clientSecret = event?.headers?.['x-webhook-secret'] || event?.headers?.['X-Webhook-Secret'];
-      if (!clientSecret || clientSecret !== expectedSecret) {
-        return {
-          statusCode: 401,
-          headers: {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Headers': '*',
-            'Access-Control-Allow-Methods': 'OPTIONS,POST,GET',
-          },
-          body: JSON.stringify({ error: 'Unauthorized: invalid or missing X-Webhook-Secret header' }),
-        };
-      }
-    }
-`;
-  }
-
-  const handlerContent = `import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
-import { runWorkflow } from './runner.js';
-
-export const handler = async (event: APIGatewayProxyEventV2 | any): Promise<APIGatewayProxyResultV2> => {
-  try {
-${webhookAuthCheck}
-    let currentPayload: any = {};
-    if (event && event.body !== undefined) {
-      currentPayload = typeof event.body === 'string' ? JSON.parse(event.body || '{}') : event.body;
-    } else if (event && typeof event === 'object' && Object.keys(event).length > 0) {
-      currentPayload = event;
-    }
-
-    const execution = await runWorkflow(currentPayload);
-
-    if (execution.success) {
-      return {
-        statusCode: 200,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Headers': '*',
-          'Access-Control-Allow-Methods': 'OPTIONS,POST,GET',
-        },
-        body: JSON.stringify(execution),
-      };
-    }
-
-    return {
-      statusCode: 500,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': '*',
-        'Access-Control-Allow-Methods': 'OPTIONS,POST,GET',
-      },
-      body: JSON.stringify(execution),
-    };
-  } catch (error: any) {
-    console.error('[RunFlux Lambda Error]', error);
-    return {
-      statusCode: 500,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': '*',
-        'Access-Control-Allow-Methods': 'OPTIONS,POST,GET',
-      },
-      body: JSON.stringify({
-        success: false,
-        error: error.message || 'Error during workflow execution on AWS',
-      }),
-    };
-  }
-};
-`;
+  const handlerContent = buildAwsHandler(workflow);
 
   const files: GeneratedFile[] = [
     { path: 'package.json', content: packageJsonContent, type: 'config' },
