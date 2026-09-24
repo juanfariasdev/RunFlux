@@ -21,6 +21,6 @@ describe('Toolbar — project variables in test runs', () => {
       />,
     );
     fireEvent.click(screen.getByRole('button', { name: /test/i }));
-    await waitFor(() => expect(run).toHaveBeenCalledWith(expect.anything(), { mode: 'sandbox', environment: { DATABASE_URL: 'postgres://localhost/runflux', EMPTY: '' } }));
+    await waitFor(() => expect(run).toHaveBeenCalledWith(expect.anything(), { mode: 'production', environment: { DATABASE_URL: 'postgres://localhost/runflux', EMPTY: '' } }));
   });
 });

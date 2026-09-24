@@ -39,7 +39,9 @@ export function Toolbar({ catalog, persistence, validation, onTestingNodesChange
   const setNodeResults = useWorkflowStore((s) => s.setNodeResults);
   const clearNodeResults = useWorkflowStore((s) => s.clearNodeResults);
   const [status, setStatus] = useState<ToolbarStatus>({ kind: 'idle' });
-  const [mode, setMode] = useState<PluginExecutionMode>('sandbox');
+  // Whole-workflow tests should exercise the same side effects as the exported backend by default.
+  // Sandbox remains available explicitly for users who want simulated/non-destructive behavior.
+  const [mode, setMode] = useState<PluginExecutionMode>('production');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCompilerOpen, setIsCompilerOpen] = useState(false);
   const [isEnvModalOpen, setIsEnvModalOpen] = useState(false);
@@ -207,8 +209,8 @@ export function Toolbar({ catalog, persistence, validation, onTestingNodesChange
               onChange={(event) => setMode(event.target.value as PluginExecutionMode)}
               aria-label="Execution mode"
             >
-              <option value="sandbox">Sandbox</option>
-              <option value="production">Production</option>
+              <option value="sandbox">Sandbox (simulated)</option>
+              <option value="production">Production (real effects)</option>
             </select>
           </label>
           <Button variant="outline" size="sm" onClick={handleSave} aria-label="Save workflow" data-testid="save-project-btn">

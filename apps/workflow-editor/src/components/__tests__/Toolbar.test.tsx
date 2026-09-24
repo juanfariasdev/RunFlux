@@ -123,7 +123,7 @@ describe('Toolbar — Test (RF-06, RF-12, RN-04)', () => {
     await waitFor(() => expect(useWorkflowStore.getState().nodeResults.n1).toEqual(nodeResult));
   });
 
-  it('defaults to sandbox mode and passes the selected mode to the validation runtime (RF-08)', async () => {
+  it('defaults to production mode and passes an explicitly selected sandbox mode to the validation runtime (RF-08)', async () => {
     const run = vi.fn().mockResolvedValue({ status: 'success', nodeResults: [] });
     render(
       <Toolbar
@@ -133,10 +133,11 @@ describe('Toolbar — Test (RF-06, RF-12, RN-04)', () => {
       />,
     );
 
-    fireEvent.change(screen.getByLabelText(/execution mode/i), { target: { value: 'production' } });
+    expect(screen.getByLabelText(/execution mode/i)).toHaveValue('production');
+    fireEvent.change(screen.getByLabelText(/execution mode/i), { target: { value: 'sandbox' } });
     fireEvent.click(screen.getByRole('button', { name: /test/i }));
 
-    await waitFor(() => expect(run).toHaveBeenCalledWith(expect.anything(), { mode: 'production', environment: {} }));
+    await waitFor(() => expect(run).toHaveBeenCalledWith(expect.anything(), { mode: 'sandbox', environment: {} }));
   });
 
   it('clears a previous "ok" status as soon as a new test starts, instead of leaving it showing for the whole run', async () => {
