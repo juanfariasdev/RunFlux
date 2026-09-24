@@ -24,7 +24,9 @@
     "./operators": "./src/operators.ts",
     "./context-helpers": "./src/context-helpers.ts",
     "./evaluator": "./src/evaluator.ts",
-    "./snippets": "./src/snippets.ts"
+    "./snippets": "./src/snippets.ts",
+    "./code-generators": "./src/code-generators.ts",
+    "./generators": "./src/code-generators.ts"
   },
   "scripts": {
     "test": "vitest run",

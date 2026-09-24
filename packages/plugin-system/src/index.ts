@@ -35,19 +35,34 @@ export {
   evaluateOperator,
   combineConditions,
   matchRule,
+  evaluateSwitch,
   compare,
   combine,
   deepEqual,
   isEmptyValue,
 } from './operators';
-export type { ConditionOperator, Combinator, ConditionRule, CompareOptions } from './operators';
+export type { ConditionOperator, Combinator, ConditionRule, SwitchRule, CompareOptions } from './operators';
 
-export { getSafeEnv, getSafeNode, createSafeNodeProxy } from './context-helpers';
+export { getSafeEnv, getSafeNode, createSafeNodeProxy, extractContext } from './context-helpers';
+export type { ExtractedContext } from './context-helpers';
 
 export { evaluateExpression, resolveValue, resolveTemplateObject } from './evaluator';
 export type { EvaluatorContext } from './evaluator';
+
+export { normalizeFieldValue, composeFields } from './fields-row-schema';
+export type { FieldConfig } from './fields-row-schema';
 
 export {
   STANDALONE_OPERATOR_CODE,
   STANDALONE_EXPRESSION_EVALUATOR_CODE,
 } from './snippets';
+
+export {
+  generateConditionIfCode,
+  generateConditionSwitchCode,
+  generateFilterCode,
+  generateSetCode,
+  generateHttpOutputCode,
+  generateCodeJavascriptCode,
+} from './code-generators';
+

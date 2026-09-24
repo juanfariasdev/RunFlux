@@ -49,3 +49,22 @@ export function getSafeNode(
   const rawNode = context && typeof context === 'object' && '$node' in context ? context.$node : undefined;
   return createSafeNodeProxy(rawNode as any);
 }
+
+export interface ExtractedContext {
+  $node: Record<string, { json?: unknown }>;
+  $env: Record<string, string | undefined>;
+}
+
+/**
+ * Standardized context extractor for runtime and compiled nodes.
+ * Guarantees that $node is a safe proxy and $env is never undefined.
+ */
+export function extractContext(
+  context?: PluginExecutionContext | { $node?: Record<string, unknown>; $env?: Record<string, string | undefined> } | null
+): ExtractedContext {
+  return {
+    $node: getSafeNode(context),
+    $env: getSafeEnv(context),
+  };
+}
+

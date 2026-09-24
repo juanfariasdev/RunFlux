@@ -6,7 +6,6 @@ export interface EvaluatorContext {
   $env?: Record<string, string | undefined>;
 }
 
-const WHOLE_STRING_EXPRESSION = /^\{\{([\s\S]*)\}\}$/;
 const EMBEDDED_EXPRESSION = /\{\{([\s\S]*?)\}\}/g;
 
 /**
@@ -31,9 +30,13 @@ export function evaluateExpression(expr: string, context?: EvaluatorContext): un
 export function resolveValue(raw: unknown, context?: EvaluatorContext): unknown {
   if (typeof raw === 'string') {
     const trimmed = raw.trim();
-    const whole = WHOLE_STRING_EXPRESSION.exec(trimmed);
-    if (whole) {
-      return evaluateExpression(whole[1].trim(), context);
+    if (
+      trimmed.startsWith('{{') &&
+      trimmed.endsWith('}}') &&
+      trimmed.indexOf('}}') === trimmed.length - 2 &&
+      !trimmed.slice(2, -2).includes('{{')
+    ) {
+      return evaluateExpression(trimmed.slice(2, -2).trim(), context);
     }
     return raw.replace(EMBEDDED_EXPRESSION, (_match, expr: string) => {
       const val = evaluateExpression(expr.trim(), context);

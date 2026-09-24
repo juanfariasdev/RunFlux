@@ -136,8 +136,14 @@ function resolveValue(raw, $json, $node, $env) {
     return raw;
   }
   const trimmed = raw.trim();
-  const whole = /^{{([\\s\\S]*)}}\$/.exec(trimmed);
-  if (whole) return evaluateExpression(whole[1].trim(), $json, $node, $env);
+  if (
+    trimmed.startsWith('{{') &&
+    trimmed.endsWith('}}') &&
+    trimmed.indexOf('}}') === trimmed.length - 2 &&
+    !trimmed.slice(2, -2).includes('{{')
+  ) {
+    return evaluateExpression(trimmed.slice(2, -2).trim(), $json, $node, $env);
+  }
   return raw.replace(/{{([\\s\\S]*?)}}/g, (_m, expr) => {
     const res = evaluateExpression(expr.trim(), $json, $node, $env);
     return res === null || res === undefined ? '' : String(res);

@@ -233,6 +233,31 @@ export function matchRule(
   return combineConditions(results, combinator);
 }
 
+export interface SwitchRule {
+  combinator?: Combinator;
+  conditions?: ConditionRule[];
+}
+
+/**
+ * Evaluates ordered switch rules against positional outputs and handles fallback routing.
+ */
+export function evaluateSwitch(
+  rules: SwitchRule[] | undefined | null,
+  ruleOutputs: string[],
+  fallbackEnabled = false,
+  options?: CompareOptions
+): string | null {
+  if (Array.isArray(rules)) {
+    for (let i = 0; i < rules.length && i < ruleOutputs.length; i++) {
+      const rule = rules[i];
+      if (matchRule(rule?.conditions, rule?.combinator ?? 'and', options)) {
+        return ruleOutputs[i];
+      }
+    }
+  }
+  return fallbackEnabled ? 'fallback' : null;
+}
+
 /**
  * Backward-compatible alias for evaluateOperator used directly by plugin runtimes.
  */

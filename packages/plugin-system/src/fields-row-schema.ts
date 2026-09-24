@@ -19,8 +19,9 @@ export interface FieldConfig {
 }
 
 /** Coerces one field's `value` to match its declared `type`, throwing on a genuine mismatch. */
-export function normalizeFieldValue(field: FieldConfig): unknown {
-  const { value, type } = field;
+export function normalizeFieldValue(field: FieldConfig, valueOverride?: unknown): unknown {
+  const value = valueOverride !== undefined ? valueOverride : field.value;
+  const type = field.type;
   if (type === 'null') return null;
   if (type === 'array') {
     if (Array.isArray(value)) return value;
