@@ -65,6 +65,28 @@ export const workflowDefinitionSchema = z.object({
   connections: z.array(workflowConnectionSchema).default([]),
 });
 
+const ENVIRONMENT_VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/**
+ * Old projects stored database-query.connectionEnvVar as a bare environment-variable name.
+ * The editor-facing representation is an explicit $env expression, so normalize legacy projects
+ * both when they are read and before a new workflow version is persisted.
+ */
+function normalizeWorkflowDefinition(definition: WorkflowDefinition): WorkflowDefinition {
+  return {
+    ...definition,
+    nodes: definition.nodes.map((node) => {
+      if (node.pluginId !== 'database-query') return node;
+      const value = node.parameters?.connectionEnvVar;
+      if (typeof value !== 'string' || !ENVIRONMENT_VARIABLE_NAME.test(value.trim())) return node;
+      return {
+        ...node,
+        parameters: { ...node.parameters, connectionEnvVar: `{{$env.${value.trim()}}}` },
+      };
+    }),
+  };
+}
+
 export interface ProjectEnvVar {
   key: string;
   value: string;
@@ -120,7 +142,7 @@ export class ProjectService {
     }
 
     if (data.definition) {
-      const validated = workflowDefinitionSchema.parse(data.definition);
+      const validated = workflowDefinitionSchema.parse(normalizeWorkflowDefinition(data.definition));
       await this.repo.createVersion({
         projectId: project.id,
         version: 'v1',
@@ -172,11 +194,11 @@ export class ProjectService {
     if (project.versions.length > 0) {
       try {
         const parsed = JSON.parse(project.versions[0].definition);
-        workflow = {
+        workflow = normalizeWorkflowDefinition({
           ...parsed,
           id: project.id,
           name: project.name,
-        };
+        });
       } catch {
         // se houver falha de parse, retorna default
       }
@@ -228,7 +250,7 @@ export class ProjectService {
 
     let nextVersion = project.currentWorkflowVersion;
     if (data.definition !== undefined) {
-      const validated = workflowDefinitionSchema.parse(data.definition);
+      const validated = workflowDefinitionSchema.parse(normalizeWorkflowDefinition(data.definition));
       
       const latest = await this.repo.getLatestVersion(id);
       let versionNumber = 1;

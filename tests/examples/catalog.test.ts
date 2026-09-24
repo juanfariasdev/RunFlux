@@ -16,7 +16,10 @@ function variablesUsed(example: ExampleProject): Set<string> {
     for (const match of JSON.stringify(node.parameters).matchAll(/\$env\.([A-Za-z_][A-Za-z0-9_]*)/g)) used.add(match[1]);
     const { secretEnvVar, connectionEnvVar, authentication } = node.parameters as Record<string, string | undefined>;
     if (secretEnvVar && authentication && authentication !== 'none') used.add(secretEnvVar);
-    if (connectionEnvVar) used.add(connectionEnvVar);
+    if (connectionEnvVar) {
+      const expression = /^\{\{\s*\$env\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}$/.exec(connectionEnvVar);
+      used.add(expression?.[1] ?? connectionEnvVar);
+    }
   }
   return used;
 }

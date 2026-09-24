@@ -34,11 +34,13 @@ it('discovers every plugin with a valid manifest and a runtime definition', asyn
   }
 });
 
-it('declares literal parameters only where source code or SQL is expected', async () => {
+// The database connection stays literal: the plugin reads the variable's name from `{{$env.NAME}}`,
+// which the compiler also needs to declare that variable in the exported project.
+it('declares literal parameters only where source code, SQL or a variable reference is expected', async () => {
   const registry = new PluginRegistry();
   await registry.discover({ pluginDirectories: [resolve('plugins')] });
   const literal = registry.listManifests().flatMap((manifest) => manifest.parameters.filter((parameter) => parameter.expressions === false).map((parameter) => `${manifest.id}.${parameter.name}`));
-  expect(literal.sort()).toEqual(['code-javascript.code', 'database-query.query']);
+  expect(literal.sort()).toEqual(['code-javascript.code', 'database-query.connectionEnvVar', 'database-query.query']);
 });
 
 it('preserves parameter types, expression policies and nested row schemas when exporting the plugin catalog', async () => {

@@ -20,9 +20,15 @@ export interface DatabaseQueryParameters {
 }
 
 export function readConnectionEnvVar(parameters: ParameterReader): string {
-  const name = parameters.string('connectionEnvVar', 'DATABASE_URL');
+  const raw = parameters.string('connectionEnvVar', '{{$env.DATABASE_URL}}').trim();
+  const name = environmentVariableReference(raw) ?? raw;
   if (!isEnvironmentVariableName(name)) throw parameters.error('connectionEnvVar', `"${name}" is not an environment variable name`);
   return name;
+}
+
+/** Accepts the editor-facing `$env` expression while preserving legacy bare names. */
+function environmentVariableReference(value: string): string | undefined {
+  return /^\{\{\s*\$env\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}$/.exec(value)?.[1];
 }
 
 export function readDatabaseQueryParameters(parameters: ParameterReader): DatabaseQueryParameters {

@@ -24,7 +24,7 @@ const lookup = (parameters: Record<string, unknown>) => workflow(
 );
 
 describe('database-query', () => {
-  const parameters = { query: "SELECT id FROM users WHERE name = $1 AND note = '{{ literal }}'", queryParams: ['{{ $json.name }}'], connectionEnvVar: 'CONTRACT_DATABASE_URL', outputMode: 'first' };
+  const parameters = { query: "SELECT id FROM users WHERE name = $1 AND note = '{{ literal }}'", queryParams: ['{{ $json.name }}'], connectionEnvVar: '{{$env.CONTRACT_DATABASE_URL}}', outputMode: 'first' };
 
   it('binds workflow data to the literal SQL in the editor production mode', async () => {
     vi.stubEnv('CONTRACT_DATABASE_URL', 'postgres://localhost/contract');
@@ -56,7 +56,7 @@ describe('database-query', () => {
 
   it('never queries another database when its connection variable is missing', async () => {
     vi.stubEnv('DATABASE_URL', 'postgres://unrelated/database');
-    const run = await runWorkflow(lookup({ query: 'SELECT 1', connectionEnvVar: 'MISSING_CONTRACT_URL' }), await editorRegistry(), { mode: 'production' });
+    const run = await runWorkflow(lookup({ query: 'SELECT 1', connectionEnvVar: '{{$env.MISSING_CONTRACT_URL}}' }), await editorRegistry(), { mode: 'production' });
     expect(run.nodeResults.find((result) => result.nodeId === 'db')?.error).toBe('database-query: environment variable "MISSING_CONTRACT_URL" is required');
     expect(driver.query).not.toHaveBeenCalled();
   });

@@ -13,7 +13,7 @@ function fakeClient(rows: Record<string, unknown>[] = [{ id: 7 }, { id: 8 }]) {
 const run = (parameters: Record<string, unknown>, options: { client?: DatabaseClient; mode?: 'sandbox' | 'production'; env?: Record<string, string>; input?: unknown } = {}) =>
   executeNode(database, {
     parameters: { query: 'SELECT 1;', ...parameters },
-    literalParameters: ['query'],
+    literalParameters: ['query', 'connectionEnvVar'],
     mode: options.mode ?? 'production',
     env: options.env ?? { DATABASE_URL: 'postgres://localhost/app' },
     input: options.input ?? { id: 7 },
@@ -25,11 +25,15 @@ describe('database-query in production', () => {
   it('declares a literal SQL parameter', () => {
     expect(validateManifest(manifest).success).toBe(true);
     expect(manifest.parameters.find((parameter) => parameter.name === 'query')?.expressions).toBe(false);
+    expect(manifest.parameters.find((parameter) => parameter.name === 'connectionEnvVar')).toMatchObject({
+      default: '{{$env.DATABASE_URL}}',
+      expressions: false,
+    });
   });
 
   it('binds resolved values to a literal query on the configured connection', async () => {
     const client = fakeClient();
-    const record = await run({ query: " SELECT '{{ literal }}', $1 ", queryParams: ['{{ $json.id }}'], connectionEnvVar: 'ORDERS_URL' }, { client, env: { ORDERS_URL: 'postgres://orders' } });
+    const record = await run({ query: " SELECT '{{ literal }}', $1 ", queryParams: ['{{ $json.id }}'], connectionEnvVar: '{{$env.ORDERS_URL}}' }, { client, env: { ORDERS_URL: 'postgres://orders' } });
     expect(record.output).toEqual([{ id: 7 }, { id: 8 }]);
     expect(client.query).toHaveBeenCalledWith('postgres://orders', "SELECT '{{ literal }}', $1", [7]);
   });
@@ -41,7 +45,7 @@ describe('database-query in production', () => {
 
   it('never falls back to another connection when its variable is missing', async () => {
     const client = fakeClient();
-    const record = await run({ connectionEnvVar: 'MISSING_URL' }, { client, env: { DATABASE_URL: 'postgres://unrelated' } });
+    const record = await run({ connectionEnvVar: '{{$env.MISSING_URL}}' }, { client, env: { DATABASE_URL: 'postgres://unrelated' } });
     expect(record.error).toBe('database-query: environment variable "MISSING_URL" is required');
     expect(client.query).not.toHaveBeenCalled();
   });
@@ -118,7 +122,7 @@ describe('database-query deployment', () => {
 
   it('declares the driver, its connection variable and a local PostgreSQL service', () => {
     expect(deployment?.dependencies).toEqual({ pg: '^8.13.0' });
-    expect(deployment?.environment?.(reader({ connectionEnvVar: 'ORDERS_URL' }))).toEqual([{ key: 'ORDERS_URL', description: 'PostgreSQL connection string' }]);
+    expect(deployment?.environment?.(reader({ connectionEnvVar: '{{$env.ORDERS_URL}}' }))).toEqual([{ key: 'ORDERS_URL', description: 'PostgreSQL connection string' }]);
     expect(deployment?.environment?.(reader({}))).toEqual([{ key: 'DATABASE_URL', description: 'PostgreSQL connection string' }]);
     expect(Object.keys(deployment?.compose?.services ?? {})).toEqual(['postgres']);
     expect(deployment?.compose?.volumes).toEqual(['pgdata']);

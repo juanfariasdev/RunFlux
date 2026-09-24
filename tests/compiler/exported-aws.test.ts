@@ -78,7 +78,7 @@ describe('exported AWS CDK stack', () => {
       node('first', 'trigger-cron', { expression: '*/15 * * * *', timezone: 'America/Sao_Paulo' }),
       node('second', 'trigger-cron', { expression: '0 9 * * 1-5', timezone: 'America/Sao_Paulo' }),
       node('hook', 'trigger-webhook', { path: '/in', authentication: 'secret', secretEnvVar: 'HOOK_SECRET' }),
-      node('db', 'database-query', { connectionEnvVar: 'ORDERS_DATABASE_URL' }),
+      node('db', 'database-query', { connectionEnvVar: '{{$env.ORDERS_DATABASE_URL}}' }),
     ], [edge('hook', 'db')], { settings: { envVars: [{ key: 'API_KEY', value: 'default-key' }] } }));
     const infrastructure = project.json('infrastructure.json');
     const { WorkflowStack } = await project.import('lib/workflow-stack.ts');

@@ -78,6 +78,38 @@ describe('ProjectService', () => {
     expect(updated.workflow.nodes[0].id).toBe('n2');
   });
 
+  it('normalizes legacy database connection variables to $env expressions', async () => {
+    const project = await prisma.project.create({
+      data: { name: 'Legacy Database Workflow', currentWorkflowVersion: 'v1' },
+    });
+    await prisma.workflowVersion.create({
+      data: {
+        projectId: project.id,
+        version: 'v1',
+        definition: JSON.stringify({
+          id: '',
+          name: project.name,
+          nodes: [{
+            id: 'db',
+            pluginId: 'database-query',
+            pluginVersion: '1.0.0',
+            parameters: { connectionEnvVar: 'DATABASE_URL', query: 'SELECT 1' },
+            position: { x: 0, y: 0 },
+          }],
+          connections: [],
+        }),
+      },
+    });
+
+    const loaded = await service.getProject(project.id);
+    expect(loaded.workflow.nodes[0].parameters.connectionEnvVar).toBe('{{$env.DATABASE_URL}}');
+
+    const saved = await service.updateProject(project.id, { definition: loaded.workflow });
+    expect(saved.workflow.nodes[0].parameters.connectionEnvVar).toBe('{{$env.DATABASE_URL}}');
+    const latest = await prisma.workflowVersion.findFirst({ where: { projectId: project.id }, orderBy: { savedAt: 'desc' } });
+    expect(JSON.parse(latest!.definition).nodes[0].parameters.connectionEnvVar).toBe('{{$env.DATABASE_URL}}');
+  });
+
   it('exports and imports project with automatic name collision handling', async () => {
     const original = await service.createProject({
       name: 'Importable Workflow',

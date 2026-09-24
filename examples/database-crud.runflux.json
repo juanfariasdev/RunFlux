@@ -53,7 +53,7 @@
         "pluginVersion": "1.0.0",
         "parameters": {
           "databaseType": "postgres",
-          "connectionEnvVar": "DATABASE_URL",
+          "connectionEnvVar": "{{$env.DATABASE_URL}}",
           "query": "CREATE TABLE IF NOT EXISTS products (\n  id serial PRIMARY KEY,\n  sku text NOT NULL UNIQUE,\n  name text NOT NULL,\n  price numeric(10, 2) NOT NULL CHECK (price >= 0),\n  tags jsonb NOT NULL DEFAULT '[]',\n  active boolean NOT NULL DEFAULT true,\n  created_at timestamptz NOT NULL DEFAULT now(),\n  updated_at timestamptz\n);\nCREATE INDEX IF NOT EXISTS products_active_idx ON products (active);",
           "queryParams": [],
           "outputMode": "all"
@@ -126,7 +126,7 @@
         "pluginVersion": "1.0.0",
         "parameters": {
           "databaseType": "postgres",
-          "connectionEnvVar": "DATABASE_URL",
+          "connectionEnvVar": "{{$env.DATABASE_URL}}",
           "query": "TRUNCATE products RESTART IDENTITY",
           "queryParams": [],
           "outputMode": "all"
@@ -245,7 +245,7 @@
         "pluginVersion": "1.0.0",
         "parameters": {
           "databaseType": "postgres",
-          "connectionEnvVar": "DATABASE_URL",
+          "connectionEnvVar": "{{$env.DATABASE_URL}}",
           "query": "INSERT INTO products (sku, name, price, tags)\nVALUES ($1, $2, $3, $4::jsonb)\nRETURNING *",
           "queryParams": [
             "{{ $json.sku }}",
@@ -340,7 +340,7 @@
         "pluginVersion": "1.0.0",
         "parameters": {
           "databaseType": "postgres",
-          "connectionEnvVar": "DATABASE_URL",
+          "connectionEnvVar": "{{$env.DATABASE_URL}}",
           "query": "SELECT * FROM products WHERE id = $1::int",
           "queryParams": [
             "{{ $json._query.id }}"
@@ -362,7 +362,7 @@
         "pluginVersion": "1.0.0",
         "parameters": {
           "databaseType": "postgres",
-          "connectionEnvVar": "DATABASE_URL",
+          "connectionEnvVar": "{{$env.DATABASE_URL}}",
           "query": "SELECT * FROM products\nWHERE ($1::text IS NULL OR name ILIKE '%' || $1 || '%')\n  AND ($2::boolean IS NULL OR active = $2::boolean)\nORDER BY id\nLIMIT $3::int",
           "queryParams": [
             "{{ $json._query.search ?? null }}",
@@ -418,7 +418,7 @@
         "pluginVersion": "1.0.0",
         "parameters": {
           "databaseType": "postgres",
-          "connectionEnvVar": "DATABASE_URL",
+          "connectionEnvVar": "{{$env.DATABASE_URL}}",
           "query": "UPDATE products SET\n  name = COALESCE($2, name),\n  price = COALESCE($3::numeric, price),\n  active = COALESCE($4::boolean, active),\n  tags = COALESCE($5::jsonb, tags),\n  updated_at = now()\nWHERE id = $1::int\nRETURNING *",
           "queryParams": [
             "{{ $json._query.id }}",
@@ -540,7 +540,7 @@
         "pluginVersion": "1.0.0",
         "parameters": {
           "databaseType": "postgres",
-          "connectionEnvVar": "DATABASE_URL",
+          "connectionEnvVar": "{{$env.DATABASE_URL}}",
           "query": "DELETE FROM products WHERE id = $1::int RETURNING id, sku",
           "queryParams": [
             "{{ $json._query.id }}"
@@ -670,7 +670,7 @@
         "pluginVersion": "1.0.0",
         "parameters": {
           "databaseType": "postgres",
-          "connectionEnvVar": "DATABASE_URL",
+          "connectionEnvVar": "{{$env.DATABASE_URL}}",
           "query": "UPDATE products\nSET price = round(price * (1 + $1::numeric / 100), 2), updated_at = now()\nWHERE active\nRETURNING id, sku, price",
           "queryParams": [
             "{{ $json.percent }}"
@@ -731,7 +731,7 @@
         "pluginVersion": "1.0.0",
         "parameters": {
           "databaseType": "postgres",
-          "connectionEnvVar": "DATABASE_URL",
+          "connectionEnvVar": "{{$env.DATABASE_URL}}",
           "query": "SELECT\n  count(*)::int AS total,\n  (count(*) FILTER (WHERE active))::int AS active,\n  COALESCE(sum(price) FILTER (WHERE active), 0) AS stock_value\nFROM products",
           "queryParams": [],
           "outputMode": "first"
@@ -750,7 +750,7 @@
         "pluginVersion": "1.0.0",
         "parameters": {
           "databaseType": "postgres",
-          "connectionEnvVar": "DATABASE_URL",
+          "connectionEnvVar": "{{$env.DATABASE_URL}}",
           "query": "SELECT DISTINCT jsonb_array_elements_text(tags) AS tag FROM products ORDER BY tag",
           "queryParams": [],
           "outputMode": "all"
@@ -802,7 +802,7 @@
         "pluginVersion": "1.0.0",
         "parameters": {
           "databaseType": "postgres",
-          "connectionEnvVar": "DATABASE_URL",
+          "connectionEnvVar": "{{$env.DATABASE_URL}}",
           "query": "SELECT count(*)::int AS active FROM products WHERE active",
           "queryParams": [],
           "outputMode": "first"
