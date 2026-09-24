@@ -40,7 +40,7 @@ const parameterSchema = z.object({
   }
 });
 
-const manifestSchema = z.object({
+export const manifestSchema = z.object({
   id: z.string().min(1, 'id is required'),
   name: z.string().min(1),
   category: z.enum(['trigger', 'action', 'output', 'control-flow', 'subworkflow']),
