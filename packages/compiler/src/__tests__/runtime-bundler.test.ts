@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
 import { RUNTIME_ENTRIES, RuntimeBundleError, RuntimeBundler, VENDOR_DIRECTORY } from '../bundling/runtime-bundler.js';
 import type { GeneratedFile } from '../types.js';
@@ -71,7 +71,7 @@ describe('RuntimeBundler', () => {
   });
 
   describe('with a copy of the runtime package', () => {
-    const runtimePackage = path.resolve(new URL('../../../runtime', import.meta.url).pathname);
+    const runtimePackage = fileURLToPath(new URL('../../../runtime', import.meta.url));
     async function copyRuntime(): Promise<string> {
       const copy = await fs.mkdtemp(path.join(os.tmpdir(), 'runflux-runtime-package-'));
       directories.push(copy);
@@ -110,7 +110,7 @@ describe('RuntimeBundler', () => {
   it('asks for a build when the type declarations are missing', async () => {
     const empty = await fs.mkdtemp(path.join(os.tmpdir(), 'runflux-runtime-package-'));
     directories.push(empty);
-    await fs.cp(path.resolve(new URL('../../../runtime/src', import.meta.url).pathname), path.join(empty, 'src'), { recursive: true });
+    await fs.cp(fileURLToPath(new URL('../../../runtime/src', import.meta.url)), path.join(empty, 'src'), { recursive: true });
     await expect(new RuntimeBundler(empty).bundle({ entries: [RUNTIME_ENTRIES.core], plugins: [], external: [] }))
       .rejects.toThrow('Runtime type declarations are missing');
   });
