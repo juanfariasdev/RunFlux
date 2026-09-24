@@ -16,7 +16,7 @@ Os 11 plugins passam por descoberta, validação de manifesto, carregamento do r
 | `code-javascript` | — | Código assíncrono, `$json`, `$node`, `$env`, código literal, falhas |
 | `http-output` | `HttpClient` | Método, headers, corpo, resposta, falhas HTTP e de transporte, configuração inválida |
 | `log-output` | `Logger` | Registro e preservação do payload |
-| `database-query` | `DatabaseClient`, `PostgresClient` | SQL literal obrigatório e valores vinculados, first/all, variável obrigatória e com nome válido, simulação no sandbox, pools próprios fechados no dispose, cliente injetado preservado |
+| `database-query` | `DatabaseClient`, `PostgresClient` | SQL literal obrigatório e valores vinculados, first/all, conexão como `{{$env.NOME}}` (nome puro ainda aceito), variável obrigatória e com nome válido, sandbox que testa a conexão com `SELECT 1` e simula as linhas, pools próprios fechados no dispose, cliente injetado preservado |
 
 ## Evidências reproduzíveis
 

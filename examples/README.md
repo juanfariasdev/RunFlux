@@ -23,7 +23,7 @@ Três projetos prontos para importar no editor. Cada um reúne vários fluxos no
    npm run examples:postgres   # PostgreSQL em localhost:5432, o DATABASE_URL padrão do exemplo
    ```
 
-3. Abra o projeto, escolha **Production** (em **Sandbox**, o nó de banco simula as linhas), clique em **Test** e envie requisições para a URL de teste de cada webhook, com o método que ele atende. As execuções de teste usam as variáveis do projeto como `$env`.
+3. Abra o projeto, mantenha **Production (real effects)**, o modo padrão, clique em **Test** e envie requisições para a URL de teste de cada webhook, com o método que ele atende. As execuções de teste usam as variáveis do projeto como `$env`. Em **Sandbox (simulated)**, o nó de banco só confirma a conexão e simula as linhas, então nada é gravado.
 
    ```bash
    curl -X POST http://localhost:5173/runflux-webhook-test/items -H 'Content-Type: application/json' -d '{"name":"Monitor","price":899.9}'

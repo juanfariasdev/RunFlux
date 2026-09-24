@@ -50,4 +50,4 @@ Consulte [arquitetura e contratos](docs/architecture.md), [análise dos plugins 
 
 O editor está preparado para desenvolvimento local. Sua execução interativa usa middleware do Vite; servir apenas o build estático não disponibiliza esse serviço. Projetos compilados têm seus próprios pontos de entrada.
 
-O plugin de banco executa PostgreSQL no modo `production` e usa registros simulados no modo `sandbox`. O plugin Code executa JavaScript com os privilégios do processo Node; o modo sandbox do editor não é uma barreira de isolamento para código não confiável. O trigger manual está declarado apenas para o destino local.
+O plugin de banco executa PostgreSQL no modo `production`. No modo `sandbox`, ele só confirma a conexão com um `SELECT 1` e simula as linhas, sem executar o SQL configurado. A conexão é informada como `{{$env.NOME}}` (o padrão é `{{$env.DATABASE_URL}}`); projetos antigos, que guardavam só o nome da variável, são convertidos ao abrir. O plugin Code executa JavaScript com os privilégios do processo Node; o modo sandbox do editor não é uma barreira de isolamento para código não confiável. O trigger manual está declarado apenas para o destino local.
