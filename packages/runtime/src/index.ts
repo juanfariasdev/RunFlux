@@ -12,6 +12,7 @@ export {
   type NodeInvocation,
   type NodeOutputs,
 } from './contracts/node.js';
+export type { RunRequest, WorkflowRunner } from './contracts/runner.js';
 export type { Clock, Logger, RuntimeServices, TriggerEventSource } from './contracts/services.js';
 export { isEnvironmentVariableName, systemEnvironment, type EnvironmentVariables } from './environment.js';
 export { isRecord } from './values.js';
@@ -67,5 +68,5 @@ export {
 export { StaticNodeCatalog, type NodeCatalog } from './engine/node-catalog.js';
 export { InvalidNodeOutputError, UnknownNodeTypeError } from './engine/node-executor.js';
 export type { NodeRecord } from './engine/node-record.js';
-export { EngineDisposedError, WorkflowEngine, type NodeRunRequest, type RunRequest, type WorkflowEngineOptions } from './engine/workflow-engine.js';
+export { EngineDisposedError, WorkflowEngine, type NodeRunRequest, type WorkflowEngineOptions } from './engine/workflow-engine.js';
 export { WorkflowExecution, type ExecutionResponse, type ExecutionStatus } from './engine/workflow-execution.js';

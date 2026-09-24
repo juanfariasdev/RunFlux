@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
-import type { WorkflowEngine } from '../../engine/workflow-engine.js';
+import type { WorkflowRunner } from '../../contracts/runner.js';
 
 export interface CliOutput {
   log(...values: unknown[]): void;
@@ -9,14 +9,14 @@ export interface CliOutput {
 
 /**
  * Runs a workflow once from the command line. The first argument is the payload: JSON, or any
- * other text passed as `{ raw: text }`. Disposing the engine is up to its owner.
+ * other text passed as `{ raw: text }`. Disposing the runner is up to its owner.
  */
 export class CliHost {
-  private readonly engine: WorkflowEngine;
+  private readonly runner: WorkflowRunner;
   private readonly output: CliOutput;
 
-  constructor(engine: WorkflowEngine, output: CliOutput = console) {
-    this.engine = engine;
+  constructor(runner: WorkflowRunner, output: CliOutput = console) {
+    this.runner = runner;
     this.output = output;
   }
 
@@ -28,9 +28,9 @@ export class CliHost {
   /** Runs the workflow and returns the process exit code. */
   async run(args: readonly string[]): Promise<number> {
     const payload = parsePayload(args[0]);
-    this.output.log(`[RunFlux CLI] Executing workflow ${this.engine.workflow.name} with input:`, JSON.stringify(payload));
+    this.output.log(`[RunFlux CLI] Executing workflow ${this.runner.workflow.name} with input:`, JSON.stringify(payload));
     try {
-      const execution = await this.engine.run({ payload });
+      const execution = await this.runner.run({ payload });
       this.output.log(JSON.stringify(execution.toResponse(), null, 2));
       return execution.succeeded ? 0 : 1;
     } catch (error) {

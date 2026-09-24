@@ -46,8 +46,9 @@ or a plugin-specific service in `extensions` instead of mocking modules.
 
 `engine.run({ payload, triggerId, signal })` runs the workflow; aborting `signal` stops it.
 `engine.dispose()` waits for the runs in progress, then releases what the handlers hold. Whoever
-creates an engine disposes it: the hosts (`ExpressHost`, `LambdaHost`, `CronHost`, `CliHost`) only
-serve the engine they are given.
+creates an engine disposes it. The hosts (`ExpressHost`, `LambdaHost`, `CronHost`, `CliHost`) depend on
+the `WorkflowRunner` port (`workflow` and `run`), which `WorkflowEngine` implements: they only serve
+the runner they are given, so a composition root can pass a runner that wraps the engine.
 
 ## Rules
 

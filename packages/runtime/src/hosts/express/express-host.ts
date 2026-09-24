@@ -1,7 +1,7 @@
 import type { Server } from 'node:http';
 import cors from 'cors';
 import express, { type Express, type NextFunction, type Request, type RequestHandler, type Response } from 'express';
-import type { RunRequest, WorkflowEngine } from '../../engine/workflow-engine.js';
+import type { RunRequest, WorkflowRunner } from '../../contracts/runner.js';
 import { HOST_ROUTES, type HttpTrigger, type WebhookRequest } from '../../workflow/triggers.js';
 import { HttpTriggerAuthenticator } from '../http/http-trigger-authenticator.js';
 import { HttpTriggerRouter } from '../http/http-trigger-router.js';
@@ -22,13 +22,13 @@ export interface ExpressHostOptions {
  */
 export class ExpressHost {
   readonly app: Express;
-  private readonly engine: WorkflowEngine;
+  private readonly runner: WorkflowRunner;
   private readonly options: ExpressHostOptions;
   private readonly authenticator: HttpTriggerAuthenticator;
   private server?: Server;
 
-  constructor(engine: WorkflowEngine, options: ExpressHostOptions = {}) {
-    this.engine = engine;
+  constructor(runner: WorkflowRunner, options: ExpressHostOptions = {}) {
+    this.runner = runner;
     this.options = options;
     this.authenticator = options.authenticator ?? new HttpTriggerAuthenticator();
     this.app = this.createApp();
@@ -41,7 +41,7 @@ export class ExpressHost {
     });
   }
 
-  /** Stops accepting requests and waits for those in progress. Disposing the engine is up to its owner. */
+  /** Stops accepting requests and waits for those in progress. Disposing the runner is up to its owner. */
   async close(): Promise<void> {
     const server = this.server;
     this.server = undefined;
@@ -49,7 +49,7 @@ export class ExpressHost {
   }
 
   private createApp(): Express {
-    const { workflow } = this.engine;
+    const { workflow } = this.runner;
     const limit = this.options.bodyLimit ?? '1mb';
     const app = express();
     app.use(cors());
@@ -97,7 +97,7 @@ export class ExpressHost {
       if (!response.writableFinished) disconnected.abort();
     });
     try {
-      const execution = await this.engine.run({ ...request, signal: disconnected.signal });
+      const execution = await this.runner.run({ ...request, signal: disconnected.signal });
       if (!response.headersSent) response.status(execution.succeeded ? 200 : 500).json(execution.toResponse());
     } catch (error) {
       if (!response.headersSent) response.status(500).json({ success: false, error: error instanceof Error ? error.message : String(error) });

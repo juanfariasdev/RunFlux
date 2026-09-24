@@ -1,4 +1,4 @@
-import type { RunRequest, WorkflowEngine } from '../../engine/workflow-engine.js';
+import type { RunRequest, WorkflowRunner } from '../../contracts/runner.js';
 import type { WebhookRequest } from '../../workflow/triggers.js';
 import { HttpTriggerAuthenticator } from '../http/http-trigger-authenticator.js';
 import { HttpTriggerRouter } from '../http/http-trigger-router.js';
@@ -34,13 +34,13 @@ class BadRequest extends Error {}
  * other event is rejected.
  */
 export class LambdaHost {
-  private readonly engine: WorkflowEngine;
+  private readonly runner: WorkflowRunner;
   private readonly router: HttpTriggerRouter;
   private readonly authenticator: HttpTriggerAuthenticator;
 
-  constructor(engine: WorkflowEngine, options: LambdaHostOptions = {}) {
-    this.engine = engine;
-    this.router = new HttpTriggerRouter(engine.workflow.triggers.http);
+  constructor(runner: WorkflowRunner, options: LambdaHostOptions = {}) {
+    this.runner = runner;
+    this.router = new HttpTriggerRouter(runner.workflow.triggers.http);
     this.authenticator = options.authenticator ?? new HttpTriggerAuthenticator();
   }
 
@@ -49,7 +49,7 @@ export class LambdaHost {
     try {
       const request = isHttp(event) ? this.httpRequest(event) : scheduledRequest(event);
       if ('statusCode' in request) return request;
-      const execution = await this.engine.run(request);
+      const execution = await this.runner.run(request);
       return respond(execution.succeeded ? 200 : 500, execution.toResponse());
     } catch (error) {
       if (error instanceof BadRequest) return respond(400, { error: error.message });

@@ -1,5 +1,5 @@
 import type { Clock, Logger } from '../../contracts/services.js';
-import type { WorkflowEngine } from '../../engine/workflow-engine.js';
+import type { WorkflowRunner } from '../../contracts/runner.js';
 import { ConsoleLogger, SystemClock } from '../../services/default-services.js';
 import type { ScheduleTrigger } from '../../workflow/triggers.js';
 
@@ -35,25 +35,25 @@ export interface CronHostOptions {
 
 /**
  * Starts each schedule's trigger when it fires. Failures are logged; they never stop the schedule.
- * Disposing the engine is up to its owner.
+ * Disposing the runner is up to its owner.
  */
 export class CronHost {
-  private readonly engine: WorkflowEngine;
+  private readonly runner: WorkflowRunner;
   private readonly scheduler: Scheduler;
   private readonly logger: Logger;
   private readonly clock: Clock;
   private readonly tasks: ScheduledTask[] = [];
   private starting?: Promise<readonly ScheduledTask[]>;
 
-  constructor(engine: WorkflowEngine, options: CronHostOptions = {}) {
-    this.engine = engine;
+  constructor(runner: WorkflowRunner, options: CronHostOptions = {}) {
+    this.runner = runner;
     this.scheduler = options.scheduler ?? new NodeCronScheduler();
     this.logger = options.logger ?? new ConsoleLogger();
     this.clock = options.clock ?? new SystemClock();
   }
 
   get schedules(): readonly ScheduleTrigger[] {
-    return this.engine.workflow.triggers.schedules;
+    return this.runner.workflow.triggers.schedules;
   }
 
   /**
@@ -79,7 +79,7 @@ export class CronHost {
       timezone: schedule.timezone,
     };
     try {
-      const execution = await this.engine.run({ payload, triggerId: schedule.nodeId });
+      const execution = await this.runner.run({ payload, triggerId: schedule.nodeId });
       if (!execution.succeeded) this.logger.error('[RunFlux Cron]', execution.error);
     } catch (error) {
       this.logger.error('[RunFlux Cron]', error);

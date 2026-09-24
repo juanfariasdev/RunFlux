@@ -1,4 +1,5 @@
 import type { ExecutionMode, NodeDefinition } from '../contracts/node.js';
+import type { RunRequest, WorkflowRunner } from '../contracts/runner.js';
 import type { RuntimeServices } from '../contracts/services.js';
 import { systemEnvironment, type EnvironmentVariables } from '../environment.js';
 import { ExpressionEvaluator } from '../expressions/expression-evaluator.js';
@@ -22,17 +23,6 @@ export interface WorkflowEngineOptions {
   readonly expressions?: ExpressionEvaluator;
 }
 
-export interface RunRequest {
-  /** What the starting triggers receive as input. */
-  readonly payload?: unknown;
-  /** Start only this trigger; all triggers start when omitted. */
-  readonly triggerId?: string;
-  /** Cancels the run: running nodes see their signal abort and no further node starts. */
-  readonly signal?: AbortSignal;
-  /** Stops the run at this node, executing only the target and the upstream nodes it depends on. */
-  readonly targetNodeId?: string;
-}
-
 export interface NodeRunRequest {
   /** Earlier records; the node's parents provide its input and its ancestors `$node`. */
   readonly previous?: Iterable<NodeRecord>;
@@ -47,7 +37,7 @@ export class EngineDisposedError extends Error {
 }
 
 /** Runs a workflow, or single nodes of it, with the node types of a catalog. */
-export class WorkflowEngine {
+export class WorkflowEngine implements WorkflowRunner {
   readonly workflow: ExecutableWorkflow;
   private readonly graph: WorkflowGraph;
   private readonly executor: NodeExecutor;
