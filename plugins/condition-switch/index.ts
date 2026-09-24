@@ -1,3 +1,4 @@
+import { createCodeGenerators } from '@runflux/plugin-system/generator-factory';
 import type { PluginModule } from '@runflux/plugin-system/types';
 import { RULE_ROW_SCHEMA } from '@runflux/plugin-system/condition-row-schema';
 import { evaluateSwitch, type SwitchRule } from '@runflux/plugin-system/operators';
@@ -23,18 +24,7 @@ export const manifest: PluginModule['manifest'] = {
   outputs: [...RULE_OUTPUTS, 'fallback'],
 };
 
-export const generators: PluginModule['generators'] = {
-  aws: (nodeConfig, ctx) => generators.local(nodeConfig, ctx),
-  local: (nodeConfig) => ({
-    files: [
-      {
-        path: 'condition-switch.ts',
-        content: generateConditionSwitchCode({ ...nodeConfig, ruleOutputs: RULE_OUTPUTS }),
-      },
-    ],
-    infra: [],
-  }),
-};
+export const generators = createCodeGenerators(manifest, (config) => generateConditionSwitchCode({ ...config, ruleOutputs: RULE_OUTPUTS }));
 
 export const execute: PluginModule['execute'] = (params, input) => {
   const rules = Array.isArray(params.rules) ? (params.rules as SwitchRule[]) : [];

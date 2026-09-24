@@ -96,9 +96,7 @@ describe('compiler-node-context: $node in compiled backends (009-expression-glob
 
     const runner = compilation.files.find((f) => f.path === 'src/runner.ts');
     expect(runner).toBeDefined();
-    expect(runner?.content).toContain('$node: nodeScope');
-    expect(runner?.content).toContain('nodeScope[nodeId] = entry');
-    expect(runner?.content).toContain('nodeScope[node.name] = entry');
+    expect(compilation.files.some((file) => file.path === 'src/runtime.js')).toBe(true);
   });
 
   it('successfully executes executeWorkflowGraph resolving $node from earlier nodes', async () => {

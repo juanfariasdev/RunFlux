@@ -29,7 +29,9 @@
     "./generators": "./src/code-generators.ts",
     "./standalone": "./src/standalone.ts",
     "./http-client": "./src/http-client.ts",
-    "./webhook-config": "./src/webhook-config.ts"
+    "./webhook-config": "./src/webhook-config.ts",
+    "./testing": "./src/testing.ts",
+    "./generator-factory": "./src/generator-factory.ts"
   },
   "scripts": {
     "test": "vitest run",

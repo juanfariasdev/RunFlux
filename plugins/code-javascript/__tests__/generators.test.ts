@@ -1,10 +1,11 @@
+import { loadGeneratedModule } from '@runflux/plugin-system/testing';
 import { describe, expect, it } from 'vitest';
 import { generators } from '../index';
 
 const testWorkflowContext = { workflowId: 'wf-1', nodeId: 'n1' };
 
 describe('code-javascript generators (010-code-node-plugin)', () => {
-  it('generates a TypeScript runner file for local platform encapsulating user code', () => {
+  it('generates an executable runner with the configured user code', async () => {
     const code = `
       const doubled = $json.val * 2;
       return { doubled };
@@ -14,11 +15,7 @@ describe('code-javascript generators (010-code-node-plugin)', () => {
     expect(artifact.files).toHaveLength(1);
     const file = artifact.files[0];
     expect(file.path).toBe('code-javascript.ts');
-    expect(file.content).toContain('export async function run($json: any, context?: any)');
-    expect(file.content).toContain('const doubled = $json.val * 2;');
-    expect(file.content).toContain('return { doubled };');
-    expect(file.content).toContain('context?.$node');
-    expect(file.content).toContain('context?.$env');
+    expect(await loadGeneratedModule(file.content).run({ val: 21 }, {})).toEqual({ doubled: 42 });
   });
 
   it('generates identical execution logic for AWS Lambda platform', () => {

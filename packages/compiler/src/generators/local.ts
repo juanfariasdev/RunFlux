@@ -43,7 +43,7 @@ export function generateLocalProject(context: LocalGeneratorContext): GeneratedF
 
   const scripts: Record<string, string> = {
     clean: 'rm -rf dist compiled',
-    build: `NODE_ENV=production npm run clean && esbuild ${buildEntrypoints.join(' ')} --bundle --format=esm --splitting --packages=external --out-extension:.js=.mjs --platform=node --target=node24 --banner:js="import { createRequire } from 'module'; const require = createRequire(import.meta.url);" --outdir=dist`,
+    build: `NODE_ENV=production npm run clean && esbuild ${buildEntrypoints.join(' ')} --bundle --format=esm --splitting --packages=external --out-extension:.js=.mjs --platform=node --target=node22 --banner:js="import { createRequire } from 'module'; const require = createRequire(import.meta.url);" --outdir=dist`,
     package: 'npm run build && rm -rf compiled && mkdir -p compiled && zip -j compiled/function.zip dist/*',
     start: 'node dist/server.mjs',
     run: 'node dist/run.mjs',
@@ -117,7 +117,7 @@ export function generateLocalProject(context: LocalGeneratorContext): GeneratedF
   );
 
   const dockerfileContent = `# Stage 1: Build
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 WORKDIR /app
 COPY package*.json tsconfig.json ./
 RUN npm ci || npm install
@@ -125,7 +125,7 @@ COPY . .
 RUN npm run build
 
 # Stage 2: Runner
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 COPY package*.json ./
@@ -322,12 +322,12 @@ if (isDirectRun) {
       input = { raw: process.argv[2] };
     }
   }
-  console.log('[RunFlux CLI] Executing workflow "${projectName}" with input:', JSON.stringify(input));
+  console.log(${JSON.stringify('[RunFlux CLI] Executing workflow ' + projectName + ' with input:')}, JSON.stringify(input));
   runWorkflow(input)
     .then((out) => {
       console.log('[RunFlux CLI] Execution completed successfully:');
       console.log(JSON.stringify(out, null, 2));
-      process.exit(0);
+      process.exit(out.success ? 0 : 1);
     })
     .catch((err) => {
       console.error('[RunFlux CLI] Execution error:', err);

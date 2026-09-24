@@ -19,7 +19,8 @@
   "dependencies": {
     "@runflux/plugin-system": "*",
     "@runflux/workflow-model": "*",
-    "jszip": "^3.10.1"
+    "jszip": "^3.10.1",
+    "esbuild": "^0.28.2"
   },
   "devDependencies": {
     "@types/jszip": "^3.4.0",

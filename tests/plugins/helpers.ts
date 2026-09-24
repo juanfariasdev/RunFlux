@@ -1,18 +1,10 @@
 import { createRequire } from 'node:module';
 import { posix } from 'node:path';
-import { transformSync } from 'esbuild';
+import { loadGeneratedModule as loadGenerated } from '@runflux/plugin-system/testing';
+export { loadGeneratedModule as loadGenerated } from '@runflux/plugin-system/testing';
 import type { PluginModule } from '@runflux/plugin-system/types';
 
 const require = createRequire(import.meta.url);
-
-/** Execute the actual artifact, including its exports, instead of inspecting source text. */
-export function loadGenerated(source: string, dependencies: Record<string, unknown> = {}, resolve = require): Record<string, any> {
-  const { code } = transformSync(source, { loader: 'ts', format: 'cjs', target: 'node20' });
-  const module = { exports: {} };
-  new Function('module', 'exports', 'require', code)(module, module.exports,
-    (name: string) => name in dependencies ? dependencies[name] : resolve(name));
-  return module.exports;
-}
 
 export function loadProject(files: Array<{ path: string; content: string }>, entry = 'src/runner.ts') {
   const cache = new Map<string, Record<string, any>>();

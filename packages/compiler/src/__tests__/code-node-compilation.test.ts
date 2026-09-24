@@ -111,7 +111,7 @@ describe('code-node compilation (010-code-node-plugin)', () => {
     expect(result.status).toBe('success');
     if (result.status !== 'success') return;
 
-    const codeFile = result.files.find((f) => f.path.includes('code-javascript.ts'));
+    const codeFile = result.files.find((f) => f.path.includes('code-javascript.js'));
     expect(codeFile).toBeDefined();
     expect(codeFile?.content).toContain('calculated: $json.price * 3');
     expect(codeFile?.content).toContain('export async function run($json: any, context?: any)');

@@ -225,7 +225,7 @@ export class CompilerService {
           packages: 'external',
           outExtension: { '.js': '.mjs' },
           platform: 'node',
-          target: 'node24',
+          target: 'node22',
           banner: {
             js: "import { createRequire } from 'module'; const require = createRequire(import.meta.url);",
           },
@@ -240,7 +240,7 @@ export class CompilerService {
           format: 'esm',
           outExtension: { '.js': '.mjs' },
           platform: 'node',
-          target: 'node24',
+          target: 'node22',
           banner: {
             js: "import { createRequire } from 'module'; const require = createRequire(import.meta.url);",
           },

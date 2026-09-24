@@ -1,3 +1,4 @@
+import { createCodeGenerators } from '@runflux/plugin-system/generator-factory';
 import type { PluginModule } from '@runflux/plugin-system/types';
 import { CONDITION_ROW_SCHEMA } from '@runflux/plugin-system/condition-row-schema';
 import { matchRule, type ConditionRule } from '@runflux/plugin-system/operators';
@@ -21,18 +22,7 @@ export const manifest: PluginModule['manifest'] = {
   outputs: ['main'],
 };
 
-export const generators: PluginModule['generators'] = {
-  aws: (nodeConfig, ctx) => generators.local(nodeConfig, ctx),
-  local: (nodeConfig) => ({
-    files: [
-      {
-        path: 'filter.ts',
-        content: generateFilterCode(nodeConfig),
-      },
-    ],
-    infra: [],
-  }),
-};
+export const generators = createCodeGenerators(manifest, generateFilterCode);
 
 export const execute: PluginModule['execute'] = (params, input) => {
   const conditions = Array.isArray(params.conditions) ? (params.conditions as ConditionRule[]) : [];

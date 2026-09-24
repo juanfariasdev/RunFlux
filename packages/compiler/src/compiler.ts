@@ -1,4 +1,5 @@
 import { CyclicWorkflowError } from '@runflux/workflow-model';
+import { transformSync } from 'esbuild';
 import type { WorkflowDefinition } from '@runflux/workflow-model';
 import type {
   CompilationRequest,
@@ -66,16 +67,20 @@ export async function compileWorkflow(
           nodeId: node.id,
         });
 
+        if (!artifact?.files?.length) throw new Error('Generator returned no entrypoint');
         if (artifact && Array.isArray(artifact.files)) {
           for (const file of artifact.files) {
-            const rawFileName = file.path ? file.path.replace(/^.*[\\\/]/, '') : `${node.pluginId}.ts`;
-            const normalizedPath = file.path.startsWith('src/nodes/')
-              ? file.path
-              : `src/nodes/node-${i + 1}-${rawFileName}`;
+            const relativePath = file.path.replace(/\\/g, '/').replace(/^src\/nodes\//, '');
+            if (!relativePath || relativePath.startsWith('/') || relativePath.split('/').some((part) => part === '..' || part === '.') || relativePath.includes(':')) {
+              throw new Error(`Unsafe artifact path "${file.path}"`);
+            }
+            const isTypeScript = relativePath.endsWith('.ts');
+            const normalizedPath = `src/nodes/node-${i + 1}/${relativePath.replace(/\.ts$/, '.js')}`;
+            if (nodeFiles.some((file) => file.path === normalizedPath)) throw new Error(`Duplicate artifact path "${file.path}"`);
             nodeEntries[node.id] ??= { path: normalizedPath, isTrigger: plugin.manifest.category === 'trigger', outputs: plugin.manifest.outputs };
             nodeFiles.push({
               path: normalizedPath,
-              content: file.content || '',
+              content: isTypeScript ? transformSync(file.content, { loader: 'ts', format: 'esm', target: 'node22' }).code : file.content,
               type: 'source',
             });
           }

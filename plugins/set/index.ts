@@ -1,3 +1,4 @@
+import { createCodeGenerators } from '@runflux/plugin-system/generator-factory';
 import type { PluginModule } from '@runflux/plugin-system/types';
 import { FIELDS_ROW_SCHEMA, composeFields, type FieldConfig } from '@runflux/plugin-system/fields-row-schema';
 import { generateSetCode } from '@runflux/plugin-system/generators';
@@ -27,18 +28,7 @@ function compose(fields: FieldConfig[], includeOtherFields: boolean, input: unkn
   return { ...base, ...composeFields(fields) };
 }
 
-export const generators: PluginModule['generators'] = {
-  aws: (nodeConfig, ctx) => generators.local(nodeConfig, ctx),
-  local: (nodeConfig) => ({
-    files: [
-      {
-        path: 'set.ts',
-        content: generateSetCode(nodeConfig),
-      },
-    ],
-    infra: [],
-  }),
-};
+export const generators = createCodeGenerators(manifest, generateSetCode);
 
 export const execute: PluginModule['execute'] = (params, input) => {
   const fields = Array.isArray(params.fields) ? (params.fields as FieldConfig[]) : [];

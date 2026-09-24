@@ -120,7 +120,7 @@ describe('database-query compilation (012-database-query-plugin)', () => {
     expect(pkg.dependencies).toHaveProperty('pg');
     expect(pkg.devDependencies).toHaveProperty('@types/pg');
 
-    const dbFile = result.files.find((f) => f.path.includes('database-query.ts'));
+    const dbFile = result.files.find((f) => f.path.includes('database-query.js'));
     expect(dbFile).toBeDefined();
     expect(dbFile?.content).toContain("import pg from 'pg';");
   });

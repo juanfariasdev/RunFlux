@@ -1,3 +1,4 @@
+import { createCodeGenerators } from '@runflux/plugin-system/generator-factory';
 import type { PluginModule } from '@runflux/plugin-system/types';
 import { extractContext } from '@runflux/plugin-system/context-helpers';
 import { generateCodeJavascriptCode } from '@runflux/plugin-system/generators';
@@ -29,18 +30,7 @@ return {
   supportedPlatforms: ['local', 'aws'],
 };
 
-export const generators: PluginModule['generators'] = {
-  aws: (nodeConfig, ctx) => generators.local(nodeConfig, ctx),
-  local: (nodeConfig) => ({
-    files: [
-      {
-        path: 'code-javascript.ts',
-        content: generateCodeJavascriptCode(nodeConfig),
-      },
-    ],
-    infra: [],
-  }),
-};
+export const generators = createCodeGenerators(manifest, generateCodeJavascriptCode);
 
 export const execute: PluginModule['execute'] = async (params, input, context) => {
   const rawCode = (params.code as string | undefined)?.trim() || 'return $json;';

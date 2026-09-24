@@ -1,3 +1,4 @@
+import { getSchedules, toAwsCron } from './schedules.js';
 import { buildAwsHandler } from './templates/aws-handler.js';
 import { generateRunnerRuntime } from './templates/runner-template.js';
 import type { WorkflowDefinition } from '@runflux/workflow-model';
@@ -26,6 +27,7 @@ export function generateAwsProject(context: AwsGeneratorContext): GeneratedFile[
   const stackName = projectName.replace(/[^a-zA-Z0-9]/g, '') + 'Stack' || 'WorkflowStack';
 
   // Detect triggers
+  const schedules = getSchedules(workflow);
   const cronNode = workflow.nodes.find((n) => n.pluginId === 'trigger-cron');
   const webhookNode = workflow.nodes.find((n) => n.pluginId === 'trigger-webhook');
   const hasDatabase = workflow.nodes.some((n) => n.pluginId === 'database-query');
@@ -39,7 +41,7 @@ export function generateAwsProject(context: AwsGeneratorContext): GeneratedFile[
   const webhookHeaderName = (webhookNode?.parameters?.headerName as string) || "X-Webhook-Secret";
 
   const dependencies: Record<string, string> = {
-    'aws-cdk-lib': '^2.155.0',
+    'aws-cdk-lib': '^2.177.0',
     constructs: '^10.3.0',
     'source-map-support': '^0.5.21',
   };
@@ -58,18 +60,19 @@ export function generateAwsProject(context: AwsGeneratorContext): GeneratedFile[
       },
       scripts: {
         clean: 'rm -rf dist compiled',
-        build: 'NODE_ENV=production npm run clean && esbuild src/handler.ts --bundle --format=esm --out-extension:.js=.mjs --platform=node --target=node24 --banner:js="import { createRequire } from \'module\'; const require = createRequire(import.meta.url);" --outdir=dist',
+        build: 'NODE_ENV=production npm run clean && esbuild src/handler.ts --bundle --format=esm --out-extension:.js=.mjs --platform=node --target=node22 --banner:js="import { createRequire } from \'module\'; const require = createRequire(import.meta.url);" --outdir=dist',
         package: 'npm run build && rm -rf compiled && mkdir -p compiled && zip -j compiled/function.zip dist/*',
         cdk: 'cdk',
-        deploy: 'cdk deploy',
+        deploy: 'npm run package && cdk deploy',
       },
       dependencies,
       devDependencies: {
         '@types/aws-lambda': '^8.10.145',
         '@types/node': '^22.5.0',
-        'aws-cdk': '^2.155.0',
+        'aws-cdk': '^2.177.0',
         esbuild: '^0.28.2',
         typescript: '^5.5.4',
+        tsx: '^4.19.0',
         ...(hasDatabase ? { '@types/pg': '^8.11.10' } : {}),
       },
     },
@@ -98,7 +101,7 @@ export function generateAwsProject(context: AwsGeneratorContext): GeneratedFile[
 
   const cdkJsonContent = JSON.stringify(
     {
-      app: 'node --loader tsx bin/app.ts',
+      app: 'npx tsx bin/app.ts',
       watch: {
         include: ['**'],
         exclude: ['README.md', 'cdk*.json', '**/*.d.ts', '**/*.js', 'tsconfig.json', 'package*.json'],
@@ -113,7 +116,7 @@ export function generateAwsProject(context: AwsGeneratorContext): GeneratedFile[
 Compiled serverless backend for AWS Lambda and AWS CDK generated with [RunFlux](https://runflux.io).
 
 ## Architecture
-- **Lambda Function:** Bundled via \`esbuild\` into ultra-lightweight \`dist/handler.mjs\` (~2.5 KB)
+- **Lambda Function:** Bundled via \`esbuild\` into \`dist/handler.mjs\`
 - **Zero Runtime Dependencies:** No \`node_modules\` required inside the deployment zip
 - **Infrastructure as Code:** AWS CDK Stack in \`lib/workflow-stack.ts\`
 - **Endpoint:** AWS Lambda Function URL (Public HTTP endpoint with CORS support)
@@ -141,7 +144,7 @@ import { WorkflowStack } from '../lib/workflow-stack.js';
 
 const app = new cdk.App();
 new WorkflowStack(app, '${stackName}', {
-  description: 'Compiled stack by RunFlux for project ${projectName}',
+  description: ${JSON.stringify('Compiled stack by RunFlux for project ' + projectName)},
 });
 `;
 
@@ -151,29 +154,32 @@ new WorkflowStack(app, '${stackName}', {
     "import { Stack, StackProps } from 'aws-cdk-lib';",
     "import * as lambda from 'aws-cdk-lib/aws-lambda';",
     "import { Construct } from 'constructs';",
-    "import * as path from 'node:path';",
+    "import { fileURLToPath } from 'node:url';",
   ];
 
   if (hasCron) {
-    cdkImports.push("import * as events from 'aws-cdk-lib/aws-events';");
-    cdkImports.push("import * as targets from 'aws-cdk-lib/aws-events-targets';");
+    cdkImports.push("import * as scheduler from 'aws-cdk-lib/aws-scheduler';");
+    cdkImports.push("import * as iam from 'aws-cdk-lib/aws-iam';");
   }
 
-  let cronCdkBlock = '';
-  if (hasCron) {
-    cronCdkBlock = `
-    // Scheduled EventBridge Rule
-    const cronRule = new events.Rule(this, 'WorkflowCronRule', {
-      schedule: events.Schedule.expression('cron(${cronExpression})'),
-      description: 'Scheduled trigger for workflow ${projectName}',
+  const cronCdkBlock = hasCron ? `
+    const schedulerRole = new iam.Role(this, 'SchedulerRole', {
+      assumedBy: new iam.ServicePrincipal('scheduler.amazonaws.com'),
     });
-    cronRule.addTarget(new targets.LambdaFunction(workflowFunction));
-`;
-  }
+    workflowFunction.grantInvoke(schedulerRole);
+${schedules.map((schedule, index) => `
+    new scheduler.CfnSchedule(this, 'WorkflowSchedule${index + 1}', {
+      scheduleExpression: ${JSON.stringify(toAwsCron(schedule.expression))},
+      scheduleExpressionTimezone: ${JSON.stringify(schedule.timezone)},
+      flexibleTimeWindow: { mode: 'OFF' },
+      target: { arn: workflowFunction.functionArn, roleArn: schedulerRole.roleArn,
+        input: ${JSON.stringify(JSON.stringify({ runfluxTriggerId: schedule.nodeId }))} },
+    });`).join('\n')}
+` : '';
 
   const customEnvVars = options?.envVars || workflow.settings?.envVars || [];
   const customEnvEntries = customEnvVars.map(
-    (v) => `        ${v.key}: process.env.${v.key} || ${JSON.stringify(v.value ?? '')},`
+    (v) => `        ${JSON.stringify(v.key)}: process.env[${JSON.stringify(v.key)}] || ${JSON.stringify(v.value ?? '')},`
   );
   const customEnvBlock = customEnvEntries.length > 0 ? `\n${customEnvEntries.join('\n')}` : '';
 
@@ -184,15 +190,15 @@ export class WorkflowStack extends Stack {
     super(scope, id, props);
 
     const workflowFunction = new lambda.Function(this, 'WorkflowFunction', {
-      runtime: lambda.Runtime.NODEJS_20_X,
-      handler: 'dist/handler.mjs',
-      code: lambda.Code.fromAsset(path.join(__dirname, '..', 'compiled', 'function.zip')),
+      runtime: lambda.Runtime.NODEJS_22_X,
+      handler: 'handler.handler',
+      code: lambda.Code.fromAsset(fileURLToPath(new URL('../compiled/function.zip', import.meta.url))),
       timeout: cdk.Duration.seconds(30),
       memorySize: 512,
       environment: {
-        WORKFLOW_NAME: '${projectName}',
+        WORKFLOW_NAME: ${JSON.stringify(projectName)},
         NODE_ENV: 'production',
-        ${hasWebhook ? `${webhookSecretEnvVar}: process.env.${webhookSecretEnvVar} || '',` : ''}${customEnvBlock}
+        ${hasWebhook ? `${JSON.stringify(webhookSecretEnvVar)}: process.env[${JSON.stringify(webhookSecretEnvVar)}] || '',` : ''}${customEnvBlock}
       },
     });
 

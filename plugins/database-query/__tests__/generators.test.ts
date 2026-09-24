@@ -1,40 +1,17 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { loadGeneratedModule } from '@runflux/plugin-system/testing';
 import { generators } from '../index.js';
 
-describe('database-query generators (012-database-query-plugin)', () => {
-  it('generates local artifact with pg connection pool and query', () => {
-    const artifact = generators.local(
-      {
-        databaseType: 'postgres',
-        connectionEnvVar: 'CUSTOM_DB_URL',
-        query: 'SELECT id, email FROM customers WHERE active = true;',
-        outputMode: 'all',
-      },
-      {} as any
-    );
-
-    expect(artifact.files).toHaveLength(1);
-    const file = artifact.files[0];
-    expect(file.path).toBe('database-query.ts');
-    expect(file.content).toContain("import pg from 'pg';");
-    expect(file.content).toContain('CUSTOM_DB_URL');
-    expect(file.content).toContain('SELECT id, email FROM customers WHERE active = true;');
-    expect(file.content).toContain('return rows;');
-  });
-
-  it('generates aws artifact with single-result extraction when outputMode is first', () => {
-    const artifact = generators.aws(
-      {
-        databaseType: 'postgres',
-        connectionEnvVar: 'DATABASE_URL',
-        query: 'SELECT * FROM users WHERE id = $1;',
-        outputMode: 'first',
-      },
-      {} as any
-    );
-
-    expect(artifact.files).toHaveLength(1);
-    const file = artifact.files[0];
-    expect(file.content).toContain('return rows[0] ?? null;');
+afterEach(() => vi.unstubAllEnvs());
+describe('database-query generated backend', () => {
+  it.each(['local', 'aws'])('%s binds query parameters and returns the selected result shape', async (platform) => {
+    vi.stubEnv('CUSTOM_DB_URL', 'postgres://localhost/test');
+    const query = vi.fn(async () => ({ rows: [{ id: 7 }] }));
+    const pg = { Pool: class { query = query; on() { return this; } } };
+    for (const outputMode of ['all', 'first']) {
+      const artifact = generators[platform]({ connectionEnvVar: 'CUSTOM_DB_URL', query: 'SELECT id WHERE id = $1', queryParams: [7], outputMode }, { workflowId: 'test', nodeId: 'db' });
+      expect(await loadGeneratedModule(artifact.files[0].content, { pg }).run({}, {})).toEqual(outputMode === 'first' ? { id: 7 } : [{ id: 7 }]);
+    }
+    expect(query).toHaveBeenCalledWith('SELECT id WHERE id = $1', [7]);
   });
 });

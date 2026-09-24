@@ -16,7 +16,7 @@ export function generateGraphRunner(workflow: WorkflowDefinition, nodeFiles: Gen
     name: ${JSON.stringify(node.appearance?.label || node.id)},
     isTrigger: ${entry?.isTrigger ?? node.pluginId.startsWith('trigger-')},
     outputs: ${JSON.stringify(entry?.outputs) ?? 'undefined'},
-    run: (input, context) => nodeModule_${index}.run(input, context),
+    run: nodeModule_${index}.run as GraphNode['run'],
   }`;
   });
   const connections = workflow.connections.map((c) => ({

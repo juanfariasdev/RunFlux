@@ -1,3 +1,4 @@
+import { createCodeGenerators } from '@runflux/plugin-system/generator-factory';
 import { callHttp } from '@runflux/plugin-system/http-client';
 import type { PluginModule } from '@runflux/plugin-system/types';
 import { generateHttpOutputCode } from '@runflux/plugin-system/generators';
@@ -22,18 +23,7 @@ export const manifest: PluginModule['manifest'] = {
   supportedPlatforms: ['local', 'aws'],
 };
 
-export const generators: PluginModule['generators'] = {
-  aws: (nodeConfig, ctx) => generators.local(nodeConfig, ctx),
-  local: (nodeConfig) => ({
-    files: [
-      {
-        path: 'http-output.ts',
-        content: generateHttpOutputCode(nodeConfig),
-      },
-    ],
-    infra: [],
-  }),
-};
+export const generators = createCodeGenerators(manifest, generateHttpOutputCode);
 
 export const execute: PluginModule['execute'] = async (params) => {
   const method = (params.method as string | undefined) ?? 'GET';
