@@ -14,6 +14,9 @@
       "path": "packages/validation-runtime"
     },
     {
+      "path": "packages/runtime"
+    },
+    {
       "path": "packages/workflow-model"
     },
     {

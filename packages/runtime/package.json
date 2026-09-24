@@ -1,0 +1,35 @@
+{
+  "name": "@runflux/runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Workflow execution runtime shared by the RunFlux editor and every exported backend.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./express": "./src/hosts/express/index.ts",
+    "./lambda": "./src/hosts/lambda/index.ts",
+    "./cron": "./src/hosts/cron/index.ts",
+    "./cli": "./src/hosts/cli/index.ts",
+    "./plugins": "./src/plugins.ts"
+  },
+  "scripts": {
+    "build:node": "tsc -b tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -b tsconfig.json"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.0",
+    "node-cron": "^4.6.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.5.0",
+    "@types/supertest": "^6.0.2",
+    "supertest": "^7.0.0",
+    "typescript": "^5.5.4",
+    "vitest": "^4.1.9"
+  }
+}
