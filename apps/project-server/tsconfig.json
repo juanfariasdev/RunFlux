@@ -1,23 +1,23 @@
 {
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "lib": ["ES2022"],
     "rootDir": "src",
     "outDir": "dist",
-    "strict": true,
-    "composite": true,
-    "declaration": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "verbatimModuleSyntax": false
   },
-  "include": ["src/**/*.ts"],
+  "include": [
+    "src/**/*.ts"
+  ],
   "references": [
-    { "path": "../../packages/workflow-model" },
-    { "path": "../../packages/plugin-system" },
-    { "path": "../../packages/compiler" }
+    {
+      "path": "../../packages/workflow-model"
+    },
+    {
+      "path": "../../packages/plugin-system"
+    },
+    {
+      "path": "../../packages/compiler"
+    }
   ]
 }
