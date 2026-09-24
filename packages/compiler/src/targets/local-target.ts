@@ -1,4 +1,4 @@
-import type { HttpTrigger } from '@runflux/runtime';
+import { HOST_ROUTES, type HttpTrigger } from '@runflux/runtime';
 import type { EnvironmentVariableDeclaration } from '@runflux/plugin-system';
 import { RUNTIME_ENTRIES, type RuntimeEntry } from '../bundling/runtime-bundler.js';
 import type { DeploymentPlan } from '../deployment/deployment-plan.js';
@@ -141,7 +141,7 @@ export class LocalTarget implements DeploymentTarget {
       .code('bash', ['npm install', 'cp .env.example .env', '# Edit .env with your deployment settings', 'npm run build'])
       .heading(3, 'HTTP server')
       .code('bash', ['npm run start'])
-      .list([`Health check: ${code(`GET http://localhost:${port}/health`)}`, ...endpoints(http, port)])
+      .list([`Health check: ${code(`GET http://localhost:${port}${HOST_ROUTES.health}`)}`, ...endpoints(http, port)])
     if (includeCli(options)) {
       readme
         .heading(3, 'Command line')
@@ -172,7 +172,7 @@ function includeCli(options: CompilationOptions): boolean {
 }
 
 function endpoints(triggers: readonly HttpTrigger[], port: number): string[] {
-  if (triggers.length === 0) return [`Run the workflow: ${code(`POST http://localhost:${port}/api/execute`)}`];
+  if (triggers.length === 0) return [`Run the workflow: ${code(`POST http://localhost:${port}${HOST_ROUTES.execute}`)}`];
   return triggers.map((trigger) => {
     const security = trigger.authentication.type === 'none' ? 'no authentication' : `requires ${code(trigger.authentication.headerName)} = ${code(`$${trigger.authentication.secretEnvVar}`)}`;
     return `Webhook ${code(`${trigger.method} http://localhost:${port}${trigger.path}`)} (${security})`;

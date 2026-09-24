@@ -93,7 +93,7 @@ export interface ProjectEnvVar {
   description?: string;
 }
 
-export const envVarItemSchema = z.object({
+const envVarItemSchema = z.object({
   key: z
     .string()
     .min(1, 'Nome da variável não pode ser vazio')
@@ -102,7 +102,7 @@ export const envVarItemSchema = z.object({
   description: z.string().optional(),
 });
 
-export const envVarsArraySchema = z.array(envVarItemSchema);
+const envVarsArraySchema = z.array(envVarItemSchema);
 
 export const runfluxEnvelopeSchema = z.object({
   $schema: z.string().optional(),

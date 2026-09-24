@@ -9,7 +9,7 @@ export const TOOL_VERSIONS = {
   typescript: '^5.5.4',
 } as const;
 
-export const NODE_VERSION = '>=22';
+const NODE_VERSION = '>=22';
 
 export interface PackageManifest {
   readonly name: string;

@@ -5,8 +5,7 @@ import type { PluginReferenceStatus } from '@runflux/plugin-system/api/check-plu
  * Seam between the editor's UI (browser) and the Plugin System's discovery
  * mechanism (Node.js `fs`-based, `001-plugin-system`). Browser-safe: this
  * file and its implementation below use only `fetch`, never a Node API —
- * see `plugin-catalog-adapter.node.ts` for the Node-side counterpart
- * (used by tests and by `vite-plugin-plugin-catalog.ts`, never by App.tsx).
+ * discovery runs in `vite-plugin-plugin-catalog.ts`, in Vite's Node process.
  */
 export interface PluginCatalogAdapter {
   listPlugins(): Promise<Record<string, PluginManifest[]>>;

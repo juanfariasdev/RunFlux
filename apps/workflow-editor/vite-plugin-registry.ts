@@ -1,6 +1,6 @@
 import path from 'node:path';
 import type { ViteDevServer } from 'vite';
-import { PluginRegistry } from '@runflux/plugin-system/node';
+import { consoleDiscoveryLogger, PluginRegistry } from '@runflux/plugin-system/node';
 
 /**
  * The plugins found in the editor's plugin directories. Discovery runs on first use and again
@@ -51,7 +51,8 @@ export class PluginRegistryCache {
 
   private async discover(): Promise<PluginRegistry> {
     const registry = new PluginRegistry();
-    await registry.discover({ pluginDirectories: [...this.directories] });
+    // Logs the plugins it rejects, which would otherwise just be missing from the palette.
+    await registry.discover({ pluginDirectories: [...this.directories], onLog: consoleDiscoveryLogger });
     return registry;
   }
 }

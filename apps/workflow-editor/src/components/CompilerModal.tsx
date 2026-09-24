@@ -1,17 +1,20 @@
 import { useState } from 'react';
 import { useProject } from '../context/ProjectContext';
 import { useWorkflowStore } from '../store/workflow-store';
-import { HttpCompilerApiAdapter, type TargetPlatform } from '../adapters/compiler-api-adapter';
+import { HttpCompilerApiAdapter, type CompileResult, type CompilerApi, type TargetPlatform } from '../adapters/compiler-api-adapter';
 import { Button } from './ui/button';
+
+const defaultCompiler = new HttpCompilerApiAdapter();
 
 export interface CompilerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCompile?: (platform: TargetPlatform, options: { includeCli: boolean }) => Promise<any>;
+  /** Compiles the workflow and serves its download; the project server's unless a test supplies one. */
+  compiler?: CompilerApi;
   projectName?: string;
 }
 
-export function CompilerModal({ isOpen, onClose, onCompile, projectName }: CompilerModalProps) {
+export function CompilerModal({ isOpen, onClose, compiler = defaultCompiler, projectName }: CompilerModalProps) {
   const { currentProject, envVars } = useProject();
   const workflow = useWorkflowStore((s) => s.workflow);
 
@@ -20,7 +23,7 @@ export function CompilerModal({ isOpen, onClose, onCompile, projectName }: Compi
   const [status, setStatus] = useState<'idle' | 'compiling' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [errorDetails, setErrorDetails] = useState<any[] | null>(null);
-  const [resultData, setResultData] = useState<any | null>(null);
+  const [resultData, setResultData] = useState<CompileResult | null>(null);
 
   if (!isOpen) return null;
 
@@ -31,40 +34,28 @@ export function CompilerModal({ isOpen, onClose, onCompile, projectName }: Compi
     setErrorMessage(null);
     setErrorDetails(null);
     try {
-      let res;
-      const options = { includeCli: targetPlatform === 'local' && includeCli };
-      if (onCompile) {
-        res = await onCompile(targetPlatform, options);
-      } else {
-        const adapter = new HttpCompilerApiAdapter();
-        const workflowWithSettings = {
-          ...workflow,
-          settings: {
-            ...workflow.settings,
-            envVars: envVars || [],
-          },
-        };
-        res = await adapter.compile({
-          workflow: workflowWithSettings,
-          targetPlatform,
-          projectName: effectiveProjectName,
-          options,
-        });
-      }
+      const workflowWithSettings = {
+        ...workflow,
+        settings: {
+          ...workflow.settings,
+          envVars: envVars || [],
+        },
+      };
+      const res = await compiler.compile({
+        workflow: workflowWithSettings,
+        targetPlatform,
+        projectName: effectiveProjectName,
+        options: { includeCli: targetPlatform === 'local' && includeCli },
+      });
       setResultData(res);
       setStatus('success');
 
-      if (res?.downloadUrl) {
-        const downloadHref = res.downloadUrl.startsWith('http')
-          ? res.downloadUrl
-          : `http://localhost:3001${res.downloadUrl}`;
-        const link = document.createElement('a');
-        link.href = downloadHref;
-        link.download = res.zipFilename || `${effectiveProjectName}.zip`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      }
+      const link = document.createElement('a');
+      link.href = compiler.getDownloadUrl(res.zipFilename, res.compilationId);
+      link.download = res.zipFilename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     } catch (err: any) {
       setStatus('error');
       setErrorMessage(err.message || 'Project compilation failed.');
@@ -212,19 +203,13 @@ export function CompilerModal({ isOpen, onClose, onCompile, projectName }: Compi
               </p>
               <div className="flex items-center justify-between pt-1">
                 <span className="text-slate-400 text-[11px]">File: {resultData.zipFilename}</span>
-                {resultData.downloadUrl && (
-                  <a
-                    href={
-                      resultData.downloadUrl.startsWith('http')
-                        ? resultData.downloadUrl
-                        : `http://localhost:3001${resultData.downloadUrl}`
-                    }
-                    download={resultData.zipFilename}
-                    className="text-indigo-400 hover:text-indigo-300 underline font-medium"
-                  >
-                    Download again (.zip)
-                  </a>
-                )}
+                <a
+                  href={compiler.getDownloadUrl(resultData.zipFilename, resultData.compilationId)}
+                  download={resultData.zipFilename}
+                  className="text-indigo-400 hover:text-indigo-300 underline font-medium"
+                >
+                  Download again (.zip)
+                </a>
               </div>
             </div>
           )}

@@ -1,29 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { HttpValidationRuntimeAdapter, NoopValidationRuntimeAdapter } from '../validation-runtime-adapter';
+import { HttpValidationRuntimeAdapter } from '../validation-runtime-adapter';
 import type { WorkflowDefinition } from '@runflux/workflow-model/types';
 
 const workflow: WorkflowDefinition = { id: 'wf-1', name: 'Test workflow', nodes: [], connections: [] };
-
-describe('NoopValidationRuntimeAdapter', () => {
-  it('run() always resolves with status "success" and an empty nodeResults', async () => {
-    const adapter = new NoopValidationRuntimeAdapter();
-    const result = await adapter.run(workflow, { mode: 'sandbox' });
-    expect(result).toEqual({ status: 'success', message: 'No-op validation: nothing was executed', nodeResults: [] });
-  });
-
-  it('runNode() always resolves with a result carrying no error', async () => {
-    const adapter = new NoopValidationRuntimeAdapter();
-    const result = await adapter.runNode(workflow, 'n1', { mode: 'sandbox' });
-    expect(result.nodeId).toBe('n1');
-    expect(result.error).toBeNull();
-  });
-
-  it('runToNode() resolves with a workflow result', async () => {
-    const adapter = new NoopValidationRuntimeAdapter();
-    const result = await adapter.runToNode(workflow, 'n1', { mode: 'sandbox' });
-    expect(result.status).toBe('success');
-  });
-});
 
 describe('HttpValidationRuntimeAdapter (browser-safe — posts to vite-plugin-validation-runtime.ts\'s dev-only endpoint)', () => {
   beforeEach(() => {

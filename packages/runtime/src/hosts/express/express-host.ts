@@ -2,7 +2,7 @@ import type { Server } from 'node:http';
 import cors from 'cors';
 import express, { type Express, type NextFunction, type Request, type RequestHandler, type Response } from 'express';
 import type { RunRequest, WorkflowEngine } from '../../engine/workflow-engine.js';
-import type { HttpTrigger, WebhookRequest } from '../../workflow/triggers.js';
+import { HOST_ROUTES, type HttpTrigger, type WebhookRequest } from '../../workflow/triggers.js';
 import { HttpTriggerAuthenticator } from '../http/http-trigger-authenticator.js';
 import { HttpTriggerRouter } from '../http/http-trigger-router.js';
 
@@ -53,13 +53,13 @@ export class ExpressHost {
     const limit = this.options.bodyLimit ?? '1mb';
     const app = express();
     app.use(cors());
-    app.get('/health', (_request, response) => {
+    app.get(HOST_ROUTES.health, (_request, response) => {
       response.json({ status: 'ok', project: this.options.projectName ?? workflow.name, workflowId: workflow.id, nodeCount: workflow.nodes.length });
     });
     if (workflow.triggers.http.length > 0) {
       app.use(this.triggerEndpoints(workflow.triggers.http, limit));
     } else {
-      app.post('/api/execute', parseJson(limit), (request, response) => {
+      app.post(HOST_ROUTES.execute, parseJson(limit), (request, response) => {
         void this.execute(response, { payload: request.body ?? {} });
       });
     }

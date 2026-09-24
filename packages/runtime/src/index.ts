@@ -47,6 +47,7 @@ export {
 export { ExecutableWorkflowBuilder, type NodeTypeDescription, type NodeTypeLookup, type WorkflowSource } from './workflow/workflow-builder.js';
 export { CyclicWorkflowError, NotATriggerError, UnknownNodeError, WorkflowGraph } from './workflow/workflow-graph.js';
 export {
+  HOST_ROUTES,
   HTTP_METHODS,
   isHttpHeaderName,
   NO_TRIGGERS,

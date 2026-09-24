@@ -5,7 +5,7 @@ import type { WorkflowDefinition } from '@runflux/workflow-model';
 import { ExportedProject, type ExportOptions } from './exported-project';
 import { compile } from './workflows';
 
-export const EXAMPLES_DIRECTORY = fileURLToPath(new URL('../../examples/', import.meta.url));
+const EXAMPLES_DIRECTORY = fileURLToPath(new URL('../../examples/', import.meta.url));
 
 /** A `.runflux.json` file, as the editor exports and imports projects. */
 export interface ExampleProject {

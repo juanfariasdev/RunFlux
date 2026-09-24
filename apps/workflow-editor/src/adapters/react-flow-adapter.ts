@@ -7,13 +7,13 @@ import type { WorkflowLayout } from '../domain/layout';
 
 /**
  * Data carried on every React Flow node (D-05). Keeps the canonical
- * WorkflowNode fields needed for a lossless round-trip, plus display-only
+ * WorkflowNode fields, plus display-only
  * info (the resolved manifest and plugin-reference status) the node's visual
  * component uses to render its label/icon and error state (RF-11), plus its
  * last validation result if it has one this session (003-validation-runtime,
  * RF-02/RF-05, D-09).
  */
-export interface WorkflowNodeData extends Record<string, unknown> {
+interface WorkflowNodeData extends Record<string, unknown> {
   pluginId: string;
   pluginVersion: string;
   parameters: Record<string, unknown>;
@@ -73,18 +73,6 @@ export function toReactFlowNode(
       isTesting: Boolean(isTesting),
       layout,
     },
-  };
-}
-
-export function fromReactFlowNode(flowNode: FlowNode): WorkflowNode {
-  return {
-    id: flowNode.id,
-    pluginId: flowNode.data.pluginId,
-    pluginVersion: flowNode.data.pluginVersion,
-    parameters: flowNode.data.parameters,
-    position: flowNode.position,
-    ...(flowNode.parentId ? { parentId: flowNode.parentId } : {}),
-    ...(Object.keys(flowNode.data.appearance).length > 0 ? { appearance: flowNode.data.appearance } : {}),
   };
 }
 

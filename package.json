@@ -29,7 +29,6 @@
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",
     "@electric-sql/pglite-socket": "^0.2.11",
-    "@types/jszip": "^3.4.0",
     "@types/node": "^22.5.0",
     "@types/supertest": "^6.0.2",
     "aws-cdk-lib": "^2.177.0",
@@ -39,10 +38,5 @@
     "supertest": "^7.0.0",
     "typescript": "^5.5.4",
     "vitest": "^4.1.9"
-  },
-  "dependencies": {
-    "@types/node-cron": "^3.0.11",
-    "jszip": "^3.10.1",
-    "node-cron": "^4.6.0"
   }
 }

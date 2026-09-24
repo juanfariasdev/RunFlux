@@ -1,5 +1,6 @@
 import {
   ExecutableWorkflowBuilder,
+  HOST_ROUTES,
   normalizeRoutePath,
   ObjectParameterReader,
   type ExecutableNode,
@@ -12,8 +13,7 @@ import type { WorkflowDefinition } from '@runflux/workflow-model';
 import { CompilationError, type CompilationOptions, type CompiledPlugin, type PluginResolver } from '../types.js';
 import { ComposeServices, EnvironmentDeclarations, PackageRequirements } from './contributions.js';
 
-/** Paths the local backend serves itself, which no webhook may take. */
-export const RESERVED_ROUTES: readonly string[] = ['/health', '/api/execute'];
+const RESERVED_ROUTES: readonly string[] = Object.values(HOST_ROUTES);
 
 /** A plugin whose runtime is bundled into the backend. */
 export interface BundledPlugin {

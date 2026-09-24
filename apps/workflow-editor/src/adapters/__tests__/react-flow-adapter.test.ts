@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { Position } from '@xyflow/react';
 import {
   fromReactFlowEdge,
-  fromReactFlowNode,
   toReactFlowEdge,
   toReactFlowNode,
 } from '../react-flow-adapter';
@@ -33,12 +32,16 @@ const connection: WorkflowConnection = {
   targetInput: 'main',
 };
 
-describe('toReactFlowNode / fromReactFlowNode round-trip', () => {
-  it('preserves id, position, and every canonical field through a round trip', () => {
+describe('toReactFlowNode', () => {
+  it('carries id, position, and every canonical field', () => {
     const flowNode = toReactFlowNode(node, manifest, { status: 'ok' });
-    const roundTripped = fromReactFlowNode(flowNode);
 
-    expect(roundTripped).toEqual(node);
+    expect(flowNode).toMatchObject({
+      id: 'node-1',
+      position: { x: 10, y: 20 },
+      data: { pluginId: 'trigger-cron', pluginVersion: '1.0.0', parameters: { schedule: '* * * * *' }, appearance: {} },
+    });
+    expect(flowNode.parentId).toBeUndefined();
   });
 
   it('carries the resolved manifest and reference status as display-only data', () => {

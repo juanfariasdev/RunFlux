@@ -51,6 +51,17 @@ describe('Toolbar — Save (RF-07, RN-04)', () => {
     await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     expect(await screen.findByText(/saved/i)).toBeInTheDocument();
   });
+
+  it('saves on Ctrl+S and Cmd+S, and names the workflow on the project selector', async () => {
+    const save = vi.fn().mockResolvedValue(undefined);
+    render(<Toolbar catalog={fakeCatalog()} persistence={{ save, load: vi.fn() }} validation={{ run: vi.fn(), runToNode: vi.fn(), runNode: vi.fn() }} />);
+
+    expect(screen.getByTestId('project-selector-btn')).toHaveTextContent('My Workflow');
+    fireEvent.keyDown(window, { key: 's', ctrlKey: true });
+    fireEvent.keyDown(window, { key: 'S', metaKey: true });
+
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+  });
 });
 
 describe('Toolbar — Test (RF-06, RF-12, RN-04)', () => {

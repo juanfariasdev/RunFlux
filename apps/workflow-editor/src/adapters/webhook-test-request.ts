@@ -1,7 +1,7 @@
 import { FieldComposer, isRecord, ObjectParameterReader, readFields } from '@runflux/runtime';
 
 /** Where a webhook trigger's test requests go on the editor's dev server. */
-export const WEBHOOK_TEST_PREFIX = '/runflux-webhook-test';
+const WEBHOOK_TEST_PREFIX = '/runflux-webhook-test';
 
 /**
  * The body a test request built from a webhook's `sampleBody` carries: its field rows composed

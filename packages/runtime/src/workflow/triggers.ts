@@ -44,6 +44,14 @@ export interface WebhookRequest {
 
 export const NO_TRIGGERS: WorkflowTriggers = { http: [], schedules: [] };
 
+/** Paths the Express host serves itself, which no webhook may take. */
+export const HOST_ROUTES = {
+  /** `GET`: the backend's status. */
+  health: '/health',
+  /** `POST`: runs a workflow that has no HTTP trigger. */
+  execute: '/api/execute',
+} as const;
+
 // RFC 9110 token characters.
 const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 

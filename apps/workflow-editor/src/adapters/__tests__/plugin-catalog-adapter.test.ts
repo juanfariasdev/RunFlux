@@ -19,7 +19,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('HttpPluginCatalogAdapter (browser-safe — no Node APIs, see plugin-catalog-adapter.node.ts for the Node side)', () => {
+describe('HttpPluginCatalogAdapter (browser-safe — no Node APIs)', () => {
   it('fetches the catalog from the default URL', async () => {
     const adapter = new HttpPluginCatalogAdapter();
     const result = await adapter.listPlugins();

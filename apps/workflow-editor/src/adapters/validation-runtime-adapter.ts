@@ -33,22 +33,6 @@ export interface ValidationRunResult {
   nodeResults: NodeResult[];
 }
 
-/** Reports success without running anything: a stand-in for tests that do not execute nodes. */
-export class NoopValidationRuntimeAdapter implements ValidationRuntimeAdapter {
-  async run(_workflow: WorkflowDefinition, _options: ValidationRunOptions): Promise<ValidationRunResult> {
-    return { status: 'success', message: 'No-op validation: nothing was executed', nodeResults: [] };
-  }
-
-  async runToNode(_workflow: WorkflowDefinition, _nodeId: string, _options: ValidationRunOptions): Promise<ValidationRunResult> {
-    return { status: 'success', message: 'No-op validation: nothing was executed', nodeResults: [] };
-  }
-
-  async runNode(_workflow: WorkflowDefinition, nodeId: string, _options: ValidationRunOptions): Promise<NodeResult> {
-    const now = new Date().toISOString();
-    return { nodeId, input: undefined, output: null, error: null, startedAt: now, finishedAt: now };
-  }
-}
-
 /**
  * Runs workflows on the editor's dev server. Plugin runtimes can only run in the Node process that
  * loaded them, so this adapter posts the workflow to the endpoint of

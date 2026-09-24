@@ -49,6 +49,8 @@ export interface DiscoverSummary {
   errors: Array<{ path: string; error: string }>;
 }
 
+export function consoleDiscoveryLogger(message: string): void;
+
 export class PluginRegistry {
   discover(options?: DiscoverOptions): Promise<DiscoverSummary>;
   listManifests(): PluginManifest[];

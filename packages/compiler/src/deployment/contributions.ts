@@ -4,7 +4,7 @@ import type { ComposeService, EnvironmentVariableDeclaration } from '@runflux/pl
 import { CompilationError } from '../types.js';
 
 /** Compose services of the generated backend itself; plugins cannot declare them. */
-export const RESERVED_COMPOSE_SERVICES: readonly string[] = ['app', 'cron'];
+const RESERVED_COMPOSE_SERVICES: readonly string[] = ['app', 'cron'];
 
 interface Owned<TValue> {
   readonly owner: string;

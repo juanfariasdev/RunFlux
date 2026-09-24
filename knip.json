@@ -1,0 +1,14 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "workspaces": {
+    ".": {
+      "ignore": ["tests/support/fake-pg/**"]
+    },
+    "packages/compiler": {
+      "ignore": ["templates/**", "src/__tests__/fixtures/**"]
+    },
+    "packages/plugin-system": {
+      "ignore": ["src/**/__tests__/fixtures/**"]
+    }
+  }
+}

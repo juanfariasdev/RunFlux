@@ -16,7 +16,7 @@ export interface PostgresPool {
 
 export type PostgresPoolFactory = (connectionString: string, logger: Logger) => PostgresPool;
 
-export const createPostgresPool: PostgresPoolFactory = (connectionString, logger) => {
+const createPostgresPool: PostgresPoolFactory = (connectionString, logger) => {
   const pool = new pg.Pool({ connectionString, connectionTimeoutMillis: 10_000, allowExitOnIdle: true });
   pool.on('error', (error: Error) => logger.error('[database-query] Idle connection error:', error.message));
   return pool;

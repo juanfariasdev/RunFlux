@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { consoleDiscoveryLogger } from '@runflux/plugin-system/discovery/logger';
 import { PluginRegistry } from '@runflux/plugin-system/plugin-registry';
 import type { WorkflowDefinition } from '@runflux/workflow-model';
 import {
@@ -33,17 +34,14 @@ export class CompilerRequestError extends Error {
   }
 }
 
-export class IncompatibleNodesError extends CompilerRequestError {
-  readonly incompatibleNodes: IncompatibleNode[];
-
+class IncompatibleNodesError extends CompilerRequestError {
   constructor(incompatibleNodes: IncompatibleNode[]) {
     super('INCOMPATIBLE_NODES', `Incompatible nodes for target platform: ${incompatibleNodes.map((node) => node.pluginId).join(', ')}`, { details: incompatibleNodes });
     this.name = 'IncompatibleNodesError';
-    this.incompatibleNodes = incompatibleNodes;
   }
 }
 
-export class CompilerValidationError extends CompilerRequestError {
+class CompilerValidationError extends CompilerRequestError {
   constructor(message: string) {
     super('VALIDATION_ERROR', message);
     this.name = 'CompilerValidationError';
@@ -103,7 +101,7 @@ export class CompilerService {
       const registry = new PluginRegistry();
       await registry.discover({
         pluginDirectories: [this.getPluginsDir()],
-        onLog: (message) => { if (process.env.NODE_ENV !== 'test') console.info(message); },
+        onLog: process.env.NODE_ENV === 'test' ? undefined : consoleDiscoveryLogger,
       });
       return registry;
     })();
