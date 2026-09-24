@@ -12,11 +12,12 @@ export interface ValidationRunOptions {
  * `002-workflow-editor`, extended here). The editor calls `run()` when the
  * user clicks "Test" (RF-06), after its own required-parameter check
  * (RF-12) has already passed; `runNode()` backs testing a single node in
- * isolation (RF-04).
+ * isolation (RF-04), reusing `cachedResults` of nodes tested earlier as
+ * upstream input (RN-03).
  */
 export interface ValidationRuntimeAdapter {
   run(workflow: WorkflowDefinition, options: ValidationRunOptions): Promise<ValidationRunResult>;
-  runNode(workflow: WorkflowDefinition, nodeId: string, options: ValidationRunOptions): Promise<NodeResult>;
+  runNode(workflow: WorkflowDefinition, nodeId: string, options: ValidationRunOptions, cachedResults?: NodeResult[]): Promise<NodeResult>;
 }
 
 export interface ValidationRunResult {
@@ -62,8 +63,8 @@ export class HttpValidationRuntimeAdapter implements ValidationRuntimeAdapter {
     return this.post<ValidationRunResult>({ workflow, mode: options.mode });
   }
 
-  async runNode(workflow: WorkflowDefinition, nodeId: string, options: ValidationRunOptions): Promise<NodeResult> {
-    return this.post<NodeResult>({ workflow, nodeId, mode: options.mode });
+  async runNode(workflow: WorkflowDefinition, nodeId: string, options: ValidationRunOptions, cachedResults: NodeResult[] = []): Promise<NodeResult> {
+    return this.post<NodeResult>({ workflow, nodeId, mode: options.mode, cachedResults });
   }
 
   private async post<T>(body: Record<string, unknown>): Promise<T> {

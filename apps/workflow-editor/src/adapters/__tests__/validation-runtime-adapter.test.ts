@@ -51,9 +51,18 @@ describe('HttpValidationRuntimeAdapter (browser-safe — posts to vite-plugin-va
 
     expect(fetch).toHaveBeenCalledWith(
       '/runflux-validate',
-      expect.objectContaining({ method: 'POST', body: JSON.stringify({ workflow, nodeId: 'n1', mode: 'production' }) }),
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ workflow, nodeId: 'n1', mode: 'production', cachedResults: [] }) }),
     );
     expect(result).toEqual(nodeResult);
+  });
+
+  it('runNode() sends the cached results of nodes tested earlier so upstream output is reused (RN-03)', async () => {
+    const upstream = { nodeId: 'n0', input: null, output: { amount: 250 }, error: null, startedAt: 't0', finishedAt: 't1' };
+    vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => upstream } as Response);
+
+    await new HttpValidationRuntimeAdapter().runNode(workflow, 'n1', { mode: 'sandbox' }, [upstream]);
+
+    expect(JSON.parse(vi.mocked(fetch).mock.calls[0][1]!.body as string).cachedResults).toEqual([upstream]);
   });
 
   it('accepts a custom URL', async () => {

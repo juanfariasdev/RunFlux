@@ -1,6 +1,6 @@
 import type { Plugin } from 'vite';
 import { PluginRegistry, pushTestWebhook, clearPendingWebhooks } from '@runflux/plugin-system/node';
-import { runNode, runWorkflow, type PluginExecutionMode, type WorkflowDefinition } from '@runflux/validation-runtime/node';
+import { runNode, runWorkflow, type NodeResult, type PluginExecutionMode, type WorkflowDefinition } from '@runflux/validation-runtime/node';
 
 /**
  * Dev-only: `POST /runflux-validate` runs a workflow (or a single node of
@@ -108,10 +108,12 @@ export function runfluxValidationPlugin(pluginDirectories: string[]): Plugin {
               workflow: WorkflowDefinition;
               nodeId?: string;
               mode: PluginExecutionMode;
+              cachedResults?: NodeResult[];
             };
             const registry = await discoverRegistry();
+            const cache = new Map((payload.cachedResults ?? []).map((result) => [result.nodeId, result]));
             const result = payload.nodeId
-              ? await runNode(payload.workflow, payload.nodeId, registry, { mode: payload.mode })
+              ? await runNode(payload.workflow, payload.nodeId, registry, { mode: payload.mode }, cache)
               : await runWorkflow(payload.workflow, registry, { mode: payload.mode });
             res.setHeader('Content-Type', 'application/json');
             res.end(JSON.stringify(result));

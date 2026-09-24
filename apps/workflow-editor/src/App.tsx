@@ -77,12 +77,13 @@ function WorkflowEditorContent() {
     clearNodeResult(nodeId);
     setTestingNodeIds(new Set([nodeId]));
     try {
-      const result = await validation.runNode(workflow, nodeId, { mode: 'sandbox' });
+      const cachedResults = Object.values(nodeResults).filter((result) => result.nodeId !== nodeId);
+      const result = await validation.runNode(workflow, nodeId, { mode: 'sandbox' }, cachedResults);
       setNodeResult(result);
     } finally {
       setTestingNodeIds(new Set());
     }
-  }, [workflow, setNodeResult, clearNodeResult]);
+  }, [workflow, nodeResults, setNodeResult, clearNodeResult]);
 
   useEffect(() => {
     let cancelled = false;
