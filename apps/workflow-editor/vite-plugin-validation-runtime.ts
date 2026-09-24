@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Plugin } from 'vite';
 import { WebhookTestHub } from '@runflux/plugin-system/node';
-import { runNode, runWorkflow, type NodeResult, type PluginExecutionMode, type WorkflowDefinition } from '@runflux/validation-runtime/node';
+import { runNode, runWorkflow, runWorkflowToNode, type NodeResult, type PluginExecutionMode, type WorkflowDefinition } from '@runflux/validation-runtime/node';
 import type { PluginRegistryCache } from './vite-plugin-registry.ts';
 
 /** Body of `POST /runflux-validate`. */
@@ -9,6 +9,8 @@ interface ValidationRequest {
   workflow: WorkflowDefinition;
   /** Runs only this node, with `cachedResults` of nodes tested earlier as upstream data. */
   nodeId?: string;
+  /** Runs the real workflow path up to and including this node. */
+  untilNodeId?: string;
   mode: PluginExecutionMode;
   cachedResults?: NodeResult[];
   /** The project's variables, which test runs read as `$env` before the dev server's own. */
@@ -82,6 +84,7 @@ export function runfluxValidationPlugin(plugins: PluginRegistryCache): Plugin {
             signal: cancellation.signal,
             environment: { ...process.env, ...textValues(payload.environment) },
           };
+          if (payload.untilNodeId) return runWorkflowToNode(payload.workflow, payload.untilNodeId, registry, options);
           if (!payload.nodeId) return runWorkflow(payload.workflow, registry, options);
           const cache = new Map((payload.cachedResults ?? []).map((result) => [result.nodeId, result]));
           return runNode(payload.workflow, payload.nodeId, registry, options, cache);

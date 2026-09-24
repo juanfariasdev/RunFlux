@@ -7,7 +7,7 @@
  * extension-cascade problem entirely. A package-name import (not relative)
  * is fine — resolved via node_modules/#exports regardless of module mode.
  *
- * Keep this in sync with the real runWorkflow/runNode signatures in src/
+ * Keep this in sync with the real runWorkflow/runWorkflowToNode/runNode signatures in src/
  * by hand — only the narrow surface a Node-side consumer actually needs.
  */
 import type { PluginRegistry } from '@runflux/plugin-system/node';
@@ -71,6 +71,13 @@ export interface ValidationRun {
 
 export function runWorkflow(
   workflow: WorkflowDefinition,
+  registry: PluginRegistry,
+  options: ValidationRunOptions,
+): Promise<ValidationRun>;
+
+export function runWorkflowToNode(
+  workflow: WorkflowDefinition,
+  nodeId: string,
   registry: PluginRegistry,
   options: ValidationRunOptions,
 ): Promise<ValidationRun>;

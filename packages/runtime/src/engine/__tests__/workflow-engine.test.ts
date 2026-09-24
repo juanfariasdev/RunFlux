@@ -87,6 +87,25 @@ describe('WorkflowEngine.run', () => {
     expect((await engine(document).run()).records.map((record) => record.nodeId).sort()).toEqual(['afterOrders', 'events', 'orders']);
   });
 
+  it('can execute only the path required to reach a target node', async () => {
+    const document = workflow(
+      [
+        { id: 'start', pluginId: 'start' },
+        { id: 'before', pluginId: 'emit', parameters: { value: 'before' } },
+        { id: 'target', pluginId: 'emit' },
+        { id: 'after', pluginId: 'emit', parameters: { value: 'after' } },
+        { id: 'side', pluginId: 'emit', parameters: { value: 'side' } },
+      ],
+      [['start', 'before'], ['before', 'target'], ['target', 'after'], ['start', 'side']],
+    );
+
+    const execution = await engine(document).run({ targetNodeId: 'target' });
+
+    expect(execution.records.map((record) => record.nodeId)).toEqual(['start', 'before', 'target']);
+    expect(execution.record('after')).toBeUndefined();
+    expect(execution.record('side')).toBeUndefined();
+  });
+
   it('rejects a start node that is not a trigger', async () => {
     await expect(engine(workflow([{ id: 'a', pluginId: 'emit' }], [])).run({ triggerId: 'a' })).rejects.toThrow('Node "a" is not a trigger');
   });

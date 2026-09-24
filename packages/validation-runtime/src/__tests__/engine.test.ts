@@ -1,6 +1,6 @@
 import type { PluginCategory } from '@runflux/plugin-system/types';
 import { describe, expect, it } from 'vitest';
-import { runWorkflow } from '../engine';
+import { runWorkflow, runWorkflowToNode } from '../engine';
 import type { WorkflowDefinition } from '@runflux/workflow-model/types';
 import { behaviourPlugin, registryWith, type TestBehaviour } from './support';
 
@@ -253,5 +253,33 @@ describe('runWorkflow (RF-01, RF-02)', () => {
     expect(downstreamCalled).toBe(false);
     expect(run.nodeResults).toHaveLength(0);
     expect(run.status).toBe('success');
+  });
+});
+
+describe('runWorkflowToNode', () => {
+  it('executes the target and its upstream path without running siblings or descendants', async () => {
+    const registry = registryWith(
+      plugin('trigger', () => 'start', 'trigger'),
+      plugin('action', (_params, input) => input),
+    );
+    const wf = workflow({
+      nodes: [
+        { id: 'start', pluginId: 'trigger', pluginVersion: '1.0.0', parameters: {}, position: { x: 0, y: 0 } },
+        { id: 'before', pluginId: 'action', pluginVersion: '1.0.0', parameters: {}, position: { x: 0, y: 0 } },
+        { id: 'target', pluginId: 'action', pluginVersion: '1.0.0', parameters: {}, position: { x: 0, y: 0 } },
+        { id: 'after', pluginId: 'action', pluginVersion: '1.0.0', parameters: {}, position: { x: 0, y: 0 } },
+        { id: 'side', pluginId: 'action', pluginVersion: '1.0.0', parameters: {}, position: { x: 0, y: 0 } },
+      ],
+      connections: [
+        { sourceNodeId: 'start', sourceOutput: 'main', targetNodeId: 'before', targetInput: 'main' },
+        { sourceNodeId: 'before', sourceOutput: 'main', targetNodeId: 'target', targetInput: 'main' },
+        { sourceNodeId: 'target', sourceOutput: 'main', targetNodeId: 'after', targetInput: 'main' },
+        { sourceNodeId: 'start', sourceOutput: 'main', targetNodeId: 'side', targetInput: 'main' },
+      ],
+    });
+
+    const run = await runWorkflowToNode(wf, 'target', registry, { mode: 'sandbox' });
+
+    expect(run.nodeResults.map((result) => result.nodeId)).toEqual(['start', 'before', 'target']);
   });
 });

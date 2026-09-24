@@ -17,7 +17,7 @@ describe('Toolbar — project variables in test runs', () => {
       <Toolbar
         catalog={{ listPlugins: async () => ({}), checkReference: async () => ({ status: 'ok' }) }}
         persistence={{ save: vi.fn(), load: vi.fn() }}
-        validation={{ run, runNode: vi.fn() }}
+        validation={{ run, runToNode: vi.fn(), runNode: vi.fn() }}
       />,
     );
     fireEvent.click(screen.getByRole('button', { name: /test/i }));

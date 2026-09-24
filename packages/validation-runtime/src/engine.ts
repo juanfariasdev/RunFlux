@@ -96,6 +96,25 @@ export async function runWorkflow(workflow: WorkflowDefinition, registry: Plugin
   };
 }
 
+/** Runs the workflow only as far as `nodeId`, preserving normal trigger, branch and merge semantics. */
+export async function runWorkflowToNode(
+  workflow: WorkflowDefinition,
+  nodeId: string,
+  registry: PluginRegistry,
+  options: ValidationRunOptions,
+): Promise<ValidationRun> {
+  const execution = await withEngine(workflow, registry, options, (engine) => engine.run({ signal: options.signal, targetNodeId: nodeId }));
+  return {
+    workflowId: workflow.id,
+    mode: options.mode,
+    nodeResults: execution.records.map(toNodeResult),
+    startedAt: execution.startedAt,
+    finishedAt: execution.finishedAt,
+    status: execution.status,
+    cancelled: execution.cancelled,
+  };
+}
+
 /**
  * Runs a single node in isolation (RF-04), with the last known outputs of its upstream nodes from
  * `cache` (RN-03). A parent that was never tested contributes null instead of blocking (RN-06).

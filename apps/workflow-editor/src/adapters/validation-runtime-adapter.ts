@@ -21,6 +21,7 @@ export interface ValidationRunOptions {
  */
 export interface ValidationRuntimeAdapter {
   run(workflow: WorkflowDefinition, options: ValidationRunOptions): Promise<ValidationRunResult>;
+  runToNode(workflow: WorkflowDefinition, nodeId: string, options: ValidationRunOptions): Promise<ValidationRunResult>;
   runNode(workflow: WorkflowDefinition, nodeId: string, options: ValidationRunOptions, cachedResults?: NodeResult[]): Promise<NodeResult>;
 }
 
@@ -35,6 +36,10 @@ export interface ValidationRunResult {
 /** Reports success without running anything: a stand-in for tests that do not execute nodes. */
 export class NoopValidationRuntimeAdapter implements ValidationRuntimeAdapter {
   async run(_workflow: WorkflowDefinition, _options: ValidationRunOptions): Promise<ValidationRunResult> {
+    return { status: 'success', message: 'No-op validation: nothing was executed', nodeResults: [] };
+  }
+
+  async runToNode(_workflow: WorkflowDefinition, _nodeId: string, _options: ValidationRunOptions): Promise<ValidationRunResult> {
     return { status: 'success', message: 'No-op validation: nothing was executed', nodeResults: [] };
   }
 
@@ -59,6 +64,10 @@ export class HttpValidationRuntimeAdapter implements ValidationRuntimeAdapter {
 
   async run(workflow: WorkflowDefinition, options: ValidationRunOptions): Promise<ValidationRunResult> {
     return this.post<ValidationRunResult>({ workflow, mode: options.mode, ...environmentOf(options) }, options.signal);
+  }
+
+  async runToNode(workflow: WorkflowDefinition, nodeId: string, options: ValidationRunOptions): Promise<ValidationRunResult> {
+    return this.post<ValidationRunResult>({ workflow, untilNodeId: nodeId, mode: options.mode, ...environmentOf(options) }, options.signal);
   }
 
   async runNode(workflow: WorkflowDefinition, nodeId: string, options: ValidationRunOptions, cachedResults: NodeResult[] = []): Promise<NodeResult> {

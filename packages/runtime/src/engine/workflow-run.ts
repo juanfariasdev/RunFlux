@@ -28,13 +28,22 @@ export class WorkflowRun {
   private readonly payload: unknown;
   private readonly signal: AbortSignal | undefined;
 
-  constructor(graph: WorkflowGraph, executor: NodeExecutor, triggers: readonly ExecutableNode[], payload: unknown, signal?: AbortSignal) {
+  constructor(graph: WorkflowGraph, executor: NodeExecutor, triggers: readonly ExecutableNode[], payload: unknown, signal?: AbortSignal, targetNodeId?: string) {
     this.graph = graph;
     this.executor = executor;
-    this.triggers = triggers;
     this.payload = payload;
     this.signal = signal;
-    this.reachable = graph.reachableFrom(triggers.map((trigger) => trigger.id));
+    const reachableFromTriggers = graph.reachableFrom(triggers.map((trigger) => trigger.id));
+    if (targetNodeId === undefined) {
+      this.reachable = reachableFromTriggers;
+      this.triggers = triggers;
+      return;
+    }
+
+    graph.node(targetNodeId);
+    const required = new Set([...graph.ancestors(targetNodeId), targetNodeId]);
+    this.reachable = new Set([...reachableFromTriggers].filter((nodeId) => required.has(nodeId)));
+    this.triggers = triggers.filter((trigger) => this.reachable.has(trigger.id));
   }
 
   async execute(): Promise<NodeRecord[]> {

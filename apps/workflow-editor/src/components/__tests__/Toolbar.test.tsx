@@ -43,7 +43,7 @@ describe('Toolbar — Save (RF-07, RN-04)', () => {
 
     const save = vi.fn().mockResolvedValue(undefined);
     const persistence: WorkflowPersistenceAdapter = { save, load: vi.fn() };
-    const validation: ValidationRuntimeAdapter = { run: vi.fn(), runNode: vi.fn() };
+    const validation: ValidationRuntimeAdapter = { run: vi.fn(), runToNode: vi.fn(), runNode: vi.fn() };
 
     render(<Toolbar catalog={fakeCatalog()} persistence={persistence} validation={validation} />);
     fireEvent.click(screen.getByRole('button', { name: /save/i }));
@@ -68,7 +68,7 @@ describe('Toolbar — Test (RF-06, RF-12, RN-04)', () => {
       <Toolbar
         catalog={fakeCatalog()}
         persistence={{ save: vi.fn(), load: vi.fn() }}
-        validation={{ run, runNode: vi.fn() }}
+        validation={{ run, runToNode: vi.fn(), runNode: vi.fn() }}
       />,
     );
     fireEvent.click(screen.getByRole('button', { name: /test/i }));
@@ -91,7 +91,7 @@ describe('Toolbar — Test (RF-06, RF-12, RN-04)', () => {
       <Toolbar
         catalog={fakeCatalog()}
         persistence={{ save: vi.fn(), load: vi.fn() }}
-        validation={{ run, runNode: vi.fn() }}
+        validation={{ run, runToNode: vi.fn(), runNode: vi.fn() }}
       />,
     );
     fireEvent.click(screen.getByRole('button', { name: /test/i }));
@@ -115,7 +115,7 @@ describe('Toolbar — Test (RF-06, RF-12, RN-04)', () => {
       <Toolbar
         catalog={fakeCatalog()}
         persistence={{ save: vi.fn(), load: vi.fn() }}
-        validation={{ run, runNode: vi.fn() }}
+        validation={{ run, runToNode: vi.fn(), runNode: vi.fn() }}
       />,
     );
     fireEvent.click(screen.getByRole('button', { name: /test/i }));
@@ -129,7 +129,7 @@ describe('Toolbar — Test (RF-06, RF-12, RN-04)', () => {
       <Toolbar
         catalog={fakeCatalog()}
         persistence={{ save: vi.fn(), load: vi.fn() }}
-        validation={{ run, runNode: vi.fn() }}
+        validation={{ run, runToNode: vi.fn(), runNode: vi.fn() }}
       />,
     );
 
@@ -151,7 +151,7 @@ describe('Toolbar — Test (RF-06, RF-12, RN-04)', () => {
       <Toolbar
         catalog={fakeCatalog()}
         persistence={{ save: vi.fn(), load: vi.fn() }}
-        validation={{ run, runNode: vi.fn() }}
+        validation={{ run, runToNode: vi.fn(), runNode: vi.fn() }}
       />,
     );
 
@@ -183,7 +183,7 @@ describe('Toolbar — Test (RF-06, RF-12, RN-04)', () => {
       <Toolbar
         catalog={fakeCatalog()}
         persistence={{ save: vi.fn(), load: vi.fn() }}
-        validation={{ run, runNode: vi.fn() }}
+        validation={{ run, runToNode: vi.fn(), runNode: vi.fn() }}
       />,
     );
 
@@ -207,7 +207,7 @@ describe('Toolbar — Test (RF-06, RF-12, RN-04)', () => {
       <Toolbar
         catalog={fakeCatalog()}
         persistence={{ save: vi.fn(), load: vi.fn() }}
-        validation={{ run, runNode: vi.fn() }}
+        validation={{ run, runToNode: vi.fn(), runNode: vi.fn() }}
       />,
     );
 
@@ -236,7 +236,7 @@ describe('Toolbar — Test (RF-06, RF-12, RN-04)', () => {
       <Toolbar
         catalog={fakeCatalog()}
         persistence={{ save: vi.fn(), load: vi.fn() }}
-        validation={{ run, runNode: vi.fn() }}
+        validation={{ run, runToNode: vi.fn(), runNode: vi.fn() }}
       />,
     );
     fireEvent.click(screen.getByRole('button', { name: /^▶ Test$/ }));
@@ -284,7 +284,7 @@ describe('Toolbar — Test (RF-06, RF-12, RN-04)', () => {
       <Toolbar
         catalog={fakeCatalog()}
         persistence={{ save: vi.fn(), load: vi.fn() }}
-        validation={{ run, runNode: vi.fn() }}
+        validation={{ run, runToNode: vi.fn(), runNode: vi.fn() }}
       />,
     );
     fireEvent.click(screen.getByRole('button', { name: /^▶ Test$/ }));
@@ -333,7 +333,7 @@ describe('Toolbar — Test (RF-06, RF-12, RN-04)', () => {
       <Toolbar
         catalog={fakeCatalog()}
         persistence={{ save: vi.fn(), load: vi.fn() }}
-        validation={{ run, runNode: vi.fn() }}
+        validation={{ run, runToNode: vi.fn(), runNode: vi.fn() }}
         onTestingNodesChange={onTestingNodesChange}
       />,
     );
@@ -351,7 +351,7 @@ describe('Toolbar — Test (RF-06, RF-12, RN-04)', () => {
       <Toolbar
         catalog={fakeCatalog()}
         persistence={{ save: vi.fn(), load: vi.fn() }}
-        validation={{ run, runNode: vi.fn() }}
+        validation={{ run, runToNode: vi.fn(), runNode: vi.fn() }}
       />,
     );
 
@@ -368,7 +368,7 @@ describe("Toolbar — Compiler Button", () => {
       <Toolbar
         catalog={fakeCatalog()}
         persistence={{ save: vi.fn(), load: vi.fn() }}
-        validation={{ run: vi.fn(), runNode: vi.fn() }}
+        validation={{ run: vi.fn(), runToNode: vi.fn(), runNode: vi.fn() }}
       />
     );
     const compileBtn = screen.getByTestId("open-compiler-modal-btn");

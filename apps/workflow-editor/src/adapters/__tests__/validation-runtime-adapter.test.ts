@@ -17,6 +17,12 @@ describe('NoopValidationRuntimeAdapter', () => {
     expect(result.nodeId).toBe('n1');
     expect(result.error).toBeNull();
   });
+
+  it('runToNode() resolves with a workflow result', async () => {
+    const adapter = new NoopValidationRuntimeAdapter();
+    const result = await adapter.runToNode(workflow, 'n1', { mode: 'sandbox' });
+    expect(result.status).toBe('success');
+  });
 });
 
 describe('HttpValidationRuntimeAdapter (browser-safe — posts to vite-plugin-validation-runtime.ts\'s dev-only endpoint)', () => {
@@ -56,6 +62,19 @@ describe('HttpValidationRuntimeAdapter (browser-safe — posts to vite-plugin-va
     expect(result).toEqual(nodeResult);
   });
 
+  it('runToNode() posts the workflow target and returns all results up to that node', async () => {
+    const runResult = { status: 'success', nodeResults: [{ nodeId: 'n1', input: null, output: 'ok', error: null, startedAt: 't0', finishedAt: 't1' }] };
+    vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => runResult } as Response);
+
+    const result = await new HttpValidationRuntimeAdapter().runToNode(workflow, 'n1', { mode: 'sandbox' });
+
+    expect(fetch).toHaveBeenCalledWith(
+      '/runflux-validate',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ workflow, untilNodeId: 'n1', mode: 'sandbox' }) }),
+    );
+    expect(result).toEqual(runResult);
+  });
+
   it('runNode() sends the cached results of nodes tested earlier so upstream output is reused (RN-03)', async () => {
     const upstream = { nodeId: 'n0', input: null, output: { amount: 250 }, error: null, startedAt: 't0', finishedAt: 't1' };
     vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => upstream } as Response);
@@ -70,8 +89,9 @@ describe('HttpValidationRuntimeAdapter (browser-safe — posts to vite-plugin-va
     const controller = new AbortController();
     const adapter = new HttpValidationRuntimeAdapter();
     await adapter.run(workflow, { mode: 'sandbox', signal: controller.signal });
+    await adapter.runToNode(workflow, 'n1', { mode: 'sandbox', signal: controller.signal });
     await adapter.runNode(workflow, 'n1', { mode: 'sandbox', signal: controller.signal });
-    expect(vi.mocked(fetch).mock.calls.map(([, init]) => init?.signal)).toEqual([controller.signal, controller.signal]);
+    expect(vi.mocked(fetch).mock.calls.map(([, init]) => init?.signal)).toEqual([controller.signal, controller.signal, controller.signal]);
   });
 
   it('sends the project variables of a run as its environment, and none when there are none', async () => {

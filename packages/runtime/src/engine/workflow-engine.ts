@@ -29,6 +29,8 @@ export interface RunRequest {
   readonly triggerId?: string;
   /** Cancels the run: running nodes see their signal abort and no further node starts. */
   readonly signal?: AbortSignal;
+  /** Stops the run at this node, executing only the target and the upstream nodes it depends on. */
+  readonly targetNodeId?: string;
 }
 
 export interface NodeRunRequest {
@@ -78,7 +80,7 @@ export class WorkflowEngine {
     return this.track(async () => {
       const startedAt = this.timestamp();
       const triggers = this.graph.triggers(request.triggerId);
-      const records = await new WorkflowRun(this.graph, this.executor, triggers, request.payload, request.signal).execute();
+      const records = await new WorkflowRun(this.graph, this.executor, triggers, request.payload, request.signal, request.targetNodeId).execute();
       return new WorkflowExecution(this.graph, records, startedAt, this.timestamp(), request.signal?.aborted ?? false);
     });
   }
