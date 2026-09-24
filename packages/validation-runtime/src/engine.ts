@@ -9,6 +9,7 @@ import {
   type NodeRecord,
   type NodeTypeLookup,
   type RuntimeServices,
+  type WorkflowExecution,
   type WorkflowSource,
 } from '@runflux/runtime';
 
@@ -80,6 +81,18 @@ function toNodeResult(record: NodeRecord): NodeResult {
   };
 }
 
+function toValidationRun(workflow: WorkflowSource, options: ValidationRunOptions, execution: WorkflowExecution): ValidationRun {
+  return {
+    workflowId: workflow.id,
+    mode: options.mode,
+    nodeResults: execution.records.map(toNodeResult),
+    startedAt: execution.startedAt,
+    finishedAt: execution.finishedAt,
+    status: execution.status,
+    cancelled: execution.cancelled,
+  };
+}
+
 function toNodeRecord(result: NodeResult): NodeRecord {
   return { ...result, activeOutput: MAIN_OUTPUT, finishedAt: result.finishedAt ?? result.startedAt };
 }
@@ -91,15 +104,7 @@ function toNodeRecord(result: NodeResult): NodeRecord {
  */
 export async function runWorkflow(workflow: WorkflowSource, catalog: ValidationCatalog, options: ValidationRunOptions): Promise<ValidationRun> {
   const execution = await withEngine(workflow, catalog, options, (engine) => engine.run({ signal: options.signal }));
-  return {
-    workflowId: workflow.id,
-    mode: options.mode,
-    nodeResults: execution.records.map(toNodeResult),
-    startedAt: execution.startedAt,
-    finishedAt: execution.finishedAt,
-    status: execution.status,
-    cancelled: execution.cancelled,
-  };
+  return toValidationRun(workflow, options, execution);
 }
 
 /** Runs the workflow only as far as `nodeId`, preserving normal trigger, branch and merge semantics. */
@@ -110,15 +115,7 @@ export async function runWorkflowToNode(
   options: ValidationRunOptions,
 ): Promise<ValidationRun> {
   const execution = await withEngine(workflow, catalog, options, (engine) => engine.run({ signal: options.signal, targetNodeId: nodeId }));
-  return {
-    workflowId: workflow.id,
-    mode: options.mode,
-    nodeResults: execution.records.map(toNodeResult),
-    startedAt: execution.startedAt,
-    finishedAt: execution.finishedAt,
-    status: execution.status,
-    cancelled: execution.cancelled,
-  };
+  return toValidationRun(workflow, options, execution);
 }
 
 /**
