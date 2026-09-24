@@ -8,8 +8,9 @@ export type { DatabaseClient, DatabaseRow } from './postgres-client.js';
 export const DATABASE_CLIENT = new ServiceKey<DatabaseClient>('database-query.client');
 
 /**
- * Runs a parameterized SQL query. In production it queries the database; in the editor's sandbox
- * it outputs one simulated row built from the input, so workflows can be designed offline.
+ * Runs a parameterized SQL query. Production executes the configured SQL. Sandbox performs a
+ * harmless `SELECT 1` connection probe first, then simulates the query result so write statements
+ * are never executed by an editor test while broken credentials/connections still fail visibly.
  */
 export class DatabaseQueryNode implements NodeHandler<DatabaseQueryParameters> {
   private readonly database: DatabaseClient;
@@ -22,9 +23,10 @@ export class DatabaseQueryNode implements NodeHandler<DatabaseQueryParameters> {
   }
 
   async execute({ parameters, input, context }: NodeInvocation<DatabaseQueryParameters>): Promise<NodeOutput> {
+    const connectionString = this.connectionString(parameters, context.env);
     const rows = context.mode === 'production'
-      ? await this.database.query(this.connectionString(parameters, context.env), parameters.query, parameters.values)
-      : simulateRows(parameters, input);
+      ? await this.database.query(connectionString, parameters.query, parameters.values)
+      : await this.simulateAfterConnectionCheck(connectionString, parameters, input);
     return NodeOutput.main(parameters.outputMode === 'first' ? rows[0] ?? null : rows);
   }
 
@@ -36,6 +38,11 @@ export class DatabaseQueryNode implements NodeHandler<DatabaseQueryParameters> {
     const connectionString = env[parameters.connectionEnvVar];
     if (!connectionString) throw new Error(`database-query: environment variable "${parameters.connectionEnvVar}" is required`);
     return connectionString;
+  }
+
+  private async simulateAfterConnectionCheck(connectionString: string, parameters: DatabaseQueryParameters, input: unknown): Promise<DatabaseRow[]> {
+    await this.database.query(connectionString, 'SELECT 1', []);
+    return simulateRows(parameters, input);
   }
 }
 

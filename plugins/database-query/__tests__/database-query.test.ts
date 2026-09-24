@@ -69,12 +69,18 @@ describe('database-query in production', () => {
 });
 
 describe('database-query in the sandbox', () => {
-  it('simulates one row from the input without touching the database', async () => {
+  it('checks database connectivity before simulating a safe row', async () => {
     const client = fakeClient();
     const record = await run({ query: 'SELECT * FROM orders WHERE id = $1' }, { client, mode: 'sandbox', input: { orderId: 'ord-1', amount: 150 } });
     expect(record.output).toEqual([{ id: 1, query_executed: 'SELECT * FROM orders WHERE id = $1', success: true, orderId: 'ord-1', amount: 150 }]);
     expect((await run({ outputMode: 'first' }, { client, mode: 'sandbox', input: 'raw' })).output).toEqual({ id: 1, query_executed: 'SELECT 1;', success: true, input: 'raw' });
-    expect(client.query).not.toHaveBeenCalled();
+    expect(client.query).toHaveBeenCalledWith('postgres://localhost/app', 'SELECT 1', []);
+  });
+
+  it('fails the sandbox test when the database cannot be reached', async () => {
+    const client = { query: vi.fn(async () => { throw new Error('connect ECONNREFUSED 127.0.0.1:5432'); }) };
+    const record = await run({}, { client, mode: 'sandbox' });
+    expect(record.error).toContain('ECONNREFUSED');
   });
 });
 

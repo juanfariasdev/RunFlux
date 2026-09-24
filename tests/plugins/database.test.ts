@@ -33,10 +33,12 @@ describe('database-query', () => {
     expect(driver.query).toHaveBeenCalledWith(parameters.query, ["O'Reilly"]);
   });
 
-  it('simulates rows in the editor sandbox without touching the driver', async () => {
+  it('checks database connectivity before simulating rows in the editor sandbox', async () => {
+    vi.stubEnv('CONTRACT_DATABASE_URL', 'postgres://localhost/contract');
     const run = await runWorkflow(lookup(parameters), await editorRegistry(), { mode: 'sandbox' });
     expect(run.nodeResults.find((result) => result.nodeId === 'db')?.output).toMatchObject({ name: "O'Reilly", query_executed: parameters.query, success: true });
-    expect(driver.query).not.toHaveBeenCalled();
+    expect(driver.query).toHaveBeenCalledTimes(1);
+    expect(driver.query).toHaveBeenCalledWith('SELECT 1', []);
   });
 
   it('runs the same query from an exported backend, which always uses the database', async () => {

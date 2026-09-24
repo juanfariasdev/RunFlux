@@ -236,7 +236,7 @@ describe('PostgreSQL CRUD example edge cases', () => {
     }
   });
 
-  it('simulates the rows in a sandbox test run of the editor, touching no database', async () => {
+  it('checks connectivity in a sandbox test run without executing the configured query', async () => {
     await postgres.exec('DROP TABLE IF EXISTS products');
     const hub = new WebhookTestHub(10_000);
     const running = runWorkflow(workflowOf(example), await editorRegistry(), { mode: 'sandbox', services: { triggerEvents: hub, logger: { info() {}, error() {} } } });
@@ -248,6 +248,22 @@ describe('PostgreSQL CRUD example edge cases', () => {
       output: { id: 1, query_executed: 'SELECT * FROM products WHERE id = $1::int', success: true },
     });
     expect(await postgres.rows("SELECT to_regclass('products') AS table")).toEqual([{ table: null }]);
+  });
+
+  it('fails the sandbox test when PostgreSQL is unreachable', async () => {
+    const unreachable = await TestPostgres.start();
+    const unreachableUrl = unreachable.url;
+    await unreachable.stop();
+    const hub = new WebhookTestHub(10_000);
+    const running = runWorkflow(workflowOf(example), await editorRegistry(), {
+      mode: 'sandbox',
+      environment: { DATABASE_URL: unreachableUrl, ADMIN_KEY },
+      services: { triggerEvents: hub, logger: { info() {}, error() {} } },
+    });
+    await vi.waitFor(() => expect(hub.pending).toBe(nodeIds(example, 'trigger-webhook').length));
+    hub.deliver('/products', { method: 'GET', query: { id: '5' } });
+    const run = await running;
+    expect(run.nodeResults.find((result) => result.nodeId === 'find-product')?.error).toMatch(/ECONNREFUSED|connect/i);
   });
 
   it('reached every node of the workflow in the exported backend', () => {
