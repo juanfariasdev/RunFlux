@@ -2,7 +2,7 @@
   "name": "runflux",
   "version": "0.1.0",
   "private": true,
-  "description": "Visual backend compiler \u2014 design a workflow visually, compile it into a real deployable backend.",
+  "description": "Visual backend compiler — design a workflow visually, compile it into a real deployable backend.",
   "author": "Juan Pablo Farias <juanpablofarias.com>",
   "type": "module",
   "workspaces": [
@@ -20,21 +20,25 @@
     "dev:all": "concurrently -n \"server,editor\" -c \"cyan,magenta\" \"npm run dev:server\" \"npm run dev:editor\"",
     "db:generate": "npm run db:generate --workspace=@runflux/project-server",
     "db:migrate": "npm run db:migrate --workspace=@runflux/project-server",
+    "examples:seed": "npm run examples:seed --workspace=@runflux/project-server",
+    "examples:postgres": "pglite-server --db=.runflux/examples-postgres --port=5432 --max-connections=32",
     "test:plugins": "vitest run --config vitest.plugins.config.ts",
     "build": "npm run build:node --workspaces --if-present && npm run build --workspace=@runflux/app-workflow-editor && node scripts/verify-plugin-catalog.mjs",
     "pretest:plugins": "npm run build:node --workspaces --if-present"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@electric-sql/pglite-socket": "^0.2.11",
     "@types/jszip": "^3.4.0",
     "@types/node": "^22.5.0",
-    "concurrently": "^9.1.2",
-    "typescript": "^5.5.4",
-    "vitest": "^4.1.9",
-    "esbuild": "^0.28.2",
     "@types/supertest": "^6.0.2",
-    "supertest": "^7.0.0",
     "aws-cdk-lib": "^2.177.0",
-    "constructs": "^10.3.0"
+    "concurrently": "^9.1.2",
+    "constructs": "^10.3.0",
+    "esbuild": "^0.28.2",
+    "supertest": "^7.0.0",
+    "typescript": "^5.5.4",
+    "vitest": "^4.1.9"
   },
   "dependencies": {
     "@types/node-cron": "^3.0.11",

@@ -68,9 +68,9 @@ export class ExportedProject {
   }
 
   /** The workflow engine the backend's entry points create, built from the vendored runtime. */
-  async engine() {
+  async engine(options?: Record<string, unknown>) {
     const [{ WorkflowEngine }, { plugins }] = await Promise.all([this.runtime('index'), this.runtime('plugins')]);
-    return WorkflowEngine.fromDocument(this.json('src/workflow.json'), plugins);
+    return WorkflowEngine.fromDocument(this.json('src/workflow.json'), plugins, options);
   }
 
   /** Starts `node <script>` in the project and resolves once its output matches `ready`. */

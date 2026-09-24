@@ -26,7 +26,7 @@ npm run build         # Bundles Node, editor e conferência do catálogo produzi
 npm run test:plugins  # Paridade editor/backend, backends exportados, build e síntese CDK
 ```
 
-Os testes compilam backends, gravam o projeto como o download, constroem `dist/` e executam o resultado: requisições HTTP, processo do servidor, CLI, cron, handler Lambda e síntese da stack CDK. Cada plugin é executado no editor e no backend exportado com a exigência do mesmo resultado. PostgreSQL é substituído somente na fronteira do driver; o deploy real em AWS não faz parte da suíte.
+Os testes compilam backends, gravam o projeto como o download, constroem `dist/` e executam o resultado: requisições HTTP, processo do servidor, CLI, cron, handler Lambda e síntese da stack CDK. Cada plugin é executado no editor e no backend exportado com a exigência do mesmo resultado. Os workflows de [`examples/`](examples/README.md) (API HTTP com todos os métodos, CRUD em PostgreSQL e Switch) rodam no teste do editor, no app Express, no processo do servidor e no handler Lambda exportados, contra um PostgreSQL real embutido (PGlite). O deploy real em AWS não faz parte da suíte.
 
 ## Estrutura
 
@@ -41,7 +41,8 @@ Os testes compilam backends, gravam o projeto como o download, constroem `dist/`
 | `packages/validation-runtime` | Execuções de teste do editor sobre o motor do runtime |
 | `packages/compiler` | Validação, plano de deployment, alvos local/AWS, templates e empacotamento do runtime |
 | `plugins` | Os 11 plugins: `runtime.ts` executável e `index.ts` com manifesto e deployment |
-| `tests` | Paridade entre editor e backend e execução dos projetos exportados |
+| `examples` | Workflows de exemplo prontos para importar no editor |
+| `tests` | Paridade entre editor e backend, execução dos projetos exportados e dos exemplos |
 
 Consulte [arquitetura e contratos](docs/architecture.md), [análise dos plugins e validação](docs/plugin-audit.md) e o [guia do runtime](packages/runtime/README.md) antes de adicionar um plugin.
 

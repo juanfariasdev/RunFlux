@@ -1,0 +1,873 @@
+{
+  "$schema": "https://runflux.dev/schemas/v1/workflow-project.json",
+  "schemaVersion": 1,
+  "exportedAt": "2026-09-24T00:00:00.000Z",
+  "project": {
+    "name": "Example - Switch routing",
+    "envVars": []
+  },
+  "workflow": {
+    "id": "example-switch-routing",
+    "name": "Example - Switch routing",
+    "nodes": [
+      {
+        "id": "new-ticket",
+        "pluginId": "trigger-webhook",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "path": "/tickets",
+          "httpMethod": "POST",
+          "rawBody": false,
+          "authentication": "none",
+          "sampleBody": [
+            {
+              "name": "subject",
+              "value": "Refund request",
+              "type": "string"
+            },
+            {
+              "name": "amount",
+              "value": "120",
+              "type": "number"
+            }
+          ],
+          "sampleHeaders": {
+            "content-type": "application/json"
+          },
+          "sampleQuery": {}
+        },
+        "position": {
+          "x": 0,
+          "y": 525
+        },
+        "appearance": {
+          "label": "POST /tickets",
+          "color": "#4f46e5"
+        }
+      },
+      {
+        "id": "route-ticket",
+        "pluginId": "condition-switch",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "fallbackEnabled": true,
+          "rules": [
+            {
+              "combinator": "or",
+              "conditions": [
+                {
+                  "leftValue": "{{ $json.priority }}",
+                  "operator": "equals",
+                  "rightValue": "urgent"
+                },
+                {
+                  "leftValue": "{{ $json.customer?.tier }}",
+                  "operator": "equals",
+                  "rightValue": "vip"
+                }
+              ]
+            },
+            {
+              "combinator": "and",
+              "conditions": [
+                {
+                  "leftValue": "{{ ($json.subject ?? '').toLowerCase() }}",
+                  "operator": "contains",
+                  "rightValue": "refund"
+                },
+                {
+                  "leftValue": "{{ $json.amount }}",
+                  "operator": "greaterThan",
+                  "rightValue": "0"
+                }
+              ]
+            },
+            {
+              "combinator": "and",
+              "conditions": [
+                {
+                  "leftValue": "{{ $json.email }}",
+                  "operator": "endsWith",
+                  "rightValue": "@partner.com"
+                }
+              ]
+            },
+            {
+              "combinator": "and",
+              "conditions": [
+                {
+                  "leftValue": "{{ $json.tags ?? [] }}",
+                  "operator": "contains",
+                  "rightValue": "bug"
+                }
+              ]
+            },
+            {
+              "combinator": "and",
+              "conditions": [
+                {
+                  "leftValue": "{{ $json.score }}",
+                  "operator": "lessThanOrEqual",
+                  "rightValue": "3"
+                }
+              ]
+            }
+          ]
+        },
+        "position": {
+          "x": 320,
+          "y": 525
+        },
+        "appearance": {
+          "label": "Route the ticket"
+        }
+      },
+      {
+        "id": "queue-urgent",
+        "pluginId": "set",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "fields": [
+            {
+              "name": "queue",
+              "value": "urgent",
+              "type": "string"
+            },
+            {
+              "name": "sla",
+              "value": "1h",
+              "type": "string"
+            },
+            {
+              "name": "subject",
+              "value": "{{ $json.subject ?? '(no subject)' }}",
+              "type": "string"
+            }
+          ],
+          "includeOtherFields": false
+        },
+        "position": {
+          "x": 640,
+          "y": 0
+        },
+        "appearance": {
+          "label": "Urgent queue",
+          "color": "#10b981"
+        }
+      },
+      {
+        "id": "refund-size",
+        "pluginId": "condition-if",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "{{ $json.amount }}",
+              "operator": "greaterThan",
+              "rightValue": "1000"
+            }
+          ]
+        },
+        "position": {
+          "x": 640,
+          "y": 225
+        },
+        "appearance": {
+          "label": "Refund above 1000?"
+        }
+      },
+      {
+        "id": "queue-partner",
+        "pluginId": "set",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "fields": [
+            {
+              "name": "queue",
+              "value": "partners",
+              "type": "string"
+            },
+            {
+              "name": "sla",
+              "value": "4h",
+              "type": "string"
+            },
+            {
+              "name": "subject",
+              "value": "{{ $json.subject ?? '(no subject)' }}",
+              "type": "string"
+            }
+          ],
+          "includeOtherFields": false
+        },
+        "position": {
+          "x": 640,
+          "y": 450
+        },
+        "appearance": {
+          "label": "Partner queue",
+          "color": "#10b981"
+        }
+      },
+      {
+        "id": "queue-bugs",
+        "pluginId": "set",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "fields": [
+            {
+              "name": "queue",
+              "value": "engineering",
+              "type": "string"
+            },
+            {
+              "name": "sla",
+              "value": "1d",
+              "type": "string"
+            },
+            {
+              "name": "subject",
+              "value": "{{ $json.subject ?? '(no subject)' }}",
+              "type": "string"
+            }
+          ],
+          "includeOtherFields": false
+        },
+        "position": {
+          "x": 640,
+          "y": 600
+        },
+        "appearance": {
+          "label": "Bug queue",
+          "color": "#10b981"
+        }
+      },
+      {
+        "id": "queue-low",
+        "pluginId": "set",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "fields": [
+            {
+              "name": "queue",
+              "value": "low-priority",
+              "type": "string"
+            },
+            {
+              "name": "sla",
+              "value": "3d",
+              "type": "string"
+            },
+            {
+              "name": "subject",
+              "value": "{{ $json.subject ?? '(no subject)' }}",
+              "type": "string"
+            }
+          ],
+          "includeOtherFields": false
+        },
+        "position": {
+          "x": 640,
+          "y": 750
+        },
+        "appearance": {
+          "label": "Low-priority queue",
+          "color": "#10b981"
+        }
+      },
+      {
+        "id": "queue-general",
+        "pluginId": "set",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "fields": [
+            {
+              "name": "queue",
+              "value": "general",
+              "type": "string"
+            },
+            {
+              "name": "sla",
+              "value": "2d",
+              "type": "string"
+            },
+            {
+              "name": "subject",
+              "value": "{{ $json.subject ?? '(no subject)' }}",
+              "type": "string"
+            }
+          ],
+          "includeOtherFields": false
+        },
+        "position": {
+          "x": 640,
+          "y": 900
+        },
+        "appearance": {
+          "label": "General queue (fallback)",
+          "color": "#10b981"
+        }
+      },
+      {
+        "id": "billing-manager",
+        "pluginId": "set",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "fields": [
+            {
+              "name": "queue",
+              "value": "billing",
+              "type": "string"
+            },
+            {
+              "name": "approval",
+              "value": "manager",
+              "type": "string"
+            },
+            {
+              "name": "subject",
+              "value": "{{ $json.subject }}",
+              "type": "string"
+            }
+          ],
+          "includeOtherFields": false
+        },
+        "position": {
+          "x": 960,
+          "y": 150
+        },
+        "appearance": {
+          "label": "Billing, manager approval",
+          "color": "#10b981"
+        }
+      },
+      {
+        "id": "billing-automatic",
+        "pluginId": "set",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "fields": [
+            {
+              "name": "queue",
+              "value": "billing",
+              "type": "string"
+            },
+            {
+              "name": "approval",
+              "value": "automatic",
+              "type": "string"
+            },
+            {
+              "name": "subject",
+              "value": "{{ $json.subject }}",
+              "type": "string"
+            }
+          ],
+          "includeOtherFields": false
+        },
+        "position": {
+          "x": 960,
+          "y": 300
+        },
+        "appearance": {
+          "label": "Billing, automatic",
+          "color": "#10b981"
+        }
+      },
+      {
+        "id": "ticket-routed",
+        "pluginId": "log-output",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "label": "Ticket routed"
+        },
+        "position": {
+          "x": 1280,
+          "y": 525
+        },
+        "appearance": {
+          "label": "Log the route"
+        }
+      },
+      {
+        "id": "triage-ticket",
+        "pluginId": "trigger-webhook",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "path": "/tickets/triage",
+          "httpMethod": "POST",
+          "rawBody": false,
+          "authentication": "none",
+          "sampleBody": [
+            {
+              "name": "status",
+              "value": "open",
+              "type": "string"
+            },
+            {
+              "name": "title",
+              "value": "Login fails",
+              "type": "string"
+            }
+          ],
+          "sampleHeaders": {
+            "content-type": "application/json"
+          },
+          "sampleQuery": {}
+        },
+        "position": {
+          "x": 0,
+          "y": 1590
+        },
+        "appearance": {
+          "label": "POST /tickets/triage",
+          "color": "#4f46e5"
+        }
+      },
+      {
+        "id": "triage",
+        "pluginId": "condition-switch",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "fallbackEnabled": false,
+          "rules": [
+            {
+              "combinator": "and",
+              "conditions": [
+                {
+                  "leftValue": "{{ $json.status }}",
+                  "operator": "notEquals",
+                  "rightValue": "closed"
+                },
+                {
+                  "leftValue": "{{ $json.assignee }}",
+                  "operator": "isEmpty"
+                }
+              ]
+            },
+            {
+              "combinator": "and",
+              "conditions": [
+                {
+                  "leftValue": "{{ $json.title ?? '' }}",
+                  "operator": "startsWith",
+                  "rightValue": "[SEC]"
+                }
+              ]
+            },
+            {
+              "combinator": "and",
+              "conditions": [
+                {
+                  "leftValue": "{{ $json.body ?? '' }}",
+                  "operator": "regex",
+                  "rightValue": "crash|exception|stack trace"
+                }
+              ]
+            },
+            {
+              "combinator": "and",
+              "conditions": [
+                {
+                  "leftValue": "{{ $json.votes }}",
+                  "operator": "greaterThanOrEqual",
+                  "rightValue": "10"
+                }
+              ]
+            },
+            {
+              "combinator": "and",
+              "conditions": [
+                {
+                  "leftValue": "{{ $json.status }}",
+                  "operator": "equals",
+                  "rightValue": "open"
+                },
+                {
+                  "leftValue": "{{ $json.labels ?? [] }}",
+                  "operator": "notContains",
+                  "rightValue": "wontfix"
+                }
+              ]
+            }
+          ]
+        },
+        "position": {
+          "x": 320,
+          "y": 1590
+        },
+        "appearance": {
+          "label": "Triage (no fallback)"
+        }
+      },
+      {
+        "id": "needs-assignee",
+        "pluginId": "set",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "fields": [
+            {
+              "name": "action",
+              "value": "assign",
+              "type": "string"
+            }
+          ],
+          "includeOtherFields": false
+        },
+        "position": {
+          "x": 640,
+          "y": 1290
+        },
+        "appearance": {
+          "label": "Assign someone",
+          "color": "#10b981"
+        }
+      },
+      {
+        "id": "security-review",
+        "pluginId": "set",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "fields": [
+            {
+              "name": "action",
+              "value": "security-review",
+              "type": "string"
+            }
+          ],
+          "includeOtherFields": false
+        },
+        "position": {
+          "x": 640,
+          "y": 1440
+        },
+        "appearance": {
+          "label": "Security review",
+          "color": "#10b981"
+        }
+      },
+      {
+        "id": "request-logs",
+        "pluginId": "set",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "fields": [
+            {
+              "name": "action",
+              "value": "request-logs",
+              "type": "string"
+            }
+          ],
+          "includeOtherFields": false
+        },
+        "position": {
+          "x": 640,
+          "y": 1590
+        },
+        "appearance": {
+          "label": "Request the logs",
+          "color": "#10b981"
+        }
+      },
+      {
+        "id": "prioritize",
+        "pluginId": "set",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "fields": [
+            {
+              "name": "action",
+              "value": "prioritize",
+              "type": "string"
+            }
+          ],
+          "includeOtherFields": false
+        },
+        "position": {
+          "x": 640,
+          "y": 1740
+        },
+        "appearance": {
+          "label": "Prioritize",
+          "color": "#10b981"
+        }
+      },
+      {
+        "id": "backlog",
+        "pluginId": "set",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "fields": [
+            {
+              "name": "action",
+              "value": "backlog",
+              "type": "string"
+            }
+          ],
+          "includeOtherFields": false
+        },
+        "position": {
+          "x": 640,
+          "y": 1890
+        },
+        "appearance": {
+          "label": "Backlog",
+          "color": "#10b981"
+        }
+      },
+      {
+        "id": "digest-schedule",
+        "pluginId": "trigger-cron",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "expression": "0 */6 * * *",
+          "timezone": "UTC"
+        },
+        "position": {
+          "x": 0,
+          "y": 2205
+        },
+        "appearance": {
+          "label": "Every 6 hours",
+          "color": "#4f46e5"
+        }
+      },
+      {
+        "id": "digest-window",
+        "pluginId": "condition-switch",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "fallbackEnabled": true,
+          "rules": [
+            {
+              "combinator": "and",
+              "conditions": [
+                {
+                  "leftValue": "{{ new Date($json.triggeredAt).getUTCHours() }}",
+                  "operator": "lessThan",
+                  "rightValue": "12"
+                }
+              ]
+            }
+          ]
+        },
+        "position": {
+          "x": 320,
+          "y": 2205
+        },
+        "appearance": {
+          "label": "Morning or evening?"
+        }
+      },
+      {
+        "id": "morning-digest",
+        "pluginId": "set",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "fields": [
+            {
+              "name": "digest",
+              "value": "morning",
+              "type": "string"
+            },
+            {
+              "name": "at",
+              "value": "{{ $json.triggeredAt }}",
+              "type": "string"
+            }
+          ],
+          "includeOtherFields": false
+        },
+        "position": {
+          "x": 640,
+          "y": 2130
+        },
+        "appearance": {
+          "label": "Morning digest",
+          "color": "#10b981"
+        }
+      },
+      {
+        "id": "evening-digest",
+        "pluginId": "set",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "fields": [
+            {
+              "name": "digest",
+              "value": "evening",
+              "type": "string"
+            },
+            {
+              "name": "at",
+              "value": "{{ $json.triggeredAt }}",
+              "type": "string"
+            }
+          ],
+          "includeOtherFields": false
+        },
+        "position": {
+          "x": 640,
+          "y": 2280
+        },
+        "appearance": {
+          "label": "Evening digest",
+          "color": "#10b981"
+        }
+      }
+    ],
+    "connections": [
+      {
+        "sourceNodeId": "new-ticket",
+        "sourceOutput": "main",
+        "targetNodeId": "route-ticket",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "route-ticket",
+        "sourceOutput": "output1",
+        "targetNodeId": "queue-urgent",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "route-ticket",
+        "sourceOutput": "output2",
+        "targetNodeId": "refund-size",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "route-ticket",
+        "sourceOutput": "output3",
+        "targetNodeId": "queue-partner",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "route-ticket",
+        "sourceOutput": "output4",
+        "targetNodeId": "queue-bugs",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "route-ticket",
+        "sourceOutput": "output5",
+        "targetNodeId": "queue-low",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "route-ticket",
+        "sourceOutput": "fallback",
+        "targetNodeId": "queue-general",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "refund-size",
+        "sourceOutput": "true",
+        "targetNodeId": "billing-manager",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "refund-size",
+        "sourceOutput": "false",
+        "targetNodeId": "billing-automatic",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "queue-urgent",
+        "sourceOutput": "main",
+        "targetNodeId": "ticket-routed",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "billing-manager",
+        "sourceOutput": "main",
+        "targetNodeId": "ticket-routed",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "billing-automatic",
+        "sourceOutput": "main",
+        "targetNodeId": "ticket-routed",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "queue-partner",
+        "sourceOutput": "main",
+        "targetNodeId": "ticket-routed",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "queue-bugs",
+        "sourceOutput": "main",
+        "targetNodeId": "ticket-routed",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "queue-low",
+        "sourceOutput": "main",
+        "targetNodeId": "ticket-routed",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "queue-general",
+        "sourceOutput": "main",
+        "targetNodeId": "ticket-routed",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "triage-ticket",
+        "sourceOutput": "main",
+        "targetNodeId": "triage",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "triage",
+        "sourceOutput": "output1",
+        "targetNodeId": "needs-assignee",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "triage",
+        "sourceOutput": "output2",
+        "targetNodeId": "security-review",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "triage",
+        "sourceOutput": "output3",
+        "targetNodeId": "request-logs",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "triage",
+        "sourceOutput": "output4",
+        "targetNodeId": "prioritize",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "triage",
+        "sourceOutput": "output5",
+        "targetNodeId": "backlog",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "digest-schedule",
+        "sourceOutput": "main",
+        "targetNodeId": "digest-window",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "digest-window",
+        "sourceOutput": "output1",
+        "targetNodeId": "morning-digest",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "digest-window",
+        "sourceOutput": "fallback",
+        "targetNodeId": "evening-digest",
+        "targetInput": "main"
+      }
+    ]
+  }
+}

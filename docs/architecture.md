@@ -88,6 +88,7 @@ Os contratos entre runtime, plugins e hosts são estruturais: chaves de serviço
 - Uma falha fica registrada no nó e interrompe só os descendentes. `WorkflowExecution` informa o status (`success`, `partial`, `error`), as saídas e o resultado, que são as saídas das folhas.
 - Triggers do mesmo plugin disputam entre si: quando um conclui, o `signal` dos outros é abortado e os perdedores não entram no registro. No editor, a espera de webhooks vem do `WebhookTestHub`, injetado como `triggerEvents`; sem ele, o webhook de teste usa o payload de exemplo. Em produção, um webhook sem requisição recebe uma requisição vazia, nunca o exemplo.
 - `$node` contém apenas os ancestrais do nó (por id, e também pelo rótulo quando não conflita com um id), então ramos paralelos não dependem da ordem em que terminam.
+- Campos tipados aceitam o valor ou o seu texto: `"42"` como número, `"true"` como booleano, `["a"]` e `{"a":1}` em texto JSON como lista e objeto.
 - `run({ signal })` cancela um run: os nós em execução recebem o `signal` abortado e nenhum outro nó começa. O Express aborta o run quando o cliente desconecta, e o editor faz o mesmo nas execuções de teste.
 - `runNode(id, { previous })` testa um nó isolado: a entrada vem dos registros bem-sucedidos dos pais e `$node`, dos ancestrais.
 - `dispose()` espera os runs em andamento, libera os handlers e recusa runs posteriores. Quem cria o motor o descarta: os templates exportados no desligamento, a validation-runtime ao fim de cada execução de teste. Os hosts nunca descartam o motor que recebem.
@@ -122,6 +123,10 @@ O compilador rejeita, com o código `INVALID_WORKFLOW`, contribuições de plugi
 ## Editor
 
 O editor executa os plugins no processo do Vite. Um único `PluginRegistryCache` atende o catálogo e as execuções de teste: a descoberta roda uma vez e de novo quando um arquivo de um diretório de plugins muda. Plugins em TypeScript são importados pelo tsx sem cache, então os módulos auxiliares também recarregam. Uma requisição de teste interrompida pelo cliente cancela o run.
+
+As execuções de teste leem as variáveis do projeto aberto como `$env`, antes das variáveis do processo do Vite, assim como o backend exportado lê o seu `.env`. `npm run examples:seed` grava os workflows de `examples/` como projetos, e `npm run examples:postgres` sobe um PostgreSQL local (PGlite) para o exemplo de banco.
+
+Nas execuções de teste, cada webhook espera no `WebhookTestHub` pela sua rota (`POST /items`), e as requisições enviadas à URL de teste são entregues pelo método e pelo caminho, como nos backends exportados: método exato antes de `ANY`, e HEAD como GET. Vários webhooks no mesmo caminho, um por método, podem ser testados no mesmo workflow. Com o hub, o webhook espera a requisição nos dois modos de execução; sem ele, o modo sandbox usa o payload de exemplo, e a produção, uma requisição vazia.
 
 ## Evolução com TDD
 

@@ -1,0 +1,988 @@
+{
+  "$schema": "https://runflux.dev/schemas/v1/workflow-project.json",
+  "schemaVersion": 1,
+  "exportedAt": "2026-09-24T00:00:00.000Z",
+  "project": {
+    "name": "Example - PostgreSQL CRUD",
+    "envVars": [
+      {
+        "key": "DATABASE_URL",
+        "value": "postgres://postgres:postgres@localhost:5432/runflux",
+        "description": "PostgreSQL connection string; inside Docker Compose use the host postgres instead of localhost"
+      },
+      {
+        "key": "ADMIN_KEY",
+        "value": "change-me",
+        "description": "Secret the /setup, /setup/reset and /products/reprice endpoints expect in the X-Admin-Key header"
+      }
+    ]
+  },
+  "workflow": {
+    "id": "example-database-crud",
+    "name": "Example - PostgreSQL CRUD",
+    "nodes": [
+      {
+        "id": "setup",
+        "pluginId": "trigger-webhook",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "path": "/setup",
+          "httpMethod": "POST",
+          "rawBody": false,
+          "authentication": "headerAuth",
+          "headerName": "X-Admin-Key",
+          "secretEnvVar": "ADMIN_KEY",
+          "sampleBody": [],
+          "sampleHeaders": {
+            "content-type": "application/json"
+          },
+          "sampleQuery": {}
+        },
+        "position": {
+          "x": 0,
+          "y": 0
+        },
+        "appearance": {
+          "label": "POST /setup (X-Admin-Key)",
+          "color": "#4f46e5"
+        }
+      },
+      {
+        "id": "create-schema",
+        "pluginId": "database-query",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "databaseType": "postgres",
+          "connectionEnvVar": "DATABASE_URL",
+          "query": "CREATE TABLE IF NOT EXISTS products (\n  id serial PRIMARY KEY,\n  sku text NOT NULL UNIQUE,\n  name text NOT NULL,\n  price numeric(10, 2) NOT NULL CHECK (price >= 0),\n  tags jsonb NOT NULL DEFAULT '[]',\n  active boolean NOT NULL DEFAULT true,\n  created_at timestamptz NOT NULL DEFAULT now(),\n  updated_at timestamptz\n);\nCREATE INDEX IF NOT EXISTS products_active_idx ON products (active);",
+          "queryParams": [],
+          "outputMode": "all"
+        },
+        "position": {
+          "x": 320,
+          "y": 0
+        },
+        "appearance": {
+          "label": "Create the products table"
+        }
+      },
+      {
+        "id": "schema-ready",
+        "pluginId": "set",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "fields": [
+            {
+              "name": "ready",
+              "value": "true",
+              "type": "boolean"
+            },
+            {
+              "name": "table",
+              "value": "products",
+              "type": "string"
+            }
+          ],
+          "includeOtherFields": false
+        },
+        "position": {
+          "x": 640,
+          "y": 0
+        },
+        "appearance": {
+          "label": "Schema ready",
+          "color": "#10b981"
+        }
+      },
+      {
+        "id": "reset",
+        "pluginId": "trigger-webhook",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "path": "/setup/reset",
+          "httpMethod": "POST",
+          "rawBody": false,
+          "authentication": "headerAuth",
+          "headerName": "X-Admin-Key",
+          "secretEnvVar": "ADMIN_KEY",
+          "sampleBody": [],
+          "sampleHeaders": {
+            "content-type": "application/json"
+          },
+          "sampleQuery": {}
+        },
+        "position": {
+          "x": 0,
+          "y": 240
+        },
+        "appearance": {
+          "label": "POST /setup/reset (X-Admin-Key)",
+          "color": "#4f46e5"
+        }
+      },
+      {
+        "id": "truncate-products",
+        "pluginId": "database-query",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "databaseType": "postgres",
+          "connectionEnvVar": "DATABASE_URL",
+          "query": "TRUNCATE products RESTART IDENTITY",
+          "queryParams": [],
+          "outputMode": "all"
+        },
+        "position": {
+          "x": 320,
+          "y": 240
+        },
+        "appearance": {
+          "label": "Remove every product"
+        }
+      },
+      {
+        "id": "reset-done",
+        "pluginId": "set",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "fields": [
+            {
+              "name": "reset",
+              "value": "true",
+              "type": "boolean"
+            }
+          ],
+          "includeOtherFields": false
+        },
+        "position": {
+          "x": 640,
+          "y": 240
+        },
+        "appearance": {
+          "label": "Reset done",
+          "color": "#10b981"
+        }
+      },
+      {
+        "id": "create-product",
+        "pluginId": "trigger-webhook",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "path": "/products",
+          "httpMethod": "POST",
+          "rawBody": false,
+          "authentication": "none",
+          "sampleBody": [
+            {
+              "name": "sku",
+              "value": "KB-1",
+              "type": "string"
+            },
+            {
+              "name": "name",
+              "value": "Keyboard",
+              "type": "string"
+            },
+            {
+              "name": "price",
+              "value": "49.9",
+              "type": "number"
+            },
+            {
+              "name": "tags",
+              "value": [
+                "hardware"
+              ],
+              "type": "array"
+            }
+          ],
+          "sampleHeaders": {
+            "content-type": "application/json"
+          },
+          "sampleQuery": {}
+        },
+        "position": {
+          "x": 0,
+          "y": 555
+        },
+        "appearance": {
+          "label": "POST /products",
+          "color": "#4f46e5"
+        }
+      },
+      {
+        "id": "valid-product",
+        "pluginId": "condition-if",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "{{ $json.sku }}",
+              "operator": "isNotEmpty"
+            },
+            {
+              "leftValue": "{{ $json.name }}",
+              "operator": "isNotEmpty"
+            },
+            {
+              "leftValue": "{{ $json.price }}",
+              "operator": "greaterThanOrEqual",
+              "rightValue": "0"
+            }
+          ]
+        },
+        "position": {
+          "x": 320,
+          "y": 555
+        },
+        "appearance": {
+          "label": "sku, name and price?"
+        }
+      },
+      {
+        "id": "insert-product",
+        "pluginId": "database-query",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "databaseType": "postgres",
+          "connectionEnvVar": "DATABASE_URL",
+          "query": "INSERT INTO products (sku, name, price, tags)\nVALUES ($1, $2, $3, $4::jsonb)\nRETURNING *",
+          "queryParams": [
+            "{{ $json.sku }}",
+            "{{ $json.name }}",
+            "{{ $json.price }}",
+            "{{ JSON.stringify($json.tags ?? []) }}"
+          ],
+          "outputMode": "first"
+        },
+        "position": {
+          "x": 640,
+          "y": 480
+        },
+        "appearance": {
+          "label": "INSERT … RETURNING *",
+          "color": "#10b981"
+        }
+      },
+      {
+        "id": "invalid-product",
+        "pluginId": "set",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "fields": [
+            {
+              "name": "error",
+              "value": "sku, name and a price of zero or more are required",
+              "type": "string"
+            }
+          ],
+          "includeOtherFields": false
+        },
+        "position": {
+          "x": 640,
+          "y": 630
+        },
+        "appearance": {
+          "label": "Invalid product",
+          "color": "#ef4444"
+        }
+      },
+      {
+        "id": "read-products",
+        "pluginId": "trigger-webhook",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "path": "/products",
+          "httpMethod": "GET",
+          "rawBody": false,
+          "authentication": "none",
+          "sampleBody": [],
+          "sampleHeaders": {
+            "content-type": "application/json"
+          },
+          "sampleQuery": {
+            "search": "key"
+          }
+        },
+        "position": {
+          "x": 0,
+          "y": 945
+        },
+        "appearance": {
+          "label": "GET /products",
+          "color": "#4f46e5"
+        }
+      },
+      {
+        "id": "by-id",
+        "pluginId": "condition-if",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "{{ $json._query.id }}",
+              "operator": "isNotEmpty"
+            }
+          ]
+        },
+        "position": {
+          "x": 320,
+          "y": 945
+        },
+        "appearance": {
+          "label": "Query has an id?"
+        }
+      },
+      {
+        "id": "find-product",
+        "pluginId": "database-query",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "databaseType": "postgres",
+          "connectionEnvVar": "DATABASE_URL",
+          "query": "SELECT * FROM products WHERE id = $1::int",
+          "queryParams": [
+            "{{ $json._query.id }}"
+          ],
+          "outputMode": "first"
+        },
+        "position": {
+          "x": 640,
+          "y": 870
+        },
+        "appearance": {
+          "label": "SELECT one product",
+          "color": "#10b981"
+        }
+      },
+      {
+        "id": "list-products",
+        "pluginId": "database-query",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "databaseType": "postgres",
+          "connectionEnvVar": "DATABASE_URL",
+          "query": "SELECT * FROM products\nWHERE ($1::text IS NULL OR name ILIKE '%' || $1 || '%')\n  AND ($2::boolean IS NULL OR active = $2::boolean)\nORDER BY id\nLIMIT $3::int",
+          "queryParams": [
+            "{{ $json._query.search ?? null }}",
+            "{{ $json._query.active ?? null }}",
+            "{{ $json._query.limit ?? 100 }}"
+          ],
+          "outputMode": "all"
+        },
+        "position": {
+          "x": 640,
+          "y": 1020
+        },
+        "appearance": {
+          "label": "SELECT with filters",
+          "color": "#10b981"
+        }
+      },
+      {
+        "id": "update-product",
+        "pluginId": "trigger-webhook",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "path": "/products",
+          "httpMethod": "PUT",
+          "rawBody": false,
+          "authentication": "none",
+          "sampleBody": [
+            {
+              "name": "price",
+              "value": "59.9",
+              "type": "number"
+            }
+          ],
+          "sampleHeaders": {
+            "content-type": "application/json"
+          },
+          "sampleQuery": {
+            "id": "1"
+          }
+        },
+        "position": {
+          "x": 0,
+          "y": 1335
+        },
+        "appearance": {
+          "label": "PUT /products",
+          "color": "#4f46e5"
+        }
+      },
+      {
+        "id": "apply-update",
+        "pluginId": "database-query",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "databaseType": "postgres",
+          "connectionEnvVar": "DATABASE_URL",
+          "query": "UPDATE products SET\n  name = COALESCE($2, name),\n  price = COALESCE($3::numeric, price),\n  active = COALESCE($4::boolean, active),\n  tags = COALESCE($5::jsonb, tags),\n  updated_at = now()\nWHERE id = $1::int\nRETURNING *",
+          "queryParams": [
+            "{{ $json._query.id }}",
+            "{{ $json.name ?? null }}",
+            "{{ $json.price ?? null }}",
+            "{{ $json.active ?? null }}",
+            "{{ $json.tags === undefined ? null : JSON.stringify($json.tags) }}"
+          ],
+          "outputMode": "first"
+        },
+        "position": {
+          "x": 320,
+          "y": 1335
+        },
+        "appearance": {
+          "label": "UPDATE … RETURNING *"
+        }
+      },
+      {
+        "id": "was-updated",
+        "pluginId": "condition-if",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "{{ $json }}",
+              "operator": "isNotEmpty"
+            }
+          ]
+        },
+        "position": {
+          "x": 640,
+          "y": 1335
+        },
+        "appearance": {
+          "label": "Product found?"
+        }
+      },
+      {
+        "id": "product-updated",
+        "pluginId": "set",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "fields": [
+            {
+              "name": "status",
+              "value": "updated",
+              "type": "string"
+            },
+            {
+              "name": "product",
+              "value": "{{ $json }}"
+            }
+          ],
+          "includeOtherFields": false
+        },
+        "position": {
+          "x": 960,
+          "y": 1260
+        },
+        "appearance": {
+          "label": "Updated product",
+          "color": "#10b981"
+        }
+      },
+      {
+        "id": "update-missing",
+        "pluginId": "set",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "fields": [
+            {
+              "name": "error",
+              "value": "product not found",
+              "type": "string"
+            }
+          ],
+          "includeOtherFields": false
+        },
+        "position": {
+          "x": 960,
+          "y": 1410
+        },
+        "appearance": {
+          "label": "Not found",
+          "color": "#ef4444"
+        }
+      },
+      {
+        "id": "delete-product",
+        "pluginId": "trigger-webhook",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "path": "/products",
+          "httpMethod": "DELETE",
+          "rawBody": false,
+          "authentication": "none",
+          "sampleBody": [],
+          "sampleHeaders": {
+            "content-type": "application/json"
+          },
+          "sampleQuery": {
+            "id": "1"
+          }
+        },
+        "position": {
+          "x": 0,
+          "y": 1725
+        },
+        "appearance": {
+          "label": "DELETE /products",
+          "color": "#4f46e5"
+        }
+      },
+      {
+        "id": "remove-product",
+        "pluginId": "database-query",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "databaseType": "postgres",
+          "connectionEnvVar": "DATABASE_URL",
+          "query": "DELETE FROM products WHERE id = $1::int RETURNING id, sku",
+          "queryParams": [
+            "{{ $json._query.id }}"
+          ],
+          "outputMode": "first"
+        },
+        "position": {
+          "x": 320,
+          "y": 1725
+        },
+        "appearance": {
+          "label": "DELETE … RETURNING id, sku"
+        }
+      },
+      {
+        "id": "was-deleted",
+        "pluginId": "condition-if",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "{{ $json }}",
+              "operator": "isNotEmpty"
+            }
+          ]
+        },
+        "position": {
+          "x": 640,
+          "y": 1725
+        },
+        "appearance": {
+          "label": "Product found?"
+        }
+      },
+      {
+        "id": "product-deleted",
+        "pluginId": "set",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "fields": [
+            {
+              "name": "status",
+              "value": "deleted",
+              "type": "string"
+            },
+            {
+              "name": "id",
+              "value": "{{ $json.id }}",
+              "type": "number"
+            },
+            {
+              "name": "sku",
+              "value": "{{ $json.sku }}",
+              "type": "string"
+            }
+          ],
+          "includeOtherFields": false
+        },
+        "position": {
+          "x": 960,
+          "y": 1650
+        },
+        "appearance": {
+          "label": "Deleted product",
+          "color": "#10b981"
+        }
+      },
+      {
+        "id": "delete-missing",
+        "pluginId": "set",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "fields": [
+            {
+              "name": "error",
+              "value": "product not found",
+              "type": "string"
+            }
+          ],
+          "includeOtherFields": false
+        },
+        "position": {
+          "x": 960,
+          "y": 1800
+        },
+        "appearance": {
+          "label": "Not found",
+          "color": "#ef4444"
+        }
+      },
+      {
+        "id": "reprice",
+        "pluginId": "trigger-webhook",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "path": "/products/reprice",
+          "httpMethod": "POST",
+          "rawBody": false,
+          "authentication": "headerAuth",
+          "headerName": "X-Admin-Key",
+          "secretEnvVar": "ADMIN_KEY",
+          "sampleBody": [
+            {
+              "name": "percent",
+              "value": "10",
+              "type": "number"
+            }
+          ],
+          "sampleHeaders": {
+            "content-type": "application/json"
+          },
+          "sampleQuery": {}
+        },
+        "position": {
+          "x": 0,
+          "y": 2040
+        },
+        "appearance": {
+          "label": "POST /products/reprice (X-Admin-Key)",
+          "color": "#4f46e5"
+        }
+      },
+      {
+        "id": "apply-reprice",
+        "pluginId": "database-query",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "databaseType": "postgres",
+          "connectionEnvVar": "DATABASE_URL",
+          "query": "UPDATE products\nSET price = round(price * (1 + $1::numeric / 100), 2), updated_at = now()\nWHERE active\nRETURNING id, sku, price",
+          "queryParams": [
+            "{{ $json.percent }}"
+          ],
+          "outputMode": "all"
+        },
+        "position": {
+          "x": 320,
+          "y": 2040
+        },
+        "appearance": {
+          "label": "UPDATE active prices"
+        }
+      },
+      {
+        "id": "reprice-summary",
+        "pluginId": "code-javascript",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "code": "return { updated: $json.length, products: $json.sort((a, b) => a.id - b.id) };"
+        },
+        "position": {
+          "x": 640,
+          "y": 2040
+        },
+        "appearance": {
+          "label": "Summarize",
+          "color": "#10b981"
+        }
+      },
+      {
+        "id": "stats",
+        "pluginId": "trigger-webhook",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "path": "/products/stats",
+          "httpMethod": "GET",
+          "rawBody": false,
+          "authentication": "none",
+          "sampleBody": [],
+          "sampleHeaders": {
+            "content-type": "application/json"
+          },
+          "sampleQuery": {}
+        },
+        "position": {
+          "x": 0,
+          "y": 2280
+        },
+        "appearance": {
+          "label": "GET /products/stats",
+          "color": "#4f46e5"
+        }
+      },
+      {
+        "id": "product-stats",
+        "pluginId": "database-query",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "databaseType": "postgres",
+          "connectionEnvVar": "DATABASE_URL",
+          "query": "SELECT\n  count(*)::int AS total,\n  (count(*) FILTER (WHERE active))::int AS active,\n  COALESCE(sum(price) FILTER (WHERE active), 0) AS stock_value\nFROM products",
+          "queryParams": [],
+          "outputMode": "first"
+        },
+        "position": {
+          "x": 320,
+          "y": 2280
+        },
+        "appearance": {
+          "label": "Count and stock value"
+        }
+      },
+      {
+        "id": "tag-list",
+        "pluginId": "database-query",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "databaseType": "postgres",
+          "connectionEnvVar": "DATABASE_URL",
+          "query": "SELECT DISTINCT jsonb_array_elements_text(tags) AS tag FROM products ORDER BY tag",
+          "queryParams": [],
+          "outputMode": "all"
+        },
+        "position": {
+          "x": 640,
+          "y": 2280
+        },
+        "appearance": {
+          "label": "Distinct tags (jsonb)"
+        }
+      },
+      {
+        "id": "stats-response",
+        "pluginId": "code-javascript",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "code": "// $node holds the outputs of the ancestors of this node, by id.\nreturn { ...$node['product-stats'].json, tags: $json.map((row) => row.tag) };"
+        },
+        "position": {
+          "x": 960,
+          "y": 2280
+        },
+        "appearance": {
+          "label": "Combine both queries",
+          "color": "#10b981"
+        }
+      },
+      {
+        "id": "hourly-report",
+        "pluginId": "trigger-cron",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "expression": "0 * * * *",
+          "timezone": "UTC"
+        },
+        "position": {
+          "x": 0,
+          "y": 2520
+        },
+        "appearance": {
+          "label": "Every hour",
+          "color": "#4f46e5"
+        }
+      },
+      {
+        "id": "count-active",
+        "pluginId": "database-query",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "databaseType": "postgres",
+          "connectionEnvVar": "DATABASE_URL",
+          "query": "SELECT count(*)::int AS active FROM products WHERE active",
+          "queryParams": [],
+          "outputMode": "first"
+        },
+        "position": {
+          "x": 320,
+          "y": 2520
+        },
+        "appearance": {
+          "label": "Count active products"
+        }
+      },
+      {
+        "id": "log-report",
+        "pluginId": "log-output",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "label": "Active products"
+        },
+        "position": {
+          "x": 640,
+          "y": 2520
+        },
+        "appearance": {
+          "label": "Log the report",
+          "color": "#10b981"
+        }
+      }
+    ],
+    "connections": [
+      {
+        "sourceNodeId": "setup",
+        "sourceOutput": "main",
+        "targetNodeId": "create-schema",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "create-schema",
+        "sourceOutput": "main",
+        "targetNodeId": "schema-ready",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "reset",
+        "sourceOutput": "main",
+        "targetNodeId": "truncate-products",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "truncate-products",
+        "sourceOutput": "main",
+        "targetNodeId": "reset-done",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "create-product",
+        "sourceOutput": "main",
+        "targetNodeId": "valid-product",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "valid-product",
+        "sourceOutput": "true",
+        "targetNodeId": "insert-product",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "valid-product",
+        "sourceOutput": "false",
+        "targetNodeId": "invalid-product",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "read-products",
+        "sourceOutput": "main",
+        "targetNodeId": "by-id",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "by-id",
+        "sourceOutput": "true",
+        "targetNodeId": "find-product",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "by-id",
+        "sourceOutput": "false",
+        "targetNodeId": "list-products",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "update-product",
+        "sourceOutput": "main",
+        "targetNodeId": "apply-update",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "apply-update",
+        "sourceOutput": "main",
+        "targetNodeId": "was-updated",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "was-updated",
+        "sourceOutput": "true",
+        "targetNodeId": "product-updated",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "was-updated",
+        "sourceOutput": "false",
+        "targetNodeId": "update-missing",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "delete-product",
+        "sourceOutput": "main",
+        "targetNodeId": "remove-product",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "remove-product",
+        "sourceOutput": "main",
+        "targetNodeId": "was-deleted",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "was-deleted",
+        "sourceOutput": "true",
+        "targetNodeId": "product-deleted",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "was-deleted",
+        "sourceOutput": "false",
+        "targetNodeId": "delete-missing",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "reprice",
+        "sourceOutput": "main",
+        "targetNodeId": "apply-reprice",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "apply-reprice",
+        "sourceOutput": "main",
+        "targetNodeId": "reprice-summary",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "stats",
+        "sourceOutput": "main",
+        "targetNodeId": "product-stats",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "product-stats",
+        "sourceOutput": "main",
+        "targetNodeId": "tag-list",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "tag-list",
+        "sourceOutput": "main",
+        "targetNodeId": "stats-response",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "hourly-report",
+        "sourceOutput": "main",
+        "targetNodeId": "count-active",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "count-active",
+        "sourceOutput": "main",
+        "targetNodeId": "log-report",
+        "targetInput": "main"
+      }
+    ]
+  }
+}

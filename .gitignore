@@ -16,3 +16,6 @@ compiled/
 .env.local
 .DS_Store
 *.log
+
+# Local data of npm run examples:postgres
+.runflux/

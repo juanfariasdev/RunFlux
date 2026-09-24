@@ -1,0 +1,893 @@
+{
+  "$schema": "https://runflux.dev/schemas/v1/workflow-project.json",
+  "schemaVersion": 1,
+  "exportedAt": "2026-09-24T00:00:00.000Z",
+  "project": {
+    "name": "Example - HTTP API",
+    "envVars": [
+      {
+        "key": "ITEMS_API_KEY",
+        "value": "change-me",
+        "description": "Secret the PUT and PATCH /items endpoints expect in the X-Api-Key header"
+      },
+      {
+        "key": "UPSTREAM_URL",
+        "value": "https://httpbin.org/anything",
+        "description": "Base URL of the API that /proxy and /upstream/health call; httpbin echoes each request back"
+      }
+    ]
+  },
+  "workflow": {
+    "id": "example-http-api",
+    "name": "Example - HTTP API",
+    "nodes": [
+      {
+        "id": "list-items",
+        "pluginId": "trigger-webhook",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "path": "/items",
+          "httpMethod": "GET",
+          "rawBody": false,
+          "authentication": "none",
+          "sampleBody": [
+            {
+              "name": "message",
+              "value": "Sample webhook payload",
+              "type": "string"
+            }
+          ],
+          "sampleHeaders": {
+            "content-type": "application/json"
+          },
+          "sampleQuery": {
+            "category": "hardware"
+          }
+        },
+        "position": {
+          "x": 0,
+          "y": 0
+        },
+        "appearance": {
+          "label": "GET /items",
+          "color": "#4f46e5"
+        }
+      },
+      {
+        "id": "filter-catalog",
+        "pluginId": "code-javascript",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "code": "const catalog = [\n  { id: 1, name: 'Keyboard', category: 'hardware', price: 49.9 },\n  { id: 2, name: 'Mouse', category: 'hardware', price: 19.9 },\n  { id: 3, name: 'IDE license', category: 'software', price: 99 },\n];\nconst { category, limit } = $json._query;\nconst matching = catalog.filter((item) => !category || item.category === category);\nconst items = limit ? matching.slice(0, Number(limit)) : matching;\nreturn { items, count: items.length, filters: { category: category ?? null, limit: limit ? Number(limit) : null } };"
+        },
+        "position": {
+          "x": 320,
+          "y": 0
+        },
+        "appearance": {
+          "label": "Filter the catalog",
+          "color": "#10b981"
+        }
+      },
+      {
+        "id": "create-item",
+        "pluginId": "trigger-webhook",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "path": "/items",
+          "httpMethod": "POST",
+          "rawBody": false,
+          "authentication": "none",
+          "sampleBody": [
+            {
+              "name": "name",
+              "value": "Monitor",
+              "type": "string"
+            },
+            {
+              "name": "price",
+              "value": "899.9",
+              "type": "number"
+            }
+          ],
+          "sampleHeaders": {
+            "content-type": "application/json"
+          },
+          "sampleQuery": {}
+        },
+        "position": {
+          "x": 0,
+          "y": 315
+        },
+        "appearance": {
+          "label": "POST /items",
+          "color": "#4f46e5"
+        }
+      },
+      {
+        "id": "validate-item",
+        "pluginId": "condition-if",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "{{ $json.name }}",
+              "operator": "isNotEmpty"
+            },
+            {
+              "leftValue": "{{ $json.price }}",
+              "operator": "greaterThan",
+              "rightValue": "0"
+            }
+          ]
+        },
+        "position": {
+          "x": 320,
+          "y": 315
+        },
+        "appearance": {
+          "label": "Name and positive price?"
+        }
+      },
+      {
+        "id": "item-created",
+        "pluginId": "set",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "fields": [
+            {
+              "name": "status",
+              "value": "created",
+              "type": "string"
+            },
+            {
+              "name": "name",
+              "value": "{{ $json.name.trim() }}",
+              "type": "string"
+            },
+            {
+              "name": "price",
+              "value": "{{ $json.price }}",
+              "type": "number"
+            },
+            {
+              "name": "slug",
+              "value": "{{ $json.name.trim().toLowerCase().replace(/\\s+/g, '-') }}",
+              "type": "string"
+            }
+          ],
+          "includeOtherFields": false
+        },
+        "position": {
+          "x": 640,
+          "y": 240
+        },
+        "appearance": {
+          "label": "Created item",
+          "color": "#10b981"
+        }
+      },
+      {
+        "id": "log-created",
+        "pluginId": "log-output",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "label": "Item created"
+        },
+        "position": {
+          "x": 960,
+          "y": 240
+        },
+        "appearance": {
+          "label": "Log the new item"
+        }
+      },
+      {
+        "id": "item-rejected",
+        "pluginId": "set",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "fields": [
+            {
+              "name": "status",
+              "value": "rejected",
+              "type": "string"
+            },
+            {
+              "name": "error",
+              "value": "name and a positive price are required",
+              "type": "string"
+            }
+          ],
+          "includeOtherFields": false
+        },
+        "position": {
+          "x": 640,
+          "y": 390
+        },
+        "appearance": {
+          "label": "Rejected item",
+          "color": "#ef4444"
+        }
+      },
+      {
+        "id": "replace-item",
+        "pluginId": "trigger-webhook",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "path": "/items",
+          "httpMethod": "PUT",
+          "rawBody": false,
+          "authentication": "headerAuth",
+          "headerName": "X-Api-Key",
+          "secretEnvVar": "ITEMS_API_KEY",
+          "sampleBody": [
+            {
+              "name": "name",
+              "value": "Mechanical keyboard",
+              "type": "string"
+            },
+            {
+              "name": "price",
+              "value": "129",
+              "type": "number"
+            }
+          ],
+          "sampleHeaders": {
+            "content-type": "application/json"
+          },
+          "sampleQuery": {
+            "id": "1"
+          }
+        },
+        "position": {
+          "x": 0,
+          "y": 630
+        },
+        "appearance": {
+          "label": "PUT /items (X-Api-Key)",
+          "color": "#4f46e5"
+        }
+      },
+      {
+        "id": "item-replaced",
+        "pluginId": "set",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "fields": [
+            {
+              "name": "status",
+              "value": "replaced",
+              "type": "string"
+            },
+            {
+              "name": "id",
+              "value": "{{ $json._query.id }}",
+              "type": "number"
+            },
+            {
+              "name": "name",
+              "value": "{{ $json.name }}",
+              "type": "string"
+            },
+            {
+              "name": "price",
+              "value": "{{ $json.price }}",
+              "type": "number"
+            }
+          ],
+          "includeOtherFields": false
+        },
+        "position": {
+          "x": 320,
+          "y": 630
+        },
+        "appearance": {
+          "label": "Replaced item",
+          "color": "#10b981"
+        }
+      },
+      {
+        "id": "update-item",
+        "pluginId": "trigger-webhook",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "path": "/items",
+          "httpMethod": "PATCH",
+          "rawBody": false,
+          "authentication": "headerAuth",
+          "headerName": "X-Api-Key",
+          "secretEnvVar": "ITEMS_API_KEY",
+          "sampleBody": [
+            {
+              "name": "price",
+              "value": "10",
+              "type": "number"
+            }
+          ],
+          "sampleHeaders": {
+            "content-type": "application/json"
+          },
+          "sampleQuery": {
+            "id": "1"
+          }
+        },
+        "position": {
+          "x": 0,
+          "y": 945
+        },
+        "appearance": {
+          "label": "PATCH /items (X-Api-Key)",
+          "color": "#4f46e5"
+        }
+      },
+      {
+        "id": "has-changes",
+        "pluginId": "condition-if",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "{{ Object.keys($json).filter((key) => !key.startsWith('_')).length }}",
+              "operator": "greaterThan",
+              "rightValue": "0"
+            }
+          ]
+        },
+        "position": {
+          "x": 320,
+          "y": 945
+        },
+        "appearance": {
+          "label": "Any field to change?"
+        }
+      },
+      {
+        "id": "item-updated",
+        "pluginId": "code-javascript",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "code": "const { _headers, _query, ...changes } = $json;\nreturn { status: 'updated', id: Number(_query.id), changes };"
+        },
+        "position": {
+          "x": 640,
+          "y": 870
+        },
+        "appearance": {
+          "label": "Updated item",
+          "color": "#10b981"
+        }
+      },
+      {
+        "id": "item-unchanged",
+        "pluginId": "set",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "fields": [
+            {
+              "name": "status",
+              "value": "unchanged",
+              "type": "string"
+            },
+            {
+              "name": "reason",
+              "value": "send at least one field to change",
+              "type": "string"
+            }
+          ],
+          "includeOtherFields": false
+        },
+        "position": {
+          "x": 640,
+          "y": 1020
+        },
+        "appearance": {
+          "label": "Nothing to change",
+          "color": "#ef4444"
+        }
+      },
+      {
+        "id": "delete-item",
+        "pluginId": "trigger-webhook",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "path": "/items",
+          "httpMethod": "DELETE",
+          "rawBody": false,
+          "authentication": "none",
+          "sampleBody": [
+            {
+              "name": "message",
+              "value": "Sample webhook payload",
+              "type": "string"
+            }
+          ],
+          "sampleHeaders": {
+            "content-type": "application/json"
+          },
+          "sampleQuery": {
+            "id": "1"
+          }
+        },
+        "position": {
+          "x": 0,
+          "y": 1335
+        },
+        "appearance": {
+          "label": "DELETE /items",
+          "color": "#4f46e5"
+        }
+      },
+      {
+        "id": "id-given",
+        "pluginId": "condition-if",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "{{ $json._query.id }}",
+              "operator": "isNotEmpty"
+            }
+          ]
+        },
+        "position": {
+          "x": 320,
+          "y": 1335
+        },
+        "appearance": {
+          "label": "Query has an id?"
+        }
+      },
+      {
+        "id": "item-deleted",
+        "pluginId": "set",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "fields": [
+            {
+              "name": "status",
+              "value": "deleted",
+              "type": "string"
+            },
+            {
+              "name": "id",
+              "value": "{{ $json._query.id }}",
+              "type": "number"
+            }
+          ],
+          "includeOtherFields": false
+        },
+        "position": {
+          "x": 640,
+          "y": 1260
+        },
+        "appearance": {
+          "label": "Deleted item",
+          "color": "#10b981"
+        }
+      },
+      {
+        "id": "delete-rejected",
+        "pluginId": "set",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "fields": [
+            {
+              "name": "status",
+              "value": "rejected",
+              "type": "string"
+            },
+            {
+              "name": "error",
+              "value": "query parameter id is required",
+              "type": "string"
+            }
+          ],
+          "includeOtherFields": false
+        },
+        "position": {
+          "x": 640,
+          "y": 1410
+        },
+        "appearance": {
+          "label": "Missing id",
+          "color": "#ef4444"
+        }
+      },
+      {
+        "id": "echo",
+        "pluginId": "trigger-webhook",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "path": "/echo",
+          "httpMethod": "ANY",
+          "rawBody": true,
+          "authentication": "none",
+          "sampleBody": {
+            "message": "raw sample"
+          },
+          "sampleHeaders": {
+            "content-type": "application/json"
+          },
+          "sampleQuery": {}
+        },
+        "position": {
+          "x": 0,
+          "y": 1650
+        },
+        "appearance": {
+          "label": "ANY /echo (raw body)",
+          "color": "#4f46e5"
+        }
+      },
+      {
+        "id": "echo-body",
+        "pluginId": "code-javascript",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "code": "const text = typeof $json.data === 'string' ? $json.data : '';\nreturn { received: text, length: text.length, contentType: $json._headers['content-type'] ?? null };"
+        },
+        "position": {
+          "x": 320,
+          "y": 1650
+        },
+        "appearance": {
+          "label": "Describe the body",
+          "color": "#10b981"
+        }
+      },
+      {
+        "id": "proxy",
+        "pluginId": "trigger-webhook",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "path": "/proxy",
+          "httpMethod": "POST",
+          "rawBody": false,
+          "authentication": "none",
+          "sampleBody": [
+            {
+              "name": "method",
+              "value": "GET",
+              "type": "string"
+            },
+            {
+              "name": "path",
+              "value": "/status",
+              "type": "string"
+            }
+          ],
+          "sampleHeaders": {
+            "content-type": "application/json"
+          },
+          "sampleQuery": {}
+        },
+        "position": {
+          "x": 0,
+          "y": 1890
+        },
+        "appearance": {
+          "label": "POST /proxy",
+          "color": "#4f46e5"
+        }
+      },
+      {
+        "id": "call-upstream",
+        "pluginId": "http-output",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "method": "{{ $json.method ?? 'GET' }}",
+          "url": "{{ $env.UPSTREAM_URL }}{{ $json.path ?? '/' }}",
+          "headers": {
+            "X-Forwarded-By": "RunFlux"
+          },
+          "body": "{{ $json.payload }}"
+        },
+        "position": {
+          "x": 320,
+          "y": 1890
+        },
+        "appearance": {
+          "label": "Call the upstream API",
+          "color": "#f59e0b"
+        }
+      },
+      {
+        "id": "proxy-response",
+        "pluginId": "set",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "fields": [
+            {
+              "name": "upstreamStatus",
+              "value": "{{ $json.status }}",
+              "type": "number"
+            },
+            {
+              "name": "upstream",
+              "value": "{{ $json.body }}"
+            }
+          ],
+          "includeOtherFields": false
+        },
+        "position": {
+          "x": 640,
+          "y": 1890
+        },
+        "appearance": {
+          "label": "Upstream answer",
+          "color": "#10b981"
+        }
+      },
+      {
+        "id": "health-check",
+        "pluginId": "trigger-webhook",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "path": "/upstream/health",
+          "httpMethod": "GET",
+          "rawBody": false,
+          "authentication": "none",
+          "sampleBody": [],
+          "sampleHeaders": {
+            "content-type": "application/json"
+          },
+          "sampleQuery": {}
+        },
+        "position": {
+          "x": 0,
+          "y": 2355
+        },
+        "appearance": {
+          "label": "GET /upstream/health",
+          "color": "#4f46e5"
+        }
+      },
+      {
+        "id": "probe-get",
+        "pluginId": "http-output",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "method": "GET",
+          "url": "{{ $env.UPSTREAM_URL }}/probe",
+          "headers": {
+            "X-Forwarded-By": "RunFlux"
+          }
+        },
+        "position": {
+          "x": 320,
+          "y": 2130
+        },
+        "appearance": {
+          "label": "GET /probe",
+          "color": "#f59e0b"
+        }
+      },
+      {
+        "id": "probe-post",
+        "pluginId": "http-output",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "method": "POST",
+          "url": "{{ $env.UPSTREAM_URL }}/probe",
+          "headers": {
+            "X-Forwarded-By": "RunFlux"
+          },
+          "body": {
+            "probe": "post"
+          }
+        },
+        "position": {
+          "x": 320,
+          "y": 2280
+        },
+        "appearance": {
+          "label": "POST /probe",
+          "color": "#f59e0b"
+        }
+      },
+      {
+        "id": "probe-put",
+        "pluginId": "http-output",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "method": "PUT",
+          "url": "{{ $env.UPSTREAM_URL }}/probe",
+          "headers": {
+            "X-Forwarded-By": "RunFlux"
+          },
+          "body": {
+            "probe": "put"
+          }
+        },
+        "position": {
+          "x": 320,
+          "y": 2430
+        },
+        "appearance": {
+          "label": "PUT /probe",
+          "color": "#f59e0b"
+        }
+      },
+      {
+        "id": "probe-delete",
+        "pluginId": "http-output",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "method": "DELETE",
+          "url": "{{ $env.UPSTREAM_URL }}/probe",
+          "headers": {
+            "X-Forwarded-By": "RunFlux"
+          }
+        },
+        "position": {
+          "x": 320,
+          "y": 2580
+        },
+        "appearance": {
+          "label": "DELETE /probe",
+          "color": "#f59e0b"
+        }
+      },
+      {
+        "id": "health-summary",
+        "pluginId": "code-javascript",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "code": "// A node with several parents receives their outputs as a list, in connection order.\nconst responses = Array.isArray($json) ? $json : [$json];\nreturn {\n  healthy: responses.every((response) => response.status >= 200 && response.status < 300),\n  checks: responses.map((response) => ({ method: response.body.method, status: response.status })),\n};"
+        },
+        "position": {
+          "x": 640,
+          "y": 2355
+        },
+        "appearance": {
+          "label": "Summarize the probes",
+          "color": "#10b981"
+        }
+      }
+    ],
+    "connections": [
+      {
+        "sourceNodeId": "list-items",
+        "sourceOutput": "main",
+        "targetNodeId": "filter-catalog",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "create-item",
+        "sourceOutput": "main",
+        "targetNodeId": "validate-item",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "validate-item",
+        "sourceOutput": "true",
+        "targetNodeId": "item-created",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "item-created",
+        "sourceOutput": "main",
+        "targetNodeId": "log-created",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "validate-item",
+        "sourceOutput": "false",
+        "targetNodeId": "item-rejected",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "replace-item",
+        "sourceOutput": "main",
+        "targetNodeId": "item-replaced",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "update-item",
+        "sourceOutput": "main",
+        "targetNodeId": "has-changes",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "has-changes",
+        "sourceOutput": "true",
+        "targetNodeId": "item-updated",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "has-changes",
+        "sourceOutput": "false",
+        "targetNodeId": "item-unchanged",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "delete-item",
+        "sourceOutput": "main",
+        "targetNodeId": "id-given",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "id-given",
+        "sourceOutput": "true",
+        "targetNodeId": "item-deleted",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "id-given",
+        "sourceOutput": "false",
+        "targetNodeId": "delete-rejected",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "echo",
+        "sourceOutput": "main",
+        "targetNodeId": "echo-body",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "proxy",
+        "sourceOutput": "main",
+        "targetNodeId": "call-upstream",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "call-upstream",
+        "sourceOutput": "main",
+        "targetNodeId": "proxy-response",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "health-check",
+        "sourceOutput": "main",
+        "targetNodeId": "probe-get",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "health-check",
+        "sourceOutput": "main",
+        "targetNodeId": "probe-post",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "health-check",
+        "sourceOutput": "main",
+        "targetNodeId": "probe-put",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "health-check",
+        "sourceOutput": "main",
+        "targetNodeId": "probe-delete",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "probe-get",
+        "sourceOutput": "main",
+        "targetNodeId": "health-summary",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "probe-post",
+        "sourceOutput": "main",
+        "targetNodeId": "health-summary",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "probe-put",
+        "sourceOutput": "main",
+        "targetNodeId": "health-summary",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "probe-delete",
+        "sourceOutput": "main",
+        "targetNodeId": "health-summary",
+        "targetInput": "main"
+      }
+    ]
+  }
+}
