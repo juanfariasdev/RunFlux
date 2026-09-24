@@ -34,7 +34,7 @@ Os testes compilam backends, gravam o projeto como o download, constroem `dist/`
 | --- | --- |
 | `apps/workflow-editor` | Canvas, formulários, catálogo e testes interativos |
 | `apps/project-server` | Persistência, versões, compilação e downloads |
-| `packages/workflow-model` | Modelo do fluxo e ordenação do grafo |
+| `packages/workflow-model` | Modelo do fluxo e detecção de ciclos na edição |
 | `packages/runtime` | Motor, expressões, condições, campos, HTTP e hosts Express/Lambda/cron/CLI, iguais no editor e nos backends |
 | `packages/plugin-system` | Contrato de plugin, descoberta, registro e hub de webhooks de teste |
 | `packages/expression-engine` | Expressões dos previews do editor, sobre o avaliador do runtime |

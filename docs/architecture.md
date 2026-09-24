@@ -21,7 +21,7 @@ O editor e os backends exportados executam o **mesmo código**. `@runflux/runtim
 
 | Pacote | Responsabilidade | Depende de |
 | --- | --- | --- |
-| `workflow-model` | Modelo do fluxo, ordem topológica, detecção de ciclos | — |
+| `workflow-model` | Modelo do fluxo e detecção de ciclos durante a edição (a ordem e a validação do grafo são do `WorkflowGraph` do runtime) | — |
 | `runtime` | Contratos de nó, motor, expressões, condições, campos, cron, HTTP, hosts Express/Lambda/cron/CLI | — |
 | `plugin-system` | Contrato de plugin, descoberta, registro, manifestos, hub de webhooks de teste | `runtime` |
 | `expression-engine` | Fachada de expressões usada pelos previews do editor | `runtime` |

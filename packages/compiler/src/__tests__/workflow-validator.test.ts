@@ -44,7 +44,10 @@ describe('WorkflowValidator', () => {
     expect(failure(definition)).toMatchObject({ code: 'INVALID_WORKFLOW', message: expect.stringContaining(message) });
   });
 
-  it('rejects cycles', () => {
-    expect(failure(workflow([node('a', 'echo'), node('b', 'echo')], [edge('a', 'b'), edge('b', 'a')]))).toMatchObject({ code: 'CYCLE_DETECTED' });
+  it('rejects cycles, including a node connected to itself', () => {
+    const cycle = { code: 'CYCLE_DETECTED', message: 'Cannot compute an execution order: the workflow graph contains a cycle' };
+    expect(failure(workflow([node('a', 'echo'), node('b', 'echo')], [edge('a', 'b'), edge('b', 'a')]))).toEqual(cycle);
+    expect(failure(workflow([node('a', 'echo')], [edge('a', 'a')]))).toEqual(cycle);
+    expect(failure(workflow([node('a', 'webhook'), node('b', 'echo'), node('c', 'echo')], [edge('a', 'b'), edge('b', 'c'), edge('c', 'b')]))).toEqual(cycle);
   });
 });

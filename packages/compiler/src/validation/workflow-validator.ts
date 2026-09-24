@@ -1,4 +1,5 @@
-import { CyclicWorkflowError, getExecutionOrder, type WorkflowDefinition } from '@runflux/workflow-model';
+import { CyclicWorkflowError, ExecutableWorkflowBuilder, WorkflowGraph } from '@runflux/runtime';
+import type { WorkflowDefinition } from '@runflux/workflow-model';
 import { CompilationError, type IncompatibleNode, type PluginResolver, type TargetPlatform } from '../types.js';
 
 /**
@@ -18,7 +19,8 @@ export class WorkflowValidator {
     this.checkCompatibility(workflow, target);
     this.checkReferences(workflow);
     try {
-      getExecutionOrder(workflow.nodes, workflow.connections);
+      // The engine's own graph: the compiler rejects exactly the cycles the engine would.
+      new WorkflowGraph(new ExecutableWorkflowBuilder((pluginId) => this.plugins(pluginId)?.manifest).build(workflow));
     } catch (error) {
       if (error instanceof CyclicWorkflowError) throw new CompilationError('CYCLE_DETECTED', error.message);
       throw error;
