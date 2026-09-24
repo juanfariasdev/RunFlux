@@ -39,11 +39,28 @@ describe('trigger-webhook runtime', () => {
     expect((await run({})).output).toEqual({ message: 'Sample webhook payload', _headers: {}, _query: {} });
   });
 
-  it('never uses its sample, nor waits, in production', async () => {
-    const hub = new WebhookTestHub();
-    const record = await run({ sampleBody: [{ name: 'id', value: '42', type: 'number' }] }, undefined, { mode: 'production', services: { triggerEvents: hub } });
+  it('never uses its sample in production', async () => {
+    const record = await run({ sampleBody: [{ name: 'id', value: '42', type: 'number' }] }, undefined, { mode: 'production' });
     expect(record.output).toEqual({ data: undefined, _headers: {}, _query: {} });
-    expect(hub.pending).toBe(0);
+  });
+
+  it('waits on its own method, so webhooks sharing a path receive their own test requests', async () => {
+    const hub = new WebhookTestHub();
+    const reading = run({ path: '/items', httpMethod: 'GET' }, undefined, { services: { triggerEvents: hub } });
+    const writing = run({ path: '/items', httpMethod: 'POST' }, undefined, { services: { triggerEvents: hub } });
+    await vi.waitFor(() => expect(hub.pending).toBe(2));
+    hub.deliver('/items', { method: 'POST', body: { id: 'post' } });
+    hub.deliver('/items', { method: 'GET', query: { id: 'get' } });
+    expect((await writing).output).toEqual({ id: 'post', _headers: {}, _query: {} });
+    expect((await reading).output).toEqual({ data: undefined, _headers: {}, _query: { id: 'get' } });
+  });
+
+  it('waits for the test request in a production test run of the editor too', async () => {
+    const hub = new WebhookTestHub();
+    const pending = run({ path: '/orders' }, undefined, { mode: 'production', services: { triggerEvents: hub } });
+    await vi.waitFor(() => expect(hub.pending).toBe(1));
+    hub.deliver('/orders', { body: { id: 7 } });
+    expect((await pending).output).toEqual({ id: 7, _headers: {}, _query: {} });
   });
 
   it('waits for a test request on its path when the editor delivers them', async () => {

@@ -39,14 +39,26 @@ const NORMALIZERS: Readonly<Record<FieldType, FieldNormalizer>> = {
   },
   null: () => null,
   array: (value, field) => {
-    if (!Array.isArray(value)) throw new FieldTypeError(field, 'an array');
-    return value;
+    const array = fromJsonText(value);
+    if (!Array.isArray(array)) throw new FieldTypeError(field, 'an array');
+    return array;
   },
   object: (value, field) => {
-    if (!isRecord(value)) throw new FieldTypeError(field, 'an object');
-    return value;
+    const object = fromJsonText(value);
+    if (!isRecord(object)) throw new FieldTypeError(field, 'an object');
+    return object;
   },
 };
+
+/** Like numbers and booleans, arrays and objects may arrive as text, e.g. `["a", "b"]`. */
+function fromJsonText(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
 
 /** Builds an object from field definitions, converting each value to its declared type. */
 export class FieldComposer {

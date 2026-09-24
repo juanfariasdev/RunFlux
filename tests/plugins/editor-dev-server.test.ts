@@ -109,6 +109,29 @@ describe('editor dev server', () => {
     }
   });
 
+  it('runs with the project variables the editor sends as $env, before its own environment', async () => {
+    vi.stubEnv('RUNFLUX_SHARED', 'from the dev server');
+    vi.stubEnv('RUNFLUX_SERVER_ONLY', 'server');
+    const vite = await devServer(runfluxValidationPlugin(new PluginRegistryCache([path.resolve('plugins')])));
+    const workflow = {
+      id: 'wf', name: 'Variables', connections: [{ sourceNodeId: 'start', sourceOutput: 'main', targetNodeId: 'read', targetInput: 'main' }],
+      nodes: [
+        { id: 'start', pluginId: 'trigger-manual-example', pluginVersion: '1.0.0', parameters: {}, position: { x: 0, y: 0 } },
+        { id: 'read', pluginId: 'code-javascript', pluginVersion: '1.0.0', parameters: { code: 'return { shared: $env.RUNFLUX_SHARED, project: $env.RUNFLUX_PROJECT, server: $env.RUNFLUX_SERVER_ONLY };' }, position: { x: 0, y: 0 } },
+      ],
+    };
+    try {
+      const response = await request(vite.middlewares).post('/runflux-validate').send({
+        workflow, mode: 'sandbox', environment: { RUNFLUX_SHARED: 'from the project', RUNFLUX_PROJECT: 'project', IGNORED: 42 },
+      });
+      expect(response.body.nodeResults.find((result: { nodeId: string }) => result.nodeId === 'read').output)
+        .toEqual({ shared: 'from the project', project: 'project', server: 'server' });
+    } finally {
+      await vite.close();
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('cancels the test run of a client that disconnects', async () => {
     const vite = await devServer(runfluxValidationPlugin(new PluginRegistryCache([path.resolve('plugins')])));
     const server = http.createServer(vite.middlewares);

@@ -46,6 +46,8 @@ export interface ValidationRunOptions {
   services?: { triggerEvents?: TriggerEventSource };
   /** Cancels the run, for instance when the request that started it is closed. */
   signal?: AbortSignal;
+  /** `$env` of the nodes. Defaults to the process environment. */
+  environment?: Readonly<Record<string, string | undefined>>;
 }
 
 export interface NodeResult {

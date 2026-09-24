@@ -2,6 +2,7 @@ import {
   ExecutableWorkflowBuilder,
   MAIN_OUTPUT,
   WorkflowEngine,
+  type EnvironmentVariables,
   type ExecutionMode,
   type ExecutionStatus,
   type NodeRecord,
@@ -21,6 +22,8 @@ export interface ValidationRunOptions {
   services?: Partial<RuntimeServices>;
   /** Cancels the run, for instance when the editor closes the request that started it. */
   signal?: AbortSignal;
+  /** `$env` of the nodes, e.g. the project's variables. Defaults to the process environment. */
+  environment?: EnvironmentVariables;
 }
 
 /** What the editor shows for one node after a test run. */
@@ -52,7 +55,7 @@ async function withEngine<TResult>(
   work: (engine: WorkflowEngine) => Promise<TResult>,
 ): Promise<TResult> {
   const document = new ExecutableWorkflowBuilder(registry.describe).build(workflow);
-  const engine = new WorkflowEngine(document, registry, { mode: options.mode, services: options.services });
+  const engine = new WorkflowEngine(document, registry, { mode: options.mode, services: options.services, environment: options.environment });
   try {
     return await work(engine);
   } finally {

@@ -11,6 +11,8 @@ interface ValidationRequest {
   nodeId?: string;
   mode: PluginExecutionMode;
   cachedResults?: NodeResult[];
+  /** The project's variables, which test runs read as `$env` before the dev server's own. */
+  environment?: Record<string, string>;
 }
 
 const WEBHOOK_TEST_PREFIXES = ['/runflux-webhook-test', '/api/webhooks/test'];
@@ -47,7 +49,8 @@ export function runfluxValidationPlugin(plugins: PluginRegistryCache): Plugin {
         if (!prefix) return next();
         respond(response, async () => {
           const body = parseLenient(await readBody(request));
-          const captured = webhooks.deliver(url.pathname.slice(prefix.length) || DEFAULT_WEBHOOK_PATH, {
+          const path = url.pathname.slice(prefix.length) || DEFAULT_WEBHOOK_PATH;
+          const captured = webhooks.deliver(path, {
             body,
             headers: request.headers,
             query: Object.fromEntries(url.searchParams),
@@ -58,7 +61,7 @@ export function runfluxValidationPlugin(plugins: PluginRegistryCache): Plugin {
             captured,
             message: captured
               ? 'Webhook captured! The waiting test in RunFlux has completed.'
-              : 'Webhook payload received, but no node was actively waiting for it. Click "Test this node" in the editor first.',
+              : `Webhook payload received, but no webhook of a running test waits for ${request.method ?? 'POST'} ${path}. Click "Test" or "Test this node" in the editor first, and send the method the webhook answers.`,
             data: body,
           };
         });
@@ -73,7 +76,12 @@ export function runfluxValidationPlugin(plugins: PluginRegistryCache): Plugin {
         respond(response, async () => {
           const payload = parseJson<ValidationRequest>(await readBody(request));
           const registry = await plugins.registry();
-          const options = { mode: payload.mode, services: { triggerEvents: webhooks }, signal: cancellation.signal };
+          const options = {
+            mode: payload.mode,
+            services: { triggerEvents: webhooks },
+            signal: cancellation.signal,
+            environment: { ...process.env, ...textValues(payload.environment) },
+          };
           if (!payload.nodeId) return runWorkflow(payload.workflow, registry, options);
           const cache = new Map((payload.cachedResults ?? []).map((result) => [result.nodeId, result]));
           return runNode(payload.workflow, payload.nodeId, registry, options, cache);
@@ -113,6 +121,12 @@ function parseJson<TValue>(text: string): TValue {
   } catch {
     throw new BadRequestError('Request body must be JSON');
   }
+}
+
+/** The text entries of a request's variable map; anything else is ignored. */
+function textValues(value: unknown): Record<string, string> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === 'string'));
 }
 
 /** A webhook test body: JSON when it parses, the text itself otherwise, `{}` when empty. */

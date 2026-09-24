@@ -7,6 +7,8 @@ export interface ValidationRunOptions {
   mode: PluginExecutionMode;
   /** Aborting it closes the request, which cancels the run on the server. */
   signal?: AbortSignal;
+  /** The project's variables, read by the nodes as `$env`. */
+  environment?: Record<string, string>;
 }
 
 /**
@@ -56,11 +58,11 @@ export class HttpValidationRuntimeAdapter implements ValidationRuntimeAdapter {
   }
 
   async run(workflow: WorkflowDefinition, options: ValidationRunOptions): Promise<ValidationRunResult> {
-    return this.post<ValidationRunResult>({ workflow, mode: options.mode }, options.signal);
+    return this.post<ValidationRunResult>({ workflow, mode: options.mode, ...environmentOf(options) }, options.signal);
   }
 
   async runNode(workflow: WorkflowDefinition, nodeId: string, options: ValidationRunOptions, cachedResults: NodeResult[] = []): Promise<NodeResult> {
-    return this.post<NodeResult>({ workflow, nodeId, mode: options.mode, cachedResults }, options.signal);
+    return this.post<NodeResult>({ workflow, nodeId, mode: options.mode, cachedResults, ...environmentOf(options) }, options.signal);
   }
 
   private async post<T>(body: Record<string, unknown>, signal?: AbortSignal): Promise<T> {
@@ -76,4 +78,8 @@ export class HttpValidationRuntimeAdapter implements ValidationRuntimeAdapter {
     }
     return (await response.json()) as T;
   }
+}
+
+function environmentOf(options: ValidationRunOptions): { environment?: Record<string, string> } {
+  return options.environment ? { environment: options.environment } : {};
 }

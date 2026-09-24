@@ -51,12 +51,15 @@ export {
   isHttpHeaderName,
   NO_TRIGGERS,
   normalizeRoutePath,
+  parseWebhookChannel,
+  webhookChannel,
   type HttpAuthentication,
   type HttpMethod,
   type HttpTrigger,
   type ScheduleTrigger,
   type TriggerBinding,
   type WebhookRequest,
+  type WebhookRoute,
   type WorkflowTriggers,
 } from './workflow/triggers.js';
 

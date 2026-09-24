@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { NodeConfigPanel, resolveSampleBodyForTest } from '../NodeConfigPanel';
+import { NodeConfigPanel } from '../NodeConfigPanel';
 import { COMBINATOR_OPTIONS, OPERATOR_OPTIONS } from '@runflux/plugin-system/condition-row-schema';
 import type { PluginManifest } from '@runflux/plugin-system/types';
 import { CONDITION_OPERATORS } from '@runflux/runtime';
@@ -468,20 +468,3 @@ describe('NodeConfigPanel — parameters described by their manifest', () => {
   });
 });
 
-describe('resolveSampleBodyForTest', () => {
-  it('composes sample field rows the way the webhook trigger does', () => {
-    expect(resolveSampleBodyForTest([{ name: 'id', value: '42', type: 'number' }, { name: 'active', value: 'true', type: 'boolean' }, { value: 'unnamed' }]))
-      .toEqual({ id: 42, active: true });
-  });
-
-  it('sends an empty body while a row is still invalid instead of failing', () => {
-    expect(resolveSampleBodyForTest([{ name: 'id', value: 'forty-two', type: 'number' }])).toEqual({});
-    expect(resolveSampleBodyForTest([{ name: 'when', value: 'now', type: 'date' }])).toEqual({});
-    expect(resolveSampleBodyForTest(['not a row'])).toEqual({});
-  });
-
-  it('keeps an object sample and falls back to a default one', () => {
-    expect(resolveSampleBodyForTest({ literal: true })).toEqual({ literal: true });
-    expect(resolveSampleBodyForTest(undefined)).toEqual({ message: 'Sample test payload' });
-  });
-});

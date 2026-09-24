@@ -47,7 +47,7 @@ export function createServer(service?: ProjectService, compilerService?: Compile
         captured,
         message: captured
           ? 'Webhook captured! The waiting test in RunFlux has completed.'
-          : 'Webhook payload received, but no node was actively waiting for it.',
+          : `Webhook payload received, but no webhook of a running test waits for ${req.method} ${subPath}.`,
         data: req.body,
       });
     } catch (err: any) {

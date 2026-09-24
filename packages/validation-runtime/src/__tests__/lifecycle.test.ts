@@ -80,3 +80,18 @@ describe('validation runs can be cancelled', () => {
     expect(result.input).toBeNull();
   });
 });
+
+describe('validation runs read the environment they are given', () => {
+  it('exposes it as $env to expressions and nodes instead of the process environment', async () => {
+    const read = testPlugin({ id: 'action' }, defineNode({
+      parseParameters: (parameters) => ({ url: parameters.string('url', '') }),
+      createHandler: () => ({ execute: ({ parameters, context }) => NodeOutput.main({ url: parameters.url, key: context.env.API_KEY ?? null }) }),
+    }));
+    const definition = workflow();
+    definition.nodes[1].parameters = { url: '{{ $env.BASE_URL }}/items' };
+    const run = await runWorkflow(definition, registryWith(trigger, read), { mode: 'sandbox', environment: { BASE_URL: 'https://api.test', API_KEY: 'secret' } });
+    expect(run.nodeResults.find((result) => result.nodeId === 'work')?.output).toEqual({ url: 'https://api.test/items', key: 'secret' });
+    const single = await runNode(definition, 'work', registryWith(trigger, read), { mode: 'sandbox', environment: { BASE_URL: 'https://other.test' } });
+    expect(single.output).toEqual({ url: 'https://other.test/items', key: null });
+  });
+});

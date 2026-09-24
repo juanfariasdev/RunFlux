@@ -12,6 +12,7 @@ import { Palette } from './components/Palette';
 import { Toolbar } from './components/Toolbar';
 import { useWorkflowStore } from './store/workflow-store';
 import { ProjectProvider, useProject } from './context/ProjectContext';
+import { projectEnvironment } from './adapters/project-environment';
 
 const catalog = new HttpPluginCatalogAdapter();
 const projectAdapter = new HttpProjectApiAdapter();
@@ -39,13 +40,8 @@ function WorkflowEditorContent() {
 
   const { isDirty, envVars } = useProject();
 
-  const envScope = useMemo(() => {
-    const scope: Record<string, string> = {};
-    for (const v of envVars || []) {
-      scope[v.key] = v.value || '';
-    }
-    return scope;
-  }, [envVars]);
+  // The project's variables, for expression previews and as `$env` of test runs.
+  const envScope = useMemo(() => projectEnvironment(envVars), [envVars]);
 
   // T021: Previne fechamento acidental da aba se houver alterações não salvas (RF-11)
   useEffect(() => {
@@ -78,12 +74,12 @@ function WorkflowEditorContent() {
     setTestingNodeIds(new Set([nodeId]));
     try {
       const cachedResults = Object.values(nodeResults).filter((result) => result.nodeId !== nodeId);
-      const result = await validation.runNode(workflow, nodeId, { mode: 'sandbox' }, cachedResults);
+      const result = await validation.runNode(workflow, nodeId, { mode: 'sandbox', environment: envScope }, cachedResults);
       setNodeResult(result);
     } finally {
       setTestingNodeIds(new Set());
     }
-  }, [workflow, nodeResults, setNodeResult, clearNodeResult]);
+  }, [workflow, nodeResults, setNodeResult, clearNodeResult, envScope]);
 
   useEffect(() => {
     let cancelled = false;

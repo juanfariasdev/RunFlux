@@ -16,6 +16,29 @@ describe('WebhookTestHub', () => {
     expect(hub.deliver('/orders', {})).toBe(false);
   });
 
+  it('routes a request by method like the exported backends: exact method, then ANY, HEAD as GET', async () => {
+    const hub = new WebhookTestHub();
+    const signal = never();
+    const get = hub.waitFor('GET /items', signal);
+    const post = hub.waitFor('POST /items', signal);
+    const any = hub.waitFor('ANY /items', signal);
+    expect(hub.deliver('/items', { method: 'post', body: 'created' })).toBe(true);
+    await expect(post).resolves.toMatchObject({ body: 'created' });
+    expect(hub.deliver('/items', { method: 'HEAD' })).toBe(true);
+    await expect(get).resolves.toMatchObject({ method: 'HEAD' });
+    expect(hub.deliver('/items', { method: 'DELETE', body: 'fallback' })).toBe(true);
+    await expect(any).resolves.toMatchObject({ body: 'fallback' });
+    expect(hub.pending).toBe(0);
+  });
+
+  it('never hands a request to a waiter of another method, and lets requests without one reach any', async () => {
+    const hub = new WebhookTestHub();
+    const put = hub.waitFor('PUT /items', never());
+    expect(hub.deliver('/items', { method: 'GET' })).toBe(false);
+    expect(hub.deliver('/items', { body: 'no method' })).toBe(true);
+    await expect(put).resolves.toEqual({ body: 'no method' });
+  });
+
   it('compares paths like the exported backends route them', async () => {
     const hub = new WebhookTestHub();
     const waiting = hub.waitFor('hooks//orders', never());

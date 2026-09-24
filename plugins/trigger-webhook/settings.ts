@@ -31,16 +31,22 @@ export function readWebhookPath(parameters: ParameterReader): string {
   return normalizeRoutePath(path);
 }
 
-/** How the webhook is exposed to HTTP clients. */
-export function readWebhookSettings(parameters: ParameterReader): WebhookSettings {
+/** The method the webhook answers, or `ANY`. */
+export function readWebhookMethod(parameters: ParameterReader): WebhookSettings['method'] {
   const method = parameters.string('httpMethod', 'POST').toUpperCase();
   if (method !== 'ANY' && !(HTTP_METHODS as readonly string[]).includes(method)) {
     throw parameters.error('httpMethod', `"${method}" is not an HTTP method`);
   }
+  return method as WebhookSettings['method'];
+}
+
+/** How the webhook is exposed to HTTP clients. */
+export function readWebhookSettings(parameters: ParameterReader): WebhookSettings {
+  const method = readWebhookMethod(parameters);
   const mode = parameters.choice('authentication', AUTHENTICATION_MODES, parameters.choice('auth', AUTHENTICATION_MODES, 'none'));
   return {
     path: readWebhookPath(parameters),
-    method: method as WebhookSettings['method'],
+    method,
     authentication: mode === 'none' ? { type: 'none' } : readHeaderAuthentication(parameters),
     rawBody: parameters.boolean('rawBody', false),
   };

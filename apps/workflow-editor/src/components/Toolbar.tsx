@@ -10,7 +10,8 @@ import { useProject } from '../context/ProjectContext';
 import { ProjectManagerModal } from './ProjectManagerModal';
 import { CompilerModal } from './CompilerModal';
 import { EnvVarsModal } from './EnvVarsModal';
-import { resolveSampleBodyForTest } from './NodeConfigPanel';
+import { projectEnvironment } from '../adapters/project-environment';
+import { webhookTestRequest } from '../adapters/webhook-test-request';
 
 export interface ToolbarProps {
   catalog: PluginCatalogAdapter;
@@ -114,7 +115,7 @@ export function Toolbar({ catalog, persistence, validation, onTestingNodesChange
     setIsRunning(true);
     onTestingNodesChange?.(webhookNodes.map((n) => n.id));
     try {
-      const result = await validation.run(workflow, { mode });
+      const result = await validation.run(workflow, { mode, environment: projectEnvironment(projectCtx?.envVars) });
       setNodeResults(result.nodeResults ?? []);
       setStatus({ kind: 'tested', message: result.message ?? result.status });
     } catch (error) {
@@ -130,13 +131,8 @@ export function Toolbar({ catalog, persistence, validation, onTestingNodesChange
   };
 
   const handleSendTestPayload = async (node: WorkflowNode) => {
-    const path = (node.parameters.path as string) || '/webhook';
-    const testUrl = `${typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173'}/runflux-webhook-test${path}`;
-    await fetch(testUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(resolveSampleBodyForTest(node.parameters.sampleBody)),
-    }).catch(() => {});
+    const { url, init } = webhookTestRequest(node.parameters, window.location.origin);
+    await fetch(url, init).catch(() => {});
   };
 
   return (

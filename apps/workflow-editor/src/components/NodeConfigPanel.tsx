@@ -4,9 +4,10 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { resolveExpressions } from '@runflux/expression-engine';
 import type { PluginManifest } from '@runflux/plugin-system/types';
 import { isParameterVisible } from '@runflux/plugin-system/visibility';
-import { containsExpression, FieldComposer, ObjectParameterReader, readFields } from '@runflux/runtime';
+import { containsExpression } from '@runflux/runtime';
 import type { NodeResult } from '@runflux/validation-runtime';
 import type { WorkflowNodeAppearance, WorkflowNodeShape } from '@runflux/workflow-model/types';
+import { webhookTestRequest } from '../adapters/webhook-test-request';
 import { buildZodSchema } from '../forms/build-zod-schema';
 import { Button } from './ui/button';
 import { Checkbox } from './ui/checkbox';
@@ -21,20 +22,6 @@ const SHAPES: { value: WorkflowNodeShape; label: string }[] = [
   { value: 'pill', label: 'Pill' },
   { value: 'diamond', label: 'Decision' },
 ];
-
-/**
- * The body a test request built from a webhook's `sampleBody` carries: its field rows composed
- * the way the trigger composes them, or `{}` while a row is still invalid (e.g. a number field
- * holding text), since the user is still editing it.
- */
-export function resolveSampleBodyForTest(sampleBody: unknown): unknown {
-  if (!Array.isArray(sampleBody)) return sampleBody || { message: 'Sample test payload' };
-  try {
-    return new FieldComposer().compose(readFields(new ObjectParameterReader({ sampleBody }, 'trigger-webhook'), 'sampleBody'));
-  } catch {
-    return {};
-  }
-}
 
 type ExpressionPreview = { ok: true; value: unknown } | { ok: false; error: string };
 
@@ -144,6 +131,8 @@ export function NodeConfigPanel({
   const isSubflow = appearance.shape === 'subflow';
   const displayedTestInput = testResult ? testResult.input : lastTestInput?.value;
   const hasDisplayedTestInput = testResult !== undefined || lastTestInput !== undefined;
+  // The request a webhook trigger of this panel receives in a test run, from the values being edited.
+  const testRequest = webhookTestRequest(watch(), typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173');
 
   useEffect(() => {
     if (initialFormState.changed) onChange(initialFormState.values);
@@ -352,18 +341,13 @@ export function NodeConfigPanel({
                 Send an HTTP request to this test URL to capture the payload:
               </p>
               <code className="mt-1 block overflow-x-auto rounded bg-white px-2 py-1 font-mono text-[9px] text-indigo-900 border border-indigo-200 select-all">
-                {typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173'}/runflux-webhook-test{(values?.path as string) || '/webhook'}
+                {`${testRequest.method} ${testRequest.url}`}
               </code>
               <div className="mt-2 flex items-center justify-between">
                 <button
                   type="button"
                   onClick={() => {
-                    const testUrl = `${typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173'}/runflux-webhook-test${(values?.path as string) || '/webhook'}`;
-                    fetch(testUrl, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify(resolveSampleBodyForTest(values?.sampleBody)),
-                    });
+                    void fetch(testRequest.url, testRequest.init).catch(() => {});
                   }}
                   className="text-[9px] font-semibold text-indigo-600 hover:text-indigo-800 hover:underline"
                 >

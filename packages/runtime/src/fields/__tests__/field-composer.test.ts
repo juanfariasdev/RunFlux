@@ -21,6 +21,8 @@ describe('FieldComposer.normalize', () => {
     ['anything', 'null', null],
     [[1, 2], 'array', [1, 2]],
     [{ a: 1 }, 'object', { a: 1 }],
+    ['["a", 2]', 'array', ['a', 2]],
+    [' {"a": {"b": true}} ', 'object', { a: { b: true } }],
     [{ untyped: true }, undefined, { untyped: true }],
   ])('converts %j to %s', (value, type, expected) => {
     expect(composer.normalize(field(value, type))).toEqual(expected);
@@ -34,6 +36,10 @@ describe('FieldComposer.normalize', () => {
     [{ 0: 1 }, 'array', 'Field "field" must be an array'],
     [[1], 'object', 'Field "field" must be an object'],
     [null, 'object', 'Field "field" must be an object'],
+    ['a, b', 'array', 'Field "field" must be an array'],
+    ['{"a": 1}', 'array', 'Field "field" must be an array'],
+    ['[1]', 'object', 'Field "field" must be an object'],
+    ['not json', 'object', 'Field "field" must be an object'],
   ])('rejects %j as %s', (value, type, message) => {
     expect(() => composer.normalize(field(value, type))).toThrow(FieldTypeError);
     expect(() => composer.normalize(field(value, type))).toThrow(message);

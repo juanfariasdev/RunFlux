@@ -59,3 +59,24 @@ export function isHttpHeaderName(name: string): boolean {
 export function normalizeRoutePath(path: string): string {
   return `/${path.split('/').filter(Boolean).join('/')}`;
 }
+
+/** A webhook route as a `TriggerEventSource` channel: its method and normalized path. */
+export interface WebhookRoute {
+  readonly method: HttpMethod | 'ANY';
+  readonly path: string;
+}
+
+const ROUTE_CHANNEL = /^([A-Z]+) (\/.*)$/;
+
+/** The channel a webhook trigger of an editor test run waits on, e.g. `POST /orders`. */
+export function webhookChannel(route: WebhookRoute): string {
+  return `${route.method} ${normalizeRoutePath(route.path)}`;
+}
+
+/** Reads a webhook channel back; a bare path, as older callers send, accepts any method. */
+export function parseWebhookChannel(channel: string): WebhookRoute {
+  const match = ROUTE_CHANNEL.exec(channel);
+  return match
+    ? { method: match[1] as WebhookRoute['method'], path: normalizeRoutePath(match[2]) }
+    : { method: 'ANY', path: normalizeRoutePath(channel) };
+}

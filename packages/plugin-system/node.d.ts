@@ -68,7 +68,8 @@ export class WebhookTestHub {
   constructor(timeoutMs?: number);
   static shared(): WebhookTestHub;
   readonly pending: number;
-  waitFor(path: string, signal: AbortSignal): Promise<WebhookTestRequest>;
+  /** `channel` is a route such as `POST /orders`, or a bare path accepting any method. */
+  waitFor(channel: string, signal: AbortSignal): Promise<WebhookTestRequest>;
   deliver(path: string, request: WebhookTestRequest): boolean;
   cancelAll(): void;
 }

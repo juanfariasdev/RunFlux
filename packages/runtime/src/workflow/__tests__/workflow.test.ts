@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { isEnvironmentVariableName } from '../../environment.js';
-import { isHttpHeaderName } from '../triggers.js';
+import { isHttpHeaderName, parseWebhookChannel, webhookChannel } from '../triggers.js';
 import { parseExecutableWorkflow, WorkflowDocumentError, type ExecutableWorkflow } from '../executable-workflow.js';
 import { ExecutableWorkflowBuilder, type NodeTypeDescription } from '../workflow-builder.js';
 import { CyclicWorkflowError, UnknownNodeError, WorkflowGraph } from '../workflow-graph.js';
@@ -119,6 +119,19 @@ describe('WorkflowGraph', () => {
     expect(() => new WorkflowGraph(cyclic)).toThrow(CyclicWorkflowError);
     const selfLoop = { ...document, connections: [{ source: 'run', sourceOutput: 'main', target: 'run', targetInput: 'main' }] };
     expect(() => new WorkflowGraph(selfLoop)).toThrow(CyclicWorkflowError);
+  });
+});
+
+describe('webhook channels', () => {
+  it('names a route by method and normalized path, and reads it back', () => {
+    expect(webhookChannel({ method: 'POST', path: 'orders//' })).toBe('POST /orders');
+    expect(parseWebhookChannel('POST /orders')).toEqual({ method: 'POST', path: '/orders' });
+    expect(parseWebhookChannel('ANY /')).toEqual({ method: 'ANY', path: '/' });
+  });
+
+  it('reads a bare path as a route for any method', () => {
+    expect(parseWebhookChannel('/orders/')).toEqual({ method: 'ANY', path: '/orders' });
+    expect(parseWebhookChannel('orders')).toEqual({ method: 'ANY', path: '/orders' });
   });
 });
 

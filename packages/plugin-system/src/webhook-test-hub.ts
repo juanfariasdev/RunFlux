@@ -1,4 +1,4 @@
-import { normalizeRoutePath, type TriggerEventSource } from '@runflux/runtime';
+import { normalizeRoutePath, parseWebhookChannel, type TriggerEventSource, type WebhookRoute } from '@runflux/runtime';
 
 /** A request sent to a webhook's test URL while the editor waits for it. */
 export interface WebhookTestRequest {
@@ -9,18 +9,21 @@ export interface WebhookTestRequest {
 }
 
 interface Waiter {
-  readonly path: string;
+  readonly route: WebhookRoute;
   readonly resolve: (request: WebhookTestRequest) => void;
   readonly reject: (error: Error) => void;
 }
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const SHARED_HUB = Symbol.for('runflux.webhook-test-hub');
+const CANCELLED = 'Cancelled: another trigger in this test run already fired';
 
 /**
  * Hands test requests to the webhook triggers waiting for them while the editor runs a workflow.
- * Each request goes to the oldest waiter on its path; a waiter gives up after a timeout, when its
- * run no longer needs it, or when the user cancels every wait.
+ * Triggers wait on their route (`POST /orders`); a request goes to the oldest waiter of its path
+ * and method, as the exported backends route it: an exact method before `ANY`, and HEAD like GET.
+ * A request without a method reaches any waiter of its path. A waiter gives up after a timeout,
+ * when its run no longer needs it, or when the user cancels every wait.
  */
 export class WebhookTestHub implements TriggerEventSource {
   private readonly waiters: Waiter[] = [];
@@ -43,10 +46,11 @@ export class WebhookTestHub implements TriggerEventSource {
     return this.waiters.length;
   }
 
-  waitFor(path: string, signal: AbortSignal): Promise<WebhookTestRequest> {
-    const normalized = normalizeRoutePath(path);
+  /** Waits for a request on `channel`: a route such as `POST /orders`, or a bare path. */
+  waitFor(channel: string, signal: AbortSignal): Promise<WebhookTestRequest> {
+    const route = parseWebhookChannel(channel);
     return new Promise((resolve, reject) => {
-      if (signal.aborted) return reject(new Error('Cancelled: another trigger in this test run already fired'));
+      if (signal.aborted) return reject(new Error(CANCELLED));
       const settle = () => {
         clearTimeout(timer);
         signal.removeEventListener('abort', onAbort);
@@ -54,22 +58,28 @@ export class WebhookTestHub implements TriggerEventSource {
         if (index !== -1) this.waiters.splice(index, 1);
       };
       const waiter: Waiter = {
-        path: normalized,
+        route,
         resolve: (request) => { settle(); resolve(request); },
         reject: (error) => { settle(); reject(error); },
       };
-      const onAbort = () => waiter.reject(new Error('Cancelled: another trigger in this test run already fired'));
+      const onAbort = () => waiter.reject(new Error(CANCELLED));
       const timer = setTimeout(() => waiter.reject(new Error(
-        `Timeout waiting for incoming webhook request on "${normalized}" after ${this.timeoutMs / 1000}s. Send an HTTP request to the test URL and click Test again.`,
+        `Timeout waiting for incoming webhook request on "${route.path}" after ${this.timeoutMs / 1000}s. Send an HTTP request to the test URL and click Test again.`,
       )), this.timeoutMs);
       signal.addEventListener('abort', onAbort);
       this.waiters.push(waiter);
     });
   }
 
-  /** Delivers `request` to the oldest waiter on `path`. Returns whether one was waiting. */
+  /** Delivers `request` to the waiter its path and method reach. Returns whether one was waiting. */
   deliver(path: string, request: WebhookTestRequest): boolean {
-    const waiter = this.waiters.find((candidate) => candidate.path === normalizeRoutePath(path));
+    const route = normalizeRoutePath(path);
+    const method = request.method?.toUpperCase();
+    const onPath = this.waiters.filter((waiter) => waiter.route.path === route);
+    const waiter = method === undefined
+      ? onPath[0]
+      : onPath.find((candidate) => candidate.route.method === method || (method === 'HEAD' && candidate.route.method === 'GET'))
+        ?? onPath.find((candidate) => candidate.route.method === 'ANY');
     waiter?.resolve(request);
     return waiter !== undefined;
   }

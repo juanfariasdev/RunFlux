@@ -10,11 +10,14 @@ import {
   type ParameterReader,
   type TriggerEventSource,
   type WebhookRequest,
+  type WebhookRoute,
+  webhookChannel,
 } from '@runflux/runtime';
-import { readWebhookPath } from './settings.js';
+import { readWebhookMethod, readWebhookPath } from './settings.js';
 
 export interface WebhookTriggerParameters {
-  readonly path: string;
+  /** Where the editor's test requests reach this trigger. */
+  readonly route: WebhookRoute;
   /** The request used when a test run has no real one to wait for. */
   readonly sample: WebhookRequest;
 }
@@ -23,9 +26,9 @@ const DEFAULT_SAMPLE_BODY = { message: 'Sample webhook payload' };
 
 /**
  * Starts a run with an HTTP request, exposing the JSON body's fields next to `_headers` and
- * `_query` (other bodies go under `data`). Hosts pass the request in. When a test run starts the
- * trigger without one, it waits for a test request or, if nothing delivers them, uses the sample;
- * a production run without a request gets an empty one, never the sample.
+ * `_query` (other bodies go under `data`). Hosts pass the request in. Without one, the trigger
+ * waits for a test request when the editor delivers them (in either execution mode); otherwise a
+ * sandbox run uses the sample and a production run gets an empty request, never the sample.
  */
 export class WebhookTriggerNode implements NodeHandler<WebhookTriggerParameters> {
   constructor(private readonly events?: TriggerEventSource) {}
@@ -36,8 +39,8 @@ export class WebhookTriggerNode implements NodeHandler<WebhookTriggerParameters>
 
   private async request(parameters: WebhookTriggerParameters, input: unknown, context: NodeContext): Promise<unknown> {
     if (input !== undefined) return isWebhookRequest(input) ? input : { body: input };
-    if (context.mode === 'production') return {};
-    return this.events ? this.events.waitFor(parameters.path, context.signal) : parameters.sample;
+    if (this.events) return this.events.waitFor(webhookChannel(parameters.route), context.signal);
+    return context.mode === 'production' ? {} : parameters.sample;
   }
 }
 
@@ -63,6 +66,9 @@ function readSample(parameters: ParameterReader, fields: FieldComposer): Webhook
 const fields = new FieldComposer();
 
 export default defineNode<WebhookTriggerParameters>({
-  parseParameters: (parameters) => ({ path: readWebhookPath(parameters), sample: readSample(parameters, fields) }),
+  parseParameters: (parameters) => ({
+    route: { method: readWebhookMethod(parameters), path: readWebhookPath(parameters) },
+    sample: readSample(parameters, fields),
+  }),
   createHandler: ({ triggerEvents }) => new WebhookTriggerNode(triggerEvents),
 });
