@@ -18,11 +18,11 @@
     "build:node": "esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist-node/index.mjs"
   },
   "dependencies": {
-    "@runflux/plugin-system": "*",
-    "@runflux/runtime": "*",
-    "@runflux/workflow-model": "*"
+    "@runflux/runtime": "*"
   },
   "devDependencies": {
+    "@runflux/plugin-system": "*",
+    "@runflux/workflow-model": "*",
     "esbuild": "^0.28.2",
     "typescript": "^5.5.4",
     "vitest": "^4.1.9",

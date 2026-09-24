@@ -55,6 +55,10 @@ export class PluginRegistry {
   discover(options?: DiscoverOptions): Promise<DiscoverSummary>;
   listManifests(): PluginManifest[];
   getManifest(pluginId: string): PluginManifest | undefined;
+  /** The runtime definition of a plugin (the node catalog of test runs). */
+  resolve(pluginId: string): unknown;
+  /** What the workflow builder needs to know about a node type. */
+  readonly describe: (pluginId: string) => PluginManifest | undefined;
 }
 
 export function listPlugins(registry: PluginRegistry): Record<string, PluginManifest[]>;

@@ -25,7 +25,7 @@ O editor e os backends exportados executam o **mesmo código**. `@runflux/runtim
 | `runtime` | Contratos de nó, motor, expressões, condições, campos, cron, HTTP, hosts Express/Lambda/cron/CLI | — |
 | `plugin-system` | Contrato de plugin, descoberta, registro, manifestos, hub de webhooks de teste | `runtime` |
 | `expression-engine` | Fachada de expressões usada pelos previews do editor | `runtime` |
-| `validation-runtime` | Execuções de teste do editor sobre o motor do runtime | `runtime`, `plugin-system` |
+| `validation-runtime` | Execuções de teste do editor sobre o motor do runtime | `runtime` (recebe o catálogo pela porta `ValidationCatalog`, que o `PluginRegistry` satisfaz) |
 | `compiler` | Validação, plano de deployment, alvos local/AWS, empacotamento do runtime | `runtime`, `plugin-system`, `workflow-model` |
 
 O núcleo de `@runflux/runtime` (`.`) não importa módulos do Node, porque o editor o empacota para o navegador. Os hosts ficam em subpaths (`/express`, `/lambda`, `/cron`, `/cli`), e um teste garante essa fronteira.

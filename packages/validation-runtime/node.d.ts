@@ -10,9 +10,14 @@
  * Keep this in sync with the real runWorkflow/runWorkflowToNode/runNode signatures in src/
  * by hand — only the narrow surface a Node-side consumer actually needs.
  */
-import type { PluginRegistry } from '@runflux/plugin-system/node';
 
 export type PluginExecutionMode = 'sandbox' | 'production';
+
+/** What a test run needs from the plugins: their runtime definitions and manifests. A PluginRegistry is one. */
+export interface ValidationCatalog {
+  resolve(pluginId: string): unknown;
+  readonly describe: (pluginId: string) => unknown;
+}
 
 export interface WorkflowNode {
   id: string;
@@ -71,21 +76,21 @@ export interface ValidationRun {
 
 export function runWorkflow(
   workflow: WorkflowDefinition,
-  registry: PluginRegistry,
+  catalog: ValidationCatalog,
   options: ValidationRunOptions,
 ): Promise<ValidationRun>;
 
 export function runWorkflowToNode(
   workflow: WorkflowDefinition,
   nodeId: string,
-  registry: PluginRegistry,
+  catalog: ValidationCatalog,
   options: ValidationRunOptions,
 ): Promise<ValidationRun>;
 
 export function runNode(
   workflow: WorkflowDefinition,
   nodeId: string,
-  registry: PluginRegistry,
+  catalog: ValidationCatalog,
   options: ValidationRunOptions,
   cache?: Map<string, NodeResult>,
 ): Promise<NodeResult>;

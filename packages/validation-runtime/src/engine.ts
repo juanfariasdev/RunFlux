@@ -5,13 +5,19 @@ import {
   type EnvironmentVariables,
   type ExecutionMode,
   type ExecutionStatus,
+  type NodeCatalog,
   type NodeRecord,
+  type NodeTypeLookup,
   type RuntimeServices,
+  type WorkflowSource,
 } from '@runflux/runtime';
-import type { PluginRegistry } from '@runflux/plugin-system/plugin-registry';
-import type { WorkflowDefinition } from '@runflux/workflow-model/types';
 
 export type PluginExecutionMode = ExecutionMode;
+
+/** What a test run needs from the plugins: their runtime definitions and manifests. A PluginRegistry is one. */
+export interface ValidationCatalog extends NodeCatalog {
+  readonly describe: NodeTypeLookup;
+}
 
 export interface ValidationRunOptions {
   mode: PluginExecutionMode;
@@ -49,13 +55,13 @@ export interface ValidationRun {
 
 /** Runs `work` with an engine for this one run, releasing the handlers' resources afterwards. */
 async function withEngine<TResult>(
-  workflow: WorkflowDefinition,
-  registry: PluginRegistry,
+  workflow: WorkflowSource,
+  catalog: ValidationCatalog,
   options: ValidationRunOptions,
   work: (engine: WorkflowEngine) => Promise<TResult>,
 ): Promise<TResult> {
-  const document = new ExecutableWorkflowBuilder(registry.describe).build(workflow);
-  const engine = new WorkflowEngine(document, registry, { mode: options.mode, services: options.services, environment: options.environment });
+  const document = new ExecutableWorkflowBuilder(catalog.describe).build(workflow);
+  const engine = new WorkflowEngine(document, catalog, { mode: options.mode, services: options.services, environment: options.environment });
   try {
     return await work(engine);
   } finally {
@@ -83,8 +89,8 @@ function toNodeRecord(result: NodeResult): NodeRecord {
  * reachable from a trigger run (RN-07); a failure stops only its own descendants (RN-02); triggers
  * of the same plugin race each other (RN-08). Nothing is compiled or deployed (RN-01).
  */
-export async function runWorkflow(workflow: WorkflowDefinition, registry: PluginRegistry, options: ValidationRunOptions): Promise<ValidationRun> {
-  const execution = await withEngine(workflow, registry, options, (engine) => engine.run({ signal: options.signal }));
+export async function runWorkflow(workflow: WorkflowSource, catalog: ValidationCatalog, options: ValidationRunOptions): Promise<ValidationRun> {
+  const execution = await withEngine(workflow, catalog, options, (engine) => engine.run({ signal: options.signal }));
   return {
     workflowId: workflow.id,
     mode: options.mode,
@@ -98,12 +104,12 @@ export async function runWorkflow(workflow: WorkflowDefinition, registry: Plugin
 
 /** Runs the workflow only as far as `nodeId`, preserving normal trigger, branch and merge semantics. */
 export async function runWorkflowToNode(
-  workflow: WorkflowDefinition,
+  workflow: WorkflowSource,
   nodeId: string,
-  registry: PluginRegistry,
+  catalog: ValidationCatalog,
   options: ValidationRunOptions,
 ): Promise<ValidationRun> {
-  const execution = await withEngine(workflow, registry, options, (engine) => engine.run({ signal: options.signal, targetNodeId: nodeId }));
+  const execution = await withEngine(workflow, catalog, options, (engine) => engine.run({ signal: options.signal, targetNodeId: nodeId }));
   return {
     workflowId: workflow.id,
     mode: options.mode,
@@ -120,13 +126,13 @@ export async function runWorkflowToNode(
  * `cache` (RN-03). A parent that was never tested contributes null instead of blocking (RN-06).
  */
 export async function runNode(
-  workflow: WorkflowDefinition,
+  workflow: WorkflowSource,
   nodeId: string,
-  registry: PluginRegistry,
+  catalog: ValidationCatalog,
   options: ValidationRunOptions,
   cache: Map<string, NodeResult> = new Map(),
 ): Promise<NodeResult> {
   const previous = [...cache.values()].map(toNodeRecord);
-  const record = await withEngine(workflow, registry, options, (engine) => engine.runNode(nodeId, { previous, signal: options.signal }));
+  const record = await withEngine(workflow, catalog, options, (engine) => engine.runNode(nodeId, { previous, signal: options.signal }));
   return toNodeResult(record);
 }
