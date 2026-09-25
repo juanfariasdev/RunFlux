@@ -47,15 +47,8 @@ export class ProjectService {
   constructor(private readonly repo: ProjectRepository) {}
 
   async createProject(data: { name: string; definition?: WorkflowDefinition; envVars?: ProjectEnvVar[] }) {
-    const trimmedName = typeof data.name === 'string' ? data.name.trim() : '';
-    if (!trimmedName) {
-      throw new ValidationError('Nome do projeto não pode ser vazio');
-    }
-
-    const existing = await this.repo.findByName(trimmedName, false);
-    if (existing) {
-      throw new ProjectConflictError(`Já existe um projeto ativo com o nome '${trimmedName}'`);
-    }
+    const trimmedName = requireName(data.name);
+    await this.assertNameAvailable(trimmedName);
 
     const project = await this.repo.create({
       name: trimmedName,
@@ -70,7 +63,7 @@ export class ProjectService {
     }
 
     if (data.definition) {
-      const validated = workflowDefinitionSchema.parse(normalizeWorkflowDefinition(data.definition));
+      const validated = validDefinition(data.definition);
       await this.repo.createVersion({
         projectId: project.id,
         version: 'v1',
@@ -107,10 +100,7 @@ export class ProjectService {
   }
 
   async getProject(id: string) {
-    const project = await this.repo.findById(id);
-    if (!project) {
-      throw new ProjectNotFoundError(`Projeto '${id}' não encontrado`);
-    }
+    const project = await this.requireProject(id);
 
     let workflow: WorkflowDefinition = {
       id: project.id,
@@ -132,15 +122,7 @@ export class ProjectService {
       }
     }
 
-    let envVars: ProjectEnvVar[] = [];
-    if (project.envVars) {
-      try {
-        const parsed = JSON.parse(project.envVars);
-        if (Array.isArray(parsed)) envVars = parsed;
-      } catch {
-        envVars = [];
-      }
-    }
+    const envVars = parseEnvVars(project.envVars);
 
     return {
       id: project.id,
@@ -155,40 +137,19 @@ export class ProjectService {
   }
 
   async updateProject(id: string, data: { name?: string; definition?: WorkflowDefinition }) {
-    const project = await this.repo.findById(id);
-    if (!project) {
-      throw new ProjectNotFoundError(`Projeto '${id}' não encontrado`);
-    }
+    const project = await this.requireProject(id);
 
     let updatedName = project.name;
     if (data.name !== undefined) {
-      const trimmed = typeof data.name === 'string' ? data.name.trim() : '';
-      if (!trimmed) {
-        throw new ValidationError('Nome do projeto não pode ser vazio');
-      }
-
-      if (trimmed !== project.name) {
-        const existing = await this.repo.findByName(trimmed, false);
-        if (existing && existing.id !== id) {
-          throw new ProjectConflictError(`Já existe um projeto ativo com o nome '${trimmed}'`);
-        }
-      }
+      const trimmed = requireName(data.name);
+      if (trimmed !== project.name) await this.assertNameAvailable(trimmed, id);
       updatedName = trimmed;
     }
 
     let nextVersion = project.currentWorkflowVersion;
     if (data.definition !== undefined) {
-      const validated = workflowDefinitionSchema.parse(normalizeWorkflowDefinition(data.definition));
-      
-      const latest = await this.repo.getLatestVersion(id);
-      let versionNumber = 1;
-      if (latest && latest.version.startsWith('v')) {
-        const parsedNum = parseInt(latest.version.substring(1), 10);
-        if (!isNaN(parsedNum)) {
-          versionNumber = parsedNum + 1;
-        }
-      }
-      nextVersion = `v${versionNumber}`;
+      const validated = validDefinition(data.definition);
+      nextVersion = nextVersionLabel(await this.repo.getLatestVersion(id));
 
       await this.repo.createVersion({
         projectId: id,
@@ -206,18 +167,12 @@ export class ProjectService {
   }
 
   async archiveProject(id: string) {
-    const project = await this.repo.findById(id);
-    if (!project) {
-      throw new ProjectNotFoundError(`Projeto '${id}' não encontrado`);
-    }
+    await this.requireProject(id);
     return this.repo.archive(id);
   }
 
   async restoreProject(id: string) {
-    const project = await this.repo.findById(id);
-    if (!project) {
-      throw new ProjectNotFoundError(`Projeto '${id}' não encontrado`);
-    }
+    const project = await this.requireProject(id);
 
     const collision = await this.repo.findByName(project.name, false);
     if (collision && collision.id !== id) {
@@ -229,32 +184,17 @@ export class ProjectService {
   }
 
   async deletePermanently(id: string) {
-    const project = await this.repo.findById(id);
-    if (!project) {
-      throw new ProjectNotFoundError(`Projeto '${id}' não encontrado`);
-    }
+    await this.requireProject(id);
     return this.repo.hardDelete(id);
   }
 
   async getProjectEnv(id: string): Promise<ProjectEnvVar[]> {
-    const project = await this.repo.findById(id);
-    if (!project) {
-      throw new ProjectNotFoundError(`Projeto '${id}' não encontrado`);
-    }
-    if (!project.envVars) return [];
-    try {
-      const parsed = JSON.parse(project.envVars);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
+    const project = await this.requireProject(id);
+    return parseEnvVars(project.envVars);
   }
 
   async updateProjectEnv(id: string, envVars: unknown): Promise<ProjectEnvVar[]> {
-    const project = await this.repo.findById(id);
-    if (!project) {
-      throw new ProjectNotFoundError(`Projeto '${id}' não encontrado`);
-    }
+    await this.requireProject(id);
 
     const validated = envVarsArraySchema.parse(envVars);
     await this.repo.update(id, {
@@ -299,6 +239,18 @@ export class ProjectService {
     });
   }
 
+  private async requireProject(id: string) {
+    const project = await this.repo.findById(id);
+    if (!project) throw new ProjectNotFoundError(`Projeto '${id}' não encontrado`);
+    return project;
+  }
+
+  /** Rejects a name another active project uses; `ownerId` is the project allowed to keep it. */
+  private async assertNameAvailable(name: string, ownerId?: string): Promise<void> {
+    const existing = await this.repo.findByName(name, false);
+    if (existing && existing.id !== ownerId) throw new ProjectConflictError(`Já existe um projeto ativo com o nome '${name}'`);
+  }
+
   private async generateUniqueName(baseName: string): Promise<string> {
     const existing = await this.repo.findByName(baseName, false);
     if (!existing) {
@@ -316,5 +268,34 @@ export class ProjectService {
     }
 
     return candidate;
+  }
+}
+
+/** A project name, trimmed; blank or missing names are rejected. */
+function requireName(name: unknown): string {
+  const trimmed = typeof name === 'string' ? name.trim() : '';
+  if (!trimmed) throw new ValidationError('Nome do projeto não pode ser vazio');
+  return trimmed;
+}
+
+/** A workflow as it is stored: legacy parameters normalized, then validated. */
+function validDefinition(definition: WorkflowDefinition) {
+  return workflowDefinitionSchema.parse(normalizeWorkflowDefinition(definition));
+}
+
+/** The label after the latest version: `v1` first, then the next number after `vN`. */
+function nextVersionLabel(latest: { version: string } | null): string {
+  const current = latest?.version.startsWith('v') ? parseInt(latest.version.substring(1), 10) : Number.NaN;
+  return `v${Number.isNaN(current) ? 1 : current + 1}`;
+}
+
+/** The stored variables of a project; missing or unreadable ones are an empty list. */
+function parseEnvVars(stored: string | null): ProjectEnvVar[] {
+  if (!stored) return [];
+  try {
+    const parsed = JSON.parse(stored);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
   }
 }
