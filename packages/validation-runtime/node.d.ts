@@ -11,6 +11,8 @@
  * by hand — only the narrow surface a Node-side consumer actually needs.
  */
 
+import type { IncomingMessage, ServerResponse } from 'node:http';
+
 export type PluginExecutionMode = 'sandbox' | 'production';
 
 /** What a test run needs from the plugins: their runtime definitions and manifests. A PluginRegistry is one. */
@@ -94,3 +96,24 @@ export function runNode(
   options: ValidationRunOptions,
   cache?: Map<string, NodeResult>,
 ): Promise<NodeResult>;
+
+/** What the handlers need from the webhook test hub. */
+export interface WebhookDelivery extends TriggerEventSource {
+  deliver(path: string, request: { body?: unknown; headers?: unknown; query?: unknown; method?: string }): boolean;
+  cancelAll(): void;
+}
+
+export interface ValidationHttpOptions {
+  readonly catalog: () => Promise<ValidationCatalog>;
+  readonly webhooks: WebhookDelivery;
+  readonly environment?: () => Readonly<Record<string, string | undefined>>;
+}
+
+/** The test execution endpoints of the editor, over plain node:http requests. */
+export interface ValidationHttpHandlers {
+  validate(request: IncomingMessage, response: ServerResponse): void;
+  deliverWebhook(request: IncomingMessage, response: ServerResponse): boolean;
+  cancelWebhooks(request: IncomingMessage, response: ServerResponse): void;
+}
+
+export function createValidationHttpHandlers(options: ValidationHttpOptions): ValidationHttpHandlers;
