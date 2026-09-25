@@ -34,6 +34,15 @@ export interface ProjectContextValue {
 
 const ProjectContext = createContext<ProjectContextValue | null>(null);
 
+/** What saving compares: the workflow's name, nodes and connections. */
+function snapshotOf(workflow: Pick<WorkflowDefinition, 'name' | 'nodes' | 'connections'>): string {
+  return JSON.stringify({ name: workflow.name, nodes: workflow.nodes, connections: workflow.connections });
+}
+
+function errorMessage(err: unknown, fallback: string): string {
+  return (err as { message?: string } | null | undefined)?.message || fallback;
+}
+
 const defaultAdapter = new HttpProjectApiAdapter();
 
 export function ProjectProvider({
@@ -51,18 +60,27 @@ export function ProjectProvider({
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
+  /** Runs a user action with the loading flag and the error the project manager shows; failures are rethrown. */
+  const runAction = useCallback(async <TResult,>(failure: string, work: () => Promise<TResult>): Promise<TResult> => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      return await work();
+    } catch (err) {
+      setError(errorMessage(err, failure));
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   const workflow = useWorkflowStore((s) => s.workflow);
   const setWorkflow = useWorkflowStore((s) => s.setWorkflow);
 
   // Calcula se o grafo atual no canvas difere do último snapshot salvo
   const isDirty = useMemo(() => {
     if (!currentProject || !lastSavedSnapshot) return false;
-    const currentJson = JSON.stringify({
-      name: workflow.name,
-      nodes: workflow.nodes,
-      connections: workflow.connections,
-    });
-    return currentJson !== lastSavedSnapshot;
+    return snapshotOf(workflow) !== lastSavedSnapshot;
   }, [currentProject, lastSavedSnapshot, workflow]);
 
   const refreshProjects = useCallback(async () => {
@@ -74,38 +92,23 @@ export function ProjectProvider({
       ]);
       setProjects(active);
       setArchivedProjects(archived);
-    } catch (err: any) {
-      setError(err?.message || 'Falha ao listar projetos');
+    } catch (err) {
+      setError(errorMessage(err, 'Falha ao listar projetos'));
     }
   }, [adapter]);
 
   const openProject = useCallback(async (id: string) => {
-    setIsLoading(true);
-    setError(null);
-    try {
+    return runAction('Falha ao abrir projeto', async () => {
       const detail = await adapter.getProject(id);
       setCurrentProject(detail);
       setEnvVars(detail.envVars || []);
       setWorkflow(detail.workflow);
-      setLastSavedSnapshot(
-        JSON.stringify({
-          name: detail.workflow.name,
-          nodes: detail.workflow.nodes,
-          connections: detail.workflow.connections,
-        })
-      );
-    } catch (err: any) {
-      setError(err?.message || 'Falha ao abrir projeto');
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [adapter, setWorkflow]);
+      setLastSavedSnapshot(snapshotOf(detail.workflow));
+    });
+  }, [runAction, adapter, setWorkflow]);
 
   const createNewProject = useCallback(async (name: string) => {
-    setIsLoading(true);
-    setError(null);
-    try {
+    return runAction('Falha ao criar projeto', async () => {
       const emptyWf: WorkflowDefinition = {
         id: '',
         name,
@@ -116,22 +119,11 @@ export function ProjectProvider({
       setCurrentProject(detail);
       setEnvVars(detail.envVars || []);
       setWorkflow(detail.workflow);
-      setLastSavedSnapshot(
-        JSON.stringify({
-          name: detail.workflow.name,
-          nodes: detail.workflow.nodes,
-          connections: detail.workflow.connections,
-        })
-      );
+      setLastSavedSnapshot(snapshotOf(detail.workflow));
       await refreshProjects();
       return detail;
-    } catch (err: any) {
-      setError(err?.message || 'Falha ao criar projeto');
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [adapter, setWorkflow, refreshProjects]);
+    });
+  }, [runAction, adapter, setWorkflow, refreshProjects]);
 
   const saveEnvVars = useCallback(async (newEnvVars: ProjectEnvVar[]) => {
     setEnvVars(newEnvVars);
@@ -140,42 +132,27 @@ export function ProjectProvider({
       const saved = await adapter.updateEnvVars(currentProject.id, newEnvVars);
       setEnvVars(saved);
       setCurrentProject((prev) => (prev ? { ...prev, envVars: saved } : null));
-    } catch (err: any) {
-      setError(err?.message || 'Falha ao salvar variáveis de ambiente');
+    } catch (err) {
+      setError(errorMessage(err, 'Falha ao salvar variáveis de ambiente'));
       throw err;
     }
   }, [adapter, currentProject]);
 
   const saveCurrentProject = useCallback(async () => {
     if (!currentProject) return;
-    setIsLoading(true);
-    setError(null);
-    try {
+    return runAction('Falha ao salvar projeto', async () => {
       const updated = await adapter.updateProject(currentProject.id, {
         name: workflow.name,
         definition: workflow,
       });
       setCurrentProject(updated);
-      setLastSavedSnapshot(
-        JSON.stringify({
-          name: updated.workflow.name,
-          nodes: updated.workflow.nodes,
-          connections: updated.workflow.connections,
-        })
-      );
+      setLastSavedSnapshot(snapshotOf(updated.workflow));
       await refreshProjects();
-    } catch (err: any) {
-      setError(err?.message || 'Falha ao salvar projeto');
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [adapter, currentProject, workflow, refreshProjects]);
+    });
+  }, [runAction, adapter, currentProject, workflow, refreshProjects]);
 
   const archiveProject = useCallback(async (id: string) => {
-    setIsLoading(true);
-    setError(null);
-    try {
+    return runAction('Falha ao arquivar projeto', async () => {
       await adapter.archiveProject(id);
       if (currentProject?.id === id) {
         setCurrentProject(null);
@@ -184,41 +161,22 @@ export function ProjectProvider({
         setWorkflow({ id: crypto.randomUUID(), name: 'Untitled workflow', nodes: [], connections: [] });
       }
       await refreshProjects();
-    } catch (err: any) {
-      setError(err?.message || 'Falha ao arquivar projeto');
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [adapter, currentProject, refreshProjects, setWorkflow]);
+    });
+  }, [runAction, adapter, currentProject, refreshProjects, setWorkflow]);
 
   const restoreProject = useCallback(async (id: string) => {
-    setIsLoading(true);
-    setError(null);
-    try {
+    return runAction('Falha ao restaurar projeto', async () => {
       await adapter.restoreProject(id);
       await refreshProjects();
-    } catch (err: any) {
-      setError(err?.message || 'Falha ao restaurar projeto');
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [adapter, refreshProjects]);
+    });
+  }, [runAction, adapter, refreshProjects]);
 
   const deleteProjectPermanently = useCallback(async (id: string) => {
-    setIsLoading(true);
-    setError(null);
-    try {
+    return runAction('Falha ao excluir projeto', async () => {
       await adapter.deletePermanently(id);
       await refreshProjects();
-    } catch (err: any) {
-      setError(err?.message || 'Falha ao excluir projeto');
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [adapter, refreshProjects]);
+    });
+  }, [runAction, adapter, refreshProjects]);
 
   const exportProject = useCallback(async (id?: string) => {
     const targetId = id || currentProject?.id;
@@ -236,29 +194,22 @@ export function ProjectProvider({
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-    } catch (err: any) {
-      setError(err?.message || 'Falha ao exportar projeto');
+    } catch (err) {
+      setError(errorMessage(err, 'Falha ao exportar projeto'));
       throw err;
     }
   }, [adapter, currentProject]);
 
   const importProjectFile = useCallback(async (file: File) => {
-    setIsLoading(true);
-    setError(null);
-    try {
+    return runAction('Arquivo de projeto inválido', async () => {
       const text = await file.text();
       const parsed = JSON.parse(text) as RunfluxExportEnvelope;
       const imported = await adapter.importProject(parsed);
       await refreshProjects();
       await openProject(imported.id);
       return imported;
-    } catch (err: any) {
-      setError(err?.message || 'Arquivo de projeto inválido');
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [adapter, refreshProjects, openProject]);
+    });
+  }, [runAction, adapter, refreshProjects, openProject]);
 
   useEffect(() => {
     refreshProjects().catch(() => {});
