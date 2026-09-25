@@ -2,6 +2,7 @@ import { lazy, Suspense, useState, useEffect } from 'react';
 import type { WorkflowNode } from '@runflux/workflow-model/types';
 import type { PluginCatalogAdapter } from '../adapters/plugin-catalog-adapter';
 import type { PluginExecutionMode, ValidationRuntimeAdapter } from '../adapters/validation-runtime-adapter';
+import type { WebhookTestingAdapter } from '../adapters/webhook-testing-adapter';
 import type { WorkflowPersistenceAdapter } from '../adapters/workflow-persistence-adapter';
 import { useWorkflowStore } from '../store/workflow-store';
 import { Button } from './ui/button';
@@ -17,6 +18,7 @@ export interface ToolbarProps {
   catalog: PluginCatalogAdapter;
   persistence: WorkflowPersistenceAdapter;
   validation: ValidationRuntimeAdapter;
+  webhooks: WebhookTestingAdapter;
   /** Called with the node ids that should show the canvas "waiting" badge for the run's duration (every Webhook Trigger while `validation.run` is in flight), and `[]` once it settles. */
   onTestingNodesChange?: (nodeIds: string[]) => void;
 }
@@ -34,7 +36,7 @@ type ToolbarStatus =
  * NodeConfigPanel, before ever calling into ValidationRuntimeAdapter.
  * Integrates ProjectContext (005-workflow-project-management) and CompilerModal (006-compiler).
  */
-export function Toolbar({ catalog, persistence, validation, onTestingNodesChange }: ToolbarProps) {
+export function Toolbar({ catalog, persistence, validation, webhooks, onTestingNodesChange }: ToolbarProps) {
   const workflow = useWorkflowStore((s) => s.workflow);
   const setNodeResults = useWorkflowStore((s) => s.setNodeResults);
   const clearNodeResults = useWorkflowStore((s) => s.clearNodeResults);
@@ -130,12 +132,11 @@ export function Toolbar({ catalog, persistence, validation, onTestingNodesChange
   };
 
   const handleCancelTest = async () => {
-    await fetch('/runflux-webhook-cancel', { method: 'POST' }).catch(() => {});
+    await webhooks.cancelListeners();
   };
 
   const handleSendTestPayload = async (node: WorkflowNode) => {
-    const { url, init } = webhookTestRequest(node.parameters, window.location.origin);
-    await fetch(url, init).catch(() => {});
+    await webhooks.send(webhookTestRequest(node.parameters, window.location.origin));
   };
 
   return (

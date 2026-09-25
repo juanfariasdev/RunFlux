@@ -52,7 +52,21 @@ export class ProjectApiError extends Error {
   }
 }
 
-export class HttpProjectApiAdapter implements WorkflowPersistenceAdapter {
+/** What the project session (ProjectContext) needs from the project server. */
+export interface ProjectApi {
+  listProjects(options?: { archived?: boolean; search?: string }): Promise<ProjectSummary[]>;
+  getProject(id: string): Promise<ProjectDetail>;
+  createProject(data: { name: string; definition?: WorkflowDefinition }): Promise<ProjectDetail>;
+  updateProject(id: string, data: { name?: string; definition?: WorkflowDefinition }): Promise<ProjectDetail>;
+  archiveProject(id: string): Promise<{ id: string; archivedAt: string; status: 'archived' }>;
+  restoreProject(id: string): Promise<{ id: string; archivedAt: null; status: 'active' }>;
+  deletePermanently(id: string): Promise<void>;
+  exportProject(id: string): Promise<RunfluxExportEnvelope>;
+  importProject(envelope: RunfluxExportEnvelope): Promise<ProjectDetail>;
+  updateEnvVars(projectId: string, envVars: ProjectEnvVar[]): Promise<ProjectEnvVar[]>;
+}
+
+export class HttpProjectApiAdapter implements ProjectApi, WorkflowPersistenceAdapter {
   private readonly baseUrl: string;
 
   constructor(baseUrl: string = '/api/projects') {

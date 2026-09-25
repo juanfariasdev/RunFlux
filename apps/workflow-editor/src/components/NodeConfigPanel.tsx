@@ -7,7 +7,7 @@ import { isParameterVisible } from '@runflux/plugin-system/visibility';
 import { containsExpression } from '@runflux/runtime';
 import type { NodeResult } from '@runflux/validation-runtime';
 import type { WorkflowNodeAppearance, WorkflowNodeShape } from '@runflux/workflow-model/types';
-import { webhookTestRequest } from '../adapters/webhook-test-request';
+import { webhookTestRequest, type WebhookTestRequest } from '../adapters/webhook-test-request';
 import { buildZodSchema } from '../forms/build-zod-schema';
 import { Button } from './ui/button';
 import { Checkbox } from './ui/checkbox';
@@ -97,6 +97,8 @@ export interface NodeConfigPanelProps {
   /** RF-02/RF-05: the node's last validation result, if it has one this session. */
   testResult?: NodeResult;
   onCancelTest?: () => void;
+  /** Sends the test request of a webhook trigger being edited; without it, the panel offers no send button. */
+  onSendTestRequest?: (request: WebhookTestRequest) => void;
   nodeScope?: Record<string, { json: unknown }>;
   envScope?: Record<string, string>;
 }
@@ -113,6 +115,7 @@ export function NodeConfigPanel({
   isTesting = false,
   testResult,
   onCancelTest,
+  onSendTestRequest,
   nodeScope,
   envScope,
 }: NodeConfigPanelProps) {
@@ -343,17 +346,15 @@ export function NodeConfigPanel({
               <code className="mt-1 block overflow-x-auto rounded bg-white px-2 py-1 font-mono text-[9px] text-indigo-900 border border-indigo-200 select-all">
                 {`${testRequest.method} ${testRequest.url}`}
               </code>
-              <div className="mt-2 flex items-center justify-between">
+              {onSendTestRequest && <div className="mt-2 flex items-center justify-between">
                 <button
                   type="button"
-                  onClick={() => {
-                    void fetch(testRequest.url, testRequest.init).catch(() => {});
-                  }}
+                  onClick={() => onSendTestRequest(testRequest)}
                   className="text-[9px] font-semibold text-indigo-600 hover:text-indigo-800 hover:underline"
                 >
                   ⚡ Send test payload now
                 </button>
-              </div>
+              </div>}
             </div>
           )}
           {hasDisplayedTestInput && (

@@ -5,7 +5,10 @@ import { useWorkflowStore } from '../../store/workflow-store';
 import type { PluginCatalogAdapter } from '../../adapters/plugin-catalog-adapter';
 import type { ValidationRuntimeAdapter, ValidationRunResult } from '../../adapters/validation-runtime-adapter';
 import type { WorkflowPersistenceAdapter } from '../../adapters/workflow-persistence-adapter';
+import { HttpWebhookTestingAdapter } from '../../adapters/webhook-testing-adapter';
 import type { PluginManifest } from '@runflux/plugin-system/types';
+
+const testWebhooks = new HttpWebhookTestingAdapter();
 
 const manifestWithRequiredField: PluginManifest = {
   id: 'action-example',
@@ -45,7 +48,7 @@ describe('Toolbar — Save (RF-07, RN-04)', () => {
     const persistence: WorkflowPersistenceAdapter = { save, load: vi.fn() };
     const validation: ValidationRuntimeAdapter = { run: vi.fn(), runToNode: vi.fn(), runNode: vi.fn() };
 
-    render(<Toolbar catalog={fakeCatalog()} persistence={persistence} validation={validation} />);
+    render(<Toolbar webhooks={testWebhooks} catalog={fakeCatalog()} persistence={persistence} validation={validation} />);
     fireEvent.click(screen.getByRole('button', { name: /save/i }));
 
     await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
@@ -54,7 +57,7 @@ describe('Toolbar — Save (RF-07, RN-04)', () => {
 
   it('saves on Ctrl+S and Cmd+S, and names the workflow on the project selector', async () => {
     const save = vi.fn().mockResolvedValue(undefined);
-    render(<Toolbar catalog={fakeCatalog()} persistence={{ save, load: vi.fn() }} validation={{ run: vi.fn(), runToNode: vi.fn(), runNode: vi.fn() }} />);
+    render(<Toolbar webhooks={testWebhooks} catalog={fakeCatalog()} persistence={{ save, load: vi.fn() }} validation={{ run: vi.fn(), runToNode: vi.fn(), runNode: vi.fn() }} />);
 
     expect(screen.getByTestId('project-selector-btn')).toHaveTextContent('My Workflow');
     fireEvent.keyDown(window, { key: 's', ctrlKey: true });
@@ -77,6 +80,7 @@ describe('Toolbar — Test (RF-06, RF-12, RN-04)', () => {
     const run = vi.fn();
     render(
       <Toolbar
+        webhooks={testWebhooks}
         catalog={fakeCatalog()}
         persistence={{ save: vi.fn(), load: vi.fn() }}
         validation={{ run, runToNode: vi.fn(), runNode: vi.fn() }}
@@ -100,6 +104,7 @@ describe('Toolbar — Test (RF-06, RF-12, RN-04)', () => {
     const run = vi.fn().mockResolvedValue({ status: 'success', message: 'ok', nodeResults: [] });
     render(
       <Toolbar
+        webhooks={testWebhooks}
         catalog={fakeCatalog()}
         persistence={{ save: vi.fn(), load: vi.fn() }}
         validation={{ run, runToNode: vi.fn(), runNode: vi.fn() }}
@@ -124,6 +129,7 @@ describe('Toolbar — Test (RF-06, RF-12, RN-04)', () => {
     const run = vi.fn().mockResolvedValue({ status: 'success', nodeResults: [nodeResult] });
     render(
       <Toolbar
+        webhooks={testWebhooks}
         catalog={fakeCatalog()}
         persistence={{ save: vi.fn(), load: vi.fn() }}
         validation={{ run, runToNode: vi.fn(), runNode: vi.fn() }}
@@ -138,6 +144,7 @@ describe('Toolbar — Test (RF-06, RF-12, RN-04)', () => {
     const run = vi.fn().mockResolvedValue({ status: 'success', nodeResults: [] });
     render(
       <Toolbar
+        webhooks={testWebhooks}
         catalog={fakeCatalog()}
         persistence={{ save: vi.fn(), load: vi.fn() }}
         validation={{ run, runToNode: vi.fn(), runNode: vi.fn() }}
@@ -160,6 +167,7 @@ describe('Toolbar — Test (RF-06, RF-12, RN-04)', () => {
 
     render(
       <Toolbar
+        webhooks={testWebhooks}
         catalog={fakeCatalog()}
         persistence={{ save: vi.fn(), load: vi.fn() }}
         validation={{ run, runToNode: vi.fn(), runNode: vi.fn() }}
@@ -192,6 +200,7 @@ describe('Toolbar — Test (RF-06, RF-12, RN-04)', () => {
 
     render(
       <Toolbar
+        webhooks={testWebhooks}
         catalog={fakeCatalog()}
         persistence={{ save: vi.fn(), load: vi.fn() }}
         validation={{ run, runToNode: vi.fn(), runNode: vi.fn() }}
@@ -216,6 +225,7 @@ describe('Toolbar — Test (RF-06, RF-12, RN-04)', () => {
     const run = vi.fn((): Promise<ValidationRunResult> => new Promise((resolve) => { resolveRun = resolve; }));
     render(
       <Toolbar
+        webhooks={testWebhooks}
         catalog={fakeCatalog()}
         persistence={{ save: vi.fn(), load: vi.fn() }}
         validation={{ run, runToNode: vi.fn(), runNode: vi.fn() }}
@@ -245,6 +255,7 @@ describe('Toolbar — Test (RF-06, RF-12, RN-04)', () => {
 
     render(
       <Toolbar
+        webhooks={testWebhooks}
         catalog={fakeCatalog()}
         persistence={{ save: vi.fn(), load: vi.fn() }}
         validation={{ run, runToNode: vi.fn(), runNode: vi.fn() }}
@@ -293,6 +304,7 @@ describe('Toolbar — Test (RF-06, RF-12, RN-04)', () => {
 
     render(
       <Toolbar
+        webhooks={testWebhooks}
         catalog={fakeCatalog()}
         persistence={{ save: vi.fn(), load: vi.fn() }}
         validation={{ run, runToNode: vi.fn(), runNode: vi.fn() }}
@@ -342,6 +354,7 @@ describe('Toolbar — Test (RF-06, RF-12, RN-04)', () => {
 
     render(
       <Toolbar
+        webhooks={testWebhooks}
         catalog={fakeCatalog()}
         persistence={{ save: vi.fn(), load: vi.fn() }}
         validation={{ run, runToNode: vi.fn(), runNode: vi.fn() }}
@@ -360,6 +373,7 @@ describe('Toolbar — Test (RF-06, RF-12, RN-04)', () => {
     const run = vi.fn().mockRejectedValue(new Error('Webhook listening cancelled by user'));
     render(
       <Toolbar
+        webhooks={testWebhooks}
         catalog={fakeCatalog()}
         persistence={{ save: vi.fn(), load: vi.fn() }}
         validation={{ run, runToNode: vi.fn(), runNode: vi.fn() }}
@@ -377,6 +391,7 @@ describe("Toolbar — Compiler Button", () => {
   it("renders the compile button in English and opens the compiler modal", async () => {
     render(
       <Toolbar
+        webhooks={testWebhooks}
         catalog={fakeCatalog()}
         persistence={{ save: vi.fn(), load: vi.fn() }}
         validation={{ run: vi.fn(), runToNode: vi.fn(), runNode: vi.fn() }}

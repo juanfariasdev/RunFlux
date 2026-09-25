@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, useCallback, useMemo } 
 import type { WorkflowDefinition } from '@runflux/workflow-model/types';
 import {
   HttpProjectApiAdapter,
+  type ProjectApi,
   type ProjectSummary,
   type ProjectDetail,
   type ProjectEnvVar,
@@ -10,7 +11,7 @@ import {
 import { useWorkflowStore } from '../store/workflow-store';
 
 export interface ProjectContextValue {
-  adapter: HttpProjectApiAdapter;
+  adapter: ProjectApi;
   currentProject: ProjectDetail | null;
   projects: ProjectSummary[];
   archivedProjects: ProjectSummary[];
@@ -40,7 +41,7 @@ export function ProjectProvider({
   adapter = defaultAdapter,
 }: {
   children: React.ReactNode;
-  adapter?: HttpProjectApiAdapter;
+  adapter?: ProjectApi;
 }) {
   const [currentProject, setCurrentProject] = useState<ProjectDetail | null>(null);
   const [envVars, setEnvVars] = useState<ProjectEnvVar[]>([]);

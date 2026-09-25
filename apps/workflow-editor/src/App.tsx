@@ -4,6 +4,7 @@ import type { PluginManifest } from '@runflux/plugin-system/types';
 import { HttpPluginCatalogAdapter } from './adapters/plugin-catalog-adapter';
 import { HttpValidationRuntimeAdapter } from './adapters/validation-runtime-adapter';
 import { HttpProjectApiAdapter } from './adapters/project-api-adapter';
+import { HttpWebhookTestingAdapter } from './adapters/webhook-testing-adapter';
 import { connectionId } from './adapters/react-flow-adapter';
 import { Canvas } from './components/Canvas';
 import { Palette } from './components/Palette';
@@ -15,6 +16,7 @@ import { projectEnvironment } from './adapters/project-environment';
 const catalog = new HttpPluginCatalogAdapter();
 const projectAdapter = new HttpProjectApiAdapter();
 const validation = new HttpValidationRuntimeAdapter();
+const webhooks = new HttpWebhookTestingAdapter();
 const NodeConfigPanel = lazy(() => import('./components/NodeConfigPanel').then((module) => ({ default: module.NodeConfigPanel })));
 const EdgeConfigPanel = lazy(() => import('./components/EdgeConfigPanel').then((module) => ({ default: module.EdgeConfigPanel })));
 
@@ -62,7 +64,7 @@ function WorkflowEditorContent() {
   // RF-04: test a single node in isolation, reusing cached upstream results
   const handleCancelTest = useCallback(async () => {
     try {
-      await fetch('/runflux-webhook-cancel', { method: 'POST' }).catch(() => {});
+      await webhooks.cancelListeners();
     } finally {
       setTestingNodeIds(new Set());
     }
@@ -119,7 +121,7 @@ function WorkflowEditorContent() {
 
   return (
     <div className="flex h-full min-w-[900px] flex-col overflow-hidden bg-slate-50 text-slate-900">
-      <Toolbar catalog={catalog} persistence={projectAdapter} validation={validation} onTestingNodesChange={(nodeIds) => setTestingNodeIds(new Set(nodeIds))} />
+      <Toolbar catalog={catalog} persistence={projectAdapter} validation={validation} webhooks={webhooks} onTestingNodesChange={(nodeIds) => setTestingNodeIds(new Set(nodeIds))} />
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <Palette catalog={catalog} />
         <ReactFlowProvider>
@@ -148,6 +150,7 @@ function WorkflowEditorContent() {
               onClose={() => setSelectedNodeId(undefined)}
               onTest={() => handleTestNode(selectedNode.id)}
               onCancelTest={handleCancelTest}
+              onSendTestRequest={(request) => void webhooks.send(request)}
               isTesting={testingNodeIds.has(selectedNode.id)}
               testResult={nodeResults[selectedNode.id]}
               nodeScope={nodeScope}
