@@ -1,9 +1,9 @@
 import { Fragment, createContext, useContext, useRef, useState } from 'react';
 import { resolveExpressions } from '@runflux/expression-engine';
-import { CONDITION_ROW_SCHEMA, RULE_ROW_SCHEMA } from '@runflux/plugin-system/condition-row-schema';
-import { FIELDS_ROW_SCHEMA } from '@runflux/plugin-system/fields-row-schema';
-import type { JsonRowFieldSchema } from '@runflux/plugin-system/types';
-import { isRowFieldHidden, isRowFieldHiddenBy } from '@runflux/plugin-system/visibility';
+import { CONDITION_ROW_SCHEMA, RULE_ROW_SCHEMA } from '@runflux/plugin-system/sdk';
+import { FIELDS_ROW_SCHEMA } from '@runflux/plugin-system/sdk';
+import type { JsonRowFieldSchema } from '@runflux/plugin-system/sdk';
+import { isRowFieldHidden, isRowFieldHiddenBy } from '@runflux/plugin-system/sdk';
 import { containsExpression } from '@runflux/runtime';
 import { Button } from './ui/button';
 import { Input } from './ui/input';

@@ -1,5 +1,5 @@
-import { COMBINATOR_OPTIONS, CONDITION_ROW_SCHEMA } from '@runflux/plugin-system/condition-row-schema';
-import type { PluginModule } from '@runflux/plugin-system/types';
+import { COMBINATOR_OPTIONS, CONDITION_ROW_SCHEMA } from '@runflux/plugin-system/sdk';
+import type { PluginModule } from '@runflux/plugin-system/sdk';
 
 /**
  * If (004-core-nodes-catalog, RF-01): routes execution to one of two named outputs ("true" or

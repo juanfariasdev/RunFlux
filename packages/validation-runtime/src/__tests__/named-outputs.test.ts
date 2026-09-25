@@ -1,4 +1,4 @@
-import type { PluginManifest } from '@runflux/plugin-system/types';
+import type { PluginManifest } from '@runflux/plugin-system/sdk';
 import { describe, expect, it } from 'vitest';
 import { runWorkflow } from '../engine';
 import type { WorkflowDefinition } from '@runflux/workflow-model/types';

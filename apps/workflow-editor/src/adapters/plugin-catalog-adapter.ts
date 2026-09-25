@@ -1,5 +1,5 @@
-import type { PluginManifest } from '@runflux/plugin-system/types';
-import type { PluginReferenceStatus } from '@runflux/plugin-system/api/check-plugin-reference';
+import type { PluginManifest } from '@runflux/plugin-system/sdk';
+import type { PluginReferenceStatus } from '@runflux/plugin-system/sdk';
 
 /**
  * Seam between the editor's UI (browser) and the Plugin System's discovery

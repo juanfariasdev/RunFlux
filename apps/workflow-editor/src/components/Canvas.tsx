@@ -16,7 +16,7 @@ import {
   type OnNodeDrag,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import type { PluginManifest } from '@runflux/plugin-system/types';
+import type { PluginManifest } from '@runflux/plugin-system/sdk';
 import type { PluginCatalogAdapter } from '../adapters/plugin-catalog-adapter';
 import { fromReactFlowEdge, toReactFlowEdge, toReactFlowNode, type FlowNode } from '../adapters/react-flow-adapter';
 import { isConnectionCompatible } from '../domain/connection-compatibility';

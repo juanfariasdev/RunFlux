@@ -3,7 +3,7 @@ import { readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { expect, it } from 'vitest';
 import { deserializeManifest, serializeManifest } from '@runflux/plugin-system/manifest-serializer';
-import { validateManifest } from '@runflux/plugin-system/manifest-validator';
+import { validateManifest } from '@runflux/plugin-system/sdk';
 import { PluginRegistry } from '@runflux/plugin-system/plugin-registry';
 import { PLUGIN_IDS } from '../support/workflows';
 

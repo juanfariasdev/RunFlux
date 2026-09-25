@@ -1,4 +1,4 @@
-import type { PluginModule } from '@runflux/plugin-system/types';
+import type { PluginModule } from '@runflux/plugin-system/sdk';
 import { HTTP_METHODS } from '@runflux/runtime';
 
 /**

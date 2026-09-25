@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { PluginCategory } from '@runflux/plugin-system/types';
+import type { PluginCategory } from '@runflux/plugin-system/sdk';
 import type { WorkflowDefinition } from '@runflux/workflow-model/types';
 import { runWorkflow, runNode } from '../engine';
 import { behaviourPlugin, registryWith, type TestBehaviour } from './support';

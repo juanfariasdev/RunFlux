@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { Palette } from '../Palette';
 import type { PluginCatalogAdapter } from '../../adapters/plugin-catalog-adapter';
-import type { PluginManifest } from '@runflux/plugin-system/types';
+import type { PluginManifest } from '@runflux/plugin-system/sdk';
 
 function manifest(id: string, category: PluginManifest['category']): PluginManifest {
   return { id, name: id, category, version: '1.0.0', parameters: [], supportedPlatforms: ['local'] };

@@ -1,5 +1,5 @@
-import { FIELDS_ROW_SCHEMA } from '@runflux/plugin-system/fields-row-schema';
-import type { PluginModule } from '@runflux/plugin-system/types';
+import { FIELDS_ROW_SCHEMA } from '@runflux/plugin-system/sdk';
+import type { PluginModule } from '@runflux/plugin-system/sdk';
 
 /**
  * Set (004-core-nodes-catalog, RF-11): composes an output object from manually defined fields

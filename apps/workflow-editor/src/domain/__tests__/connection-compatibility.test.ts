@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { isConnectionCompatible } from '../connection-compatibility';
-import type { PluginManifest } from '@runflux/plugin-system/types';
+import type { PluginManifest } from '@runflux/plugin-system/sdk';
 
 function manifest(category: PluginManifest['category']): PluginManifest {
   return { id: `m-${category}`, name: category, category, version: '1.0.0', parameters: [], supportedPlatforms: ['local'] };

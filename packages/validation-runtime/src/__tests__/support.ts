@@ -1,6 +1,7 @@
 import { PluginRegistry } from '@runflux/plugin-system/plugin-registry';
 import { testPlugin } from '@runflux/plugin-system/testing';
-import type { DiscoveredPlugin, PluginManifest } from '@runflux/plugin-system/types';
+import type { DiscoveredPlugin } from '@runflux/plugin-system';
+import type { PluginManifest } from '@runflux/plugin-system/sdk';
 import { defineNode, NodeOutput, type NodeContext } from '@runflux/runtime';
 
 /**

@@ -1,6 +1,6 @@
 import { MarkerType, Position, type Edge as ReactFlowEdge, type Node as ReactFlowNode } from '@xyflow/react';
-import type { PluginManifest } from '@runflux/plugin-system/types';
-import type { PluginReferenceStatus } from '@runflux/plugin-system/api/check-plugin-reference';
+import type { PluginManifest } from '@runflux/plugin-system/sdk';
+import type { PluginReferenceStatus } from '@runflux/plugin-system/sdk';
 import type { NodeResult } from '@runflux/validation-runtime';
 import type { WorkflowConnection, WorkflowNode, WorkflowNodeAppearance } from '@runflux/workflow-model/types';
 import type { WorkflowLayout } from '../domain/layout';

@@ -1,5 +1,5 @@
 import { PluginRegistry } from '@runflux/plugin-system/plugin-registry';
-import type { PluginCategory } from '@runflux/plugin-system/types';
+import type { PluginCategory } from '@runflux/plugin-system/sdk';
 import { describe, expect, it } from 'vitest';
 import { runNode, runWorkflow } from '../engine';
 import type { WorkflowDefinition } from '@runflux/workflow-model/types';

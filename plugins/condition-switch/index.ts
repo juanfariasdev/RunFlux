@@ -1,5 +1,5 @@
-import { RULE_ROW_SCHEMA } from '@runflux/plugin-system/condition-row-schema';
-import type { PluginModule } from '@runflux/plugin-system/types';
+import { RULE_ROW_SCHEMA } from '@runflux/plugin-system/sdk';
+import type { PluginModule } from '@runflux/plugin-system/sdk';
 import { FALLBACK_OUTPUT, RULE_OUTPUTS } from './outputs.js';
 
 /**

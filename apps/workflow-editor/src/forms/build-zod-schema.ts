@@ -1,5 +1,5 @@
 import { z, type ZodTypeAny } from 'zod';
-import type { ParameterSchema } from '@runflux/plugin-system/types';
+import type { ParameterSchema } from '@runflux/plugin-system/sdk';
 
 /**
  * Builds a Zod object schema at runtime from a plugin's declared parameters

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { PluginManifest } from '@runflux/plugin-system/types';
+import type { PluginManifest } from '@runflux/plugin-system/sdk';
 import type { PluginCatalogAdapter } from '../adapters/plugin-catalog-adapter';
 
 export interface PaletteProps { catalog: PluginCatalogAdapter; }

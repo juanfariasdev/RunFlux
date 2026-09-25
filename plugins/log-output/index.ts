@@ -1,4 +1,4 @@
-import type { PluginModule } from '@runflux/plugin-system/types';
+import type { PluginModule } from '@runflux/plugin-system/sdk';
 
 /**
  * Log (004-core-nodes-catalog, RF-05): a deterministic, network-free output — passes the input

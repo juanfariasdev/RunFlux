@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { NodeConfigPanel } from '../NodeConfigPanel';
-import type { PluginManifest } from '@runflux/plugin-system/types';
+import type { PluginManifest } from '@runflux/plugin-system/sdk';
 import type { NodeResult } from '@runflux/validation-runtime';
 
 const manifest: PluginManifest = {

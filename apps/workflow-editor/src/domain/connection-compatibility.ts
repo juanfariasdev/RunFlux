@@ -1,4 +1,4 @@
-import type { PluginManifest } from '@runflux/plugin-system/types';
+import type { PluginManifest } from '@runflux/plugin-system/sdk';
 
 /**
  * Returns false when connecting `source`'s output into `target`'s input is

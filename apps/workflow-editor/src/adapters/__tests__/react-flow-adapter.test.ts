@@ -6,7 +6,7 @@ import {
   toReactFlowNode,
 } from '../react-flow-adapter';
 import type { WorkflowConnection, WorkflowNode } from '@runflux/workflow-model/types';
-import type { PluginManifest } from '@runflux/plugin-system/types';
+import type { PluginManifest } from '@runflux/plugin-system/sdk';
 
 const node: WorkflowNode = {
   id: 'node-1',

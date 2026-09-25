@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildZodSchema } from '../build-zod-schema';
-import type { ParameterSchema } from '@runflux/plugin-system/types';
+import type { ParameterSchema } from '@runflux/plugin-system/sdk';
 
 function param(overrides: Partial<ParameterSchema>): ParameterSchema {
   return { name: 'field', label: 'Field', type: 'string', required: true, ...overrides };

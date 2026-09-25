@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HttpPluginCatalogAdapter } from '../plugin-catalog-adapter';
-import type { PluginManifest } from '@runflux/plugin-system/types';
+import type { PluginManifest } from '@runflux/plugin-system/sdk';
 
 function manifest(id: string, version = '1.0.0'): PluginManifest {
   return { id, name: id, category: 'trigger', version, parameters: [], supportedPlatforms: ['local'] };

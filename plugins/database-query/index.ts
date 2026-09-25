@@ -1,4 +1,4 @@
-import type { PluginModule } from '@runflux/plugin-system/types';
+import type { PluginModule } from '@runflux/plugin-system/sdk';
 import { DATABASE_ENGINE_OPTIONS, OUTPUT_MODE_OPTIONS, readConnectionEnvVar } from './parameters.js';
 
 /**

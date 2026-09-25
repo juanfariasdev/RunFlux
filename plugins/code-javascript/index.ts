@@ -1,4 +1,4 @@
-import type { PluginModule } from '@runflux/plugin-system/types';
+import type { PluginModule } from '@runflux/plugin-system/sdk';
 
 /**
  * Code Node (010-code-node-plugin): runs user-authored JavaScript receiving `$json`, `$node` and

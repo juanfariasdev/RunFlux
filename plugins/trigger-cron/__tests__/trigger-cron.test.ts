@@ -1,4 +1,4 @@
-import { validateManifest } from '@runflux/plugin-system/manifest-validator';
+import { validateManifest } from '@runflux/plugin-system/sdk';
 import { ObjectParameterReader } from '@runflux/runtime';
 import { executeNode } from '@runflux/runtime/testing';
 import { describe, expect, it } from 'vitest';

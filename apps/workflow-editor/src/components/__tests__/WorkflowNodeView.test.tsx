@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { WorkflowNodeView } from '../WorkflowNodeView';
 import type { FlowNode } from '../../adapters/react-flow-adapter';
-import type { PluginManifest } from '@runflux/plugin-system/types';
+import type { PluginManifest } from '@runflux/plugin-system/sdk';
 import type { NodeResult } from '@runflux/validation-runtime';
 
 function manifest(category: PluginManifest['category'], outputs?: string[]): PluginManifest {

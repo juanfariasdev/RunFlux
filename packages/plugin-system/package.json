@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./sdk": "./src/sdk.ts",
     "./node": {
       "types": "./node.d.ts",
       "import": "./dist-node/index.mjs"

@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
-import type { PluginManifest } from '@runflux/plugin-system/types';
+import type { PluginManifest } from '@runflux/plugin-system/sdk';
 import { HttpPluginCatalogAdapter } from './adapters/plugin-catalog-adapter';
 import { HttpValidationRuntimeAdapter } from './adapters/validation-runtime-adapter';
 import { HttpProjectApiAdapter } from './adapters/project-api-adapter';

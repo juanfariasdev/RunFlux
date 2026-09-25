@@ -1,4 +1,4 @@
-import type { PluginModule } from '@runflux/plugin-system/types';
+import type { PluginModule } from '@runflux/plugin-system/sdk';
 import { DEFAULT_SCHEDULE, readCronSchedule, SCHEDULE_PRESETS } from './schedule.js';
 
 /** Cron Trigger: starts the workflow on a five-field Unix cron schedule in a given timezone. */

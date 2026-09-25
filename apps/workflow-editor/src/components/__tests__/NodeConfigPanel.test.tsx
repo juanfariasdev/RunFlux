@@ -1,8 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { NodeConfigPanel } from '../NodeConfigPanel';
-import { COMBINATOR_OPTIONS, OPERATOR_OPTIONS } from '@runflux/plugin-system/condition-row-schema';
-import type { PluginManifest } from '@runflux/plugin-system/types';
+import { COMBINATOR_OPTIONS, OPERATOR_OPTIONS } from '@runflux/plugin-system/sdk';
+import type { PluginManifest } from '@runflux/plugin-system/sdk';
 import { CONDITION_OPERATORS } from '@runflux/runtime';
 
 const manifest: PluginManifest = {

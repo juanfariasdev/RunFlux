@@ -1,5 +1,5 @@
 import type { NodeDefinition } from '@runflux/runtime';
-import type { PluginModule } from '@runflux/plugin-system/types';
+import type { PluginModule } from '@runflux/plugin-system/sdk';
 import type { WorkflowDefinition } from '@runflux/workflow-model/types';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as conditionIf from '@runflux/plugin-condition-if';

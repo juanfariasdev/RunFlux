@@ -6,7 +6,7 @@ import type { PluginCatalogAdapter } from '../../adapters/plugin-catalog-adapter
 import type { ValidationRuntimeAdapter, ValidationRunResult } from '../../adapters/validation-runtime-adapter';
 import type { WorkflowPersistenceAdapter } from '../../adapters/workflow-persistence-adapter';
 import { HttpWebhookTestingAdapter } from '../../adapters/webhook-testing-adapter';
-import type { PluginManifest } from '@runflux/plugin-system/types';
+import type { PluginManifest } from '@runflux/plugin-system/sdk';
 
 const testWebhooks = new HttpWebhookTestingAdapter();
 

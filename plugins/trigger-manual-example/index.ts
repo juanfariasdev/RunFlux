@@ -1,4 +1,4 @@
-import type { PluginModule } from '@runflux/plugin-system/types';
+import type { PluginModule } from '@runflux/plugin-system/sdk';
 
 /**
  * Minimal example trigger, used as the fixture for onboarding.md's manual walkthrough: the

@@ -1,4 +1,4 @@
-import { validateManifest } from '@runflux/plugin-system/manifest-validator';
+import { validateManifest } from '@runflux/plugin-system/sdk';
 import { WebhookTestHub } from '@runflux/plugin-system/webhook-test-hub';
 import { ObjectParameterReader } from '@runflux/runtime';
 import { executeNode } from '@runflux/runtime/testing';
