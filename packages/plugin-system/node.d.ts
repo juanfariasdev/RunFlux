@@ -63,6 +63,22 @@ export class PluginRegistry {
 
 export function listPlugins(registry: PluginRegistry): Record<string, PluginManifest[]>;
 
+/** What the provider needs from a file watcher; the watcher of Vite's dev server (chokidar) is one. */
+export interface PluginFileWatcher {
+  add(paths: string[]): unknown;
+  on(event: 'all', listener: (event: string, file: string) => void): unknown;
+}
+
+/** The plugins of a set of directories, discovered on first use and again after a watched file changes. */
+export class PluginCatalogProvider {
+  constructor(directories: readonly string[], options?: { readonly onLog?: (message: string) => void });
+  readonly directories: readonly string[];
+  registry(): Promise<PluginRegistry>;
+  invalidate(): void;
+  contains(file: string): boolean;
+  observe(watcher: PluginFileWatcher): void;
+}
+
 export interface WebhookTestRequest {
   body?: unknown;
   headers?: unknown;

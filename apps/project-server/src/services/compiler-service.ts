@@ -2,8 +2,7 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { consoleDiscoveryLogger } from '@runflux/plugin-system/discovery/logger';
-import { PluginRegistry } from '@runflux/plugin-system/plugin-registry';
+import { consoleDiscoveryLogger, PluginCatalogProvider, type PluginRegistry } from '@runflux/plugin-system';
 import type { WorkflowDefinition } from '@runflux/workflow-model';
 import {
   BuildProfile,
@@ -71,13 +70,15 @@ const COMPILATION_ID = /^[A-Za-z0-9_-]+-(local|aws)-\d+-[0-9a-f]{8}$/;
  * function package `function.zip`.
  */
 export class CompilerService {
-  private registry?: Promise<PluginRegistry>;
+  private catalog?: PluginCatalogProvider;
   private readonly customPluginsDir?: string;
   private readonly customOutputDir?: string;
 
-  constructor(customPluginsDir?: string, customOutputDir?: string) {
+  /** `catalog` defaults to the plugins directory, discovered on the first compilation. */
+  constructor(customPluginsDir?: string, customOutputDir?: string, catalog?: PluginCatalogProvider) {
     this.customPluginsDir = customPluginsDir;
     this.customOutputDir = customOutputDir;
+    this.catalog = catalog;
   }
 
   getOutputDir(): string {
@@ -86,17 +87,12 @@ export class CompilerService {
     return path.join(path.resolve(this.getPluginsDir(), '..'), 'output-backends');
   }
 
-  /** Discovers the plugins once; later compilations reuse the registry. */
+  /** The plugins of the catalog; they are discovered again only when the catalog is invalidated. */
   loadPlugins(): Promise<PluginRegistry> {
-    this.registry ??= (async () => {
-      const registry = new PluginRegistry();
-      await registry.discover({
-        pluginDirectories: [this.getPluginsDir()],
-        onLog: process.env.NODE_ENV === 'test' ? undefined : consoleDiscoveryLogger,
-      });
-      return registry;
-    })();
-    return this.registry;
+    this.catalog ??= new PluginCatalogProvider([this.getPluginsDir()], {
+      onLog: process.env.NODE_ENV === 'test' ? undefined : consoleDiscoveryLogger,
+    });
+    return this.catalog.registry();
   }
 
   async compile(request: CompileWorkflowRequest): Promise<CompileWorkflowResponse> {

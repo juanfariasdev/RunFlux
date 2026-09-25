@@ -14,6 +14,7 @@ export type { ComposeContribution, ComposeService, EnvironmentVariableDeclaratio
 
 export { PluginRegistry, DuplicatePluginIdError } from './plugin-registry.js';
 export type { DiscoverOptions, DiscoverSummary } from './plugin-registry.js';
+export { PluginCatalogProvider, type PluginCatalogProviderOptions, type PluginFileWatcher } from './plugin-catalog-provider.js';
 export { consoleDiscoveryLogger } from './discovery/logger.js';
 export { PluginLoadError, loadPlugin } from './discovery/plugin-loader.js';
 
