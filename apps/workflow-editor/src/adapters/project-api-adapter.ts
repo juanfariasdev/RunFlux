@@ -1,4 +1,5 @@
 import type { WorkflowDefinition } from '@runflux/workflow-model/types';
+import type { ProjectEnvVar } from '@runflux/workflow-model/schema';
 import type { WorkflowPersistenceAdapter } from './workflow-persistence-adapter';
 
 export interface ProjectSummary {
@@ -11,11 +12,7 @@ export interface ProjectSummary {
   nodeCount: number;
 }
 
-export interface ProjectEnvVar {
-  key: string;
-  value: string;
-  description?: string;
-}
+export type { ProjectEnvVar } from '@runflux/workflow-model/schema';
 
 export interface ProjectDetail {
   id: string;

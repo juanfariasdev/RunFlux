@@ -3,7 +3,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import type { WorkflowDefinition } from '@runflux/workflow-model';
-import { ProjectService, runfluxEnvelopeSchema, workflowDefinitionSchema, type ProjectEnvVar } from '../services/project-service.js';
+import { runfluxEnvelopeSchema, workflowDefinitionSchema, type ProjectEnvVar } from '@runflux/workflow-model/schema';
+import { ProjectService } from '../services/project-service.js';
 
 export const EXAMPLES_DIRECTORY = fileURLToPath(new URL('../../../../examples/', import.meta.url));
 

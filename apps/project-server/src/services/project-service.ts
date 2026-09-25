@@ -1,5 +1,5 @@
-import { z } from 'zod';
 import type { WorkflowDefinition } from '@runflux/workflow-model';
+import { envVarsArraySchema, runfluxEnvelopeSchema, workflowDefinitionSchema, type ProjectEnvVar } from '@runflux/workflow-model/schema';
 import { ProjectRepository } from '../repositories/project-repository.js';
 
 export class ProjectConflictError extends Error {
@@ -26,45 +26,6 @@ export class ValidationError extends Error {
   }
 }
 
-const workflowNodeSchema = z.object({
-  id: z.string(),
-  pluginId: z.string(),
-  pluginVersion: z.string().optional().default('1.0.0'),
-  parameters: z.record(z.unknown()).default({}),
-  position: z.object({
-    x: z.number(),
-    y: z.number(),
-  }),
-  parentId: z.string().optional(),
-  appearance: z
-    .object({
-      label: z.string().optional(),
-      color: z.string().optional(),
-      shape: z.enum(['card', 'rounded', 'pill', 'diamond', 'subflow']).optional(),
-      width: z.number().optional(),
-      height: z.number().optional(),
-    })
-    .optional(),
-});
-
-const workflowConnectionSchema = z.object({
-  sourceNodeId: z.string(),
-  sourceOutput: z.string().default('main'),
-  targetNodeId: z.string(),
-  targetInput: z.string().default('main'),
-  label: z.string().optional(),
-  animated: z.boolean().optional(),
-  type: z.enum(['smoothstep', 'bezier', 'straight']).optional(),
-  color: z.string().optional(),
-});
-
-export const workflowDefinitionSchema = z.object({
-  id: z.string().optional(),
-  name: z.string().optional(),
-  nodes: z.array(workflowNodeSchema).default([]),
-  connections: z.array(workflowConnectionSchema).default([]),
-});
-
 const ENVIRONMENT_VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 /**
@@ -86,34 +47,6 @@ function normalizeWorkflowDefinition(definition: WorkflowDefinition): WorkflowDe
     }),
   };
 }
-
-export interface ProjectEnvVar {
-  key: string;
-  value: string;
-  description?: string;
-}
-
-const envVarItemSchema = z.object({
-  key: z
-    .string()
-    .min(1, 'Nome da variável não pode ser vazio')
-    .regex(/^[A-Za-z_][A-Za-z0-9_]*$/, 'Nome da variável deve ser um identificador válido (ex: API_KEY)'),
-  value: z.string().default(''),
-  description: z.string().optional(),
-});
-
-const envVarsArraySchema = z.array(envVarItemSchema);
-
-export const runfluxEnvelopeSchema = z.object({
-  $schema: z.string().optional(),
-  schemaVersion: z.literal(1),
-  exportedAt: z.string(),
-  project: z.object({
-    name: z.string().min(1, 'Nome do projeto é obrigatório'),
-    envVars: envVarsArraySchema.optional(),
-  }),
-  workflow: workflowDefinitionSchema,
-});
 
 export class ProjectService {
   constructor(private readonly repo = new ProjectRepository()) {}

@@ -17,7 +17,7 @@ import {
   type IncompatibleNode,
   type TargetPlatform,
 } from '@runflux/compiler';
-import { workflowDefinitionSchema } from './project-service.js';
+import { workflowDefinitionSchema } from '@runflux/workflow-model/schema';
 
 /** A compilation the request cannot get: `status` is the HTTP status to answer with. */
 export class CompilerRequestError extends Error {
