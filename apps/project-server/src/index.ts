@@ -1,9 +1,11 @@
 import 'dotenv/config';
+import { loadConfig } from './config.js';
+import { createContainer } from './container.js';
 import { createServer } from './server.js';
 
-const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3001;
-const app = createServer();
+const config = loadConfig();
+const app = createServer(createContainer(config));
 
-app.listen(port, () => {
-  console.log(`[project-server] Servidor de projetos rodando em http://localhost:${port}`);
+app.listen(config.port, () => {
+  console.log(`[project-server] Servidor de projetos rodando em http://localhost:${config.port}`);
 });

@@ -1,10 +1,12 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import request from 'supertest';
 import { prisma } from '../db.js';
+import { loadConfig } from '../config.js';
+import { createContainer } from '../container.js';
 import { createServer } from '../server.js';
 
 describe('Project Environment Variables API (011-env-vars-secrets)', () => {
-  const app = createServer();
+  const app = createServer(createContainer(loadConfig()));
 
   beforeEach(async () => {
     await prisma.workflowVersion.deleteMany();

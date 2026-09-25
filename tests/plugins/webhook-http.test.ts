@@ -5,6 +5,8 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { WebhookTestHub } from '@runflux/plugin-system/webhook-test-hub';
 import { PluginRegistryCache } from '../../apps/workflow-editor/vite-plugin-registry';
 import { runfluxValidationPlugin } from '../../apps/workflow-editor/vite-plugin-validation-runtime';
+import { loadConfig } from '../../apps/project-server/src/config';
+import { createContainer } from '../../apps/project-server/src/container';
 import { createServer } from '../../apps/project-server/src/server';
 
 afterEach(() => {
@@ -14,7 +16,7 @@ afterEach(() => {
 
 it.each(['editor', 'server'])('%s delivers test webhooks only to the trigger waiting on that path', async (target) => {
   const vite = target === 'editor' ? await createViteServer({ configFile: false, server: { middlewareMode: true }, plugins: [runfluxValidationPlugin(new PluginRegistryCache([]))] }) : undefined;
-  const app = vite?.middlewares ?? createServer();
+  const app = vite?.middlewares ?? createServer(createContainer(loadConfig()));
   if (target === 'server') vi.spyOn(process, 'cwd').mockReturnValue(resolve('apps/project-server'));
   const waiting = WebhookTestHub.shared().waitFor('/orders', new AbortController().signal);
   try {

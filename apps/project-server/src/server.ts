@@ -3,16 +3,15 @@ import cors from 'cors';
 import { ZodError } from 'zod';
 import { createProjectsRouter } from './routes/projects.js';
 import { createCompilerRouter } from './routes/compiler.js';
+import type { ServerServices } from './container.js';
 import {
-  ProjectService,
   ProjectConflictError,
   ProjectNotFoundError,
   ValidationError,
 } from './services/project-service.js';
-import { CompilerService } from './services/compiler-service.js';
 import { WebhookTestHub } from '@runflux/plugin-system/webhook-test-hub';
 
-export function createServer(service?: ProjectService, compilerService?: CompilerService): Express {
+export function createServer(services: ServerServices): Express {
   const app = express();
 
   app.use(cors());
@@ -29,8 +28,8 @@ export function createServer(service?: ProjectService, compilerService?: Compile
     next();
   });
 
-  app.use('/api/projects', createProjectsRouter(service));
-  app.use('/api/compiler', createCompilerRouter(compilerService));
+  app.use('/api/projects', createProjectsRouter(services.projects));
+  app.use('/api/compiler', createCompilerRouter(services.compiler));
 
   // Interactive webhook testing receiver (E001)
   app.all(['/api/webhooks/test', '/api/webhooks/test/*'], async (req, res) => {

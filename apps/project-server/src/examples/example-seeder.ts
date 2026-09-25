@@ -25,7 +25,7 @@ export class ExampleSeeder {
   private readonly projects: ProjectService;
   private readonly directory: string;
 
-  constructor(projects = new ProjectService(), directory = EXAMPLES_DIRECTORY) {
+  constructor(projects: ProjectService, directory = EXAMPLES_DIRECTORY) {
     this.projects = projects;
     this.directory = directory;
   }

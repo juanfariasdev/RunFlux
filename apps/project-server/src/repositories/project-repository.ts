@@ -1,8 +1,7 @@
-import { prisma } from '../db.js';
-import type { Prisma } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 
 export class ProjectRepository {
-  constructor(private readonly db = prisma) {}
+  constructor(private readonly db: PrismaClient) {}
 
   async create(data: { name: string; currentWorkflowVersion?: string }) {
     return this.db.project.create({

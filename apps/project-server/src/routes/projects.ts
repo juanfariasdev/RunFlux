@@ -6,7 +6,7 @@ import {
   ValidationError,
 } from '../services/project-service.js';
 
-export function createProjectsRouter(service: ProjectService = new ProjectService()): Router {
+export function createProjectsRouter(service: ProjectService): Router {
   const router = Router();
 
   // 1.1 Listar Projetos

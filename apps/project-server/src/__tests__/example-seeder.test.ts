@@ -4,10 +4,11 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { prisma } from '../db.js';
 import { EXAMPLES_DIRECTORY, ExampleSeeder } from '../examples/example-seeder.js';
+import { ProjectRepository } from '../repositories/project-repository.js';
 import { ProjectService } from '../services/project-service.js';
 
 describe('ExampleSeeder', () => {
-  const projects = new ProjectService();
+  const projects = new ProjectService(new ProjectRepository(prisma));
   let directory: string;
 
   beforeEach(async () => {

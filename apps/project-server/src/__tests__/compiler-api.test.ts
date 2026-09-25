@@ -2,10 +2,12 @@ import { describe, it, expect } from 'vitest';
 import request from 'supertest';
 import fs from 'node:fs';
 import path from 'node:path';
+import { loadConfig } from '../config.js';
+import { createContainer } from '../container.js';
 import { createServer } from '../server.js';
 
 describe('Compiler REST API', () => {
-  const app = createServer();
+  const app = createServer(createContainer(loadConfig()));
 
   const validWorkflow = {
     id: 'wf-compile-api',

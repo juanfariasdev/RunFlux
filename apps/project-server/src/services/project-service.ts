@@ -49,7 +49,7 @@ function normalizeWorkflowDefinition(definition: WorkflowDefinition): WorkflowDe
 }
 
 export class ProjectService {
-  constructor(private readonly repo = new ProjectRepository()) {}
+  constructor(private readonly repo: ProjectRepository) {}
 
   async createProject(data: { name: string; definition?: WorkflowDefinition; envVars?: ProjectEnvVar[] }) {
     const trimmedName = typeof data.name === 'string' ? data.name.trim() : '';

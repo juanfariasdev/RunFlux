@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { prisma } from '../../db.js';
+import { ProjectRepository } from '../../repositories/project-repository.js';
 import { ProjectService, ProjectConflictError, ValidationError, ProjectNotFoundError } from '../project-service.js';
 
 describe('ProjectService', () => {
-  const service = new ProjectService();
+  const service = new ProjectService(new ProjectRepository(prisma));
 
   beforeEach(async () => {
     await prisma.workflowVersion.deleteMany();

@@ -1,7 +1,7 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { CompilerRequestError, CompilerService } from '../services/compiler-service.js';
 
-export function createCompilerRouter(service = new CompilerService()): Router {
+export function createCompilerRouter(service: CompilerService): Router {
   const router = Router();
 
   router.post('/compile', async (req: Request, res: Response, next: NextFunction) => {

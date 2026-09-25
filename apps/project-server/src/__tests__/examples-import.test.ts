@@ -4,13 +4,15 @@ import JSZip from 'jszip';
 import request from 'supertest';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { prisma } from '../db.js';
+import { loadConfig } from '../config.js';
+import { createContainer } from '../container.js';
 import { createServer } from '../server.js';
 
 const EXAMPLES = fileURLToPath(new URL('../../../../examples/', import.meta.url));
 const files = fs.readdirSync(EXAMPLES).filter((file) => file.endsWith('.runflux.json')).sort();
 
 describe.each(files)('example %s', (file) => {
-  const app = createServer();
+  const app = createServer(createContainer(loadConfig()));
   const example = JSON.parse(fs.readFileSync(`${EXAMPLES}${file}`, 'utf8'));
 
   beforeEach(async () => {
