@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Controller, useForm } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { resolveExpressions } from '@runflux/expression-engine';
 import type { PluginManifest } from '@runflux/plugin-system/sdk';
@@ -9,11 +9,10 @@ import type { NodeResult } from '@runflux/validation-runtime';
 import type { WorkflowNodeAppearance, WorkflowNodeShape } from '@runflux/workflow-model/types';
 import { webhookTestRequest, type WebhookTestRequest } from '../adapters/webhook-test-request';
 import { buildZodSchema } from '../forms/build-zod-schema';
+import { renderParameterField, type ExpressionPreview } from '../forms/parameter-fields';
 import { Button } from './ui/button';
-import { Checkbox } from './ui/checkbox';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
-import { JsonFieldEditor } from './JsonFieldEditor';
 
 const COLORS = ['#4f46e5', '#0ea5e9', '#10b981', '#f59e0b', '#f97316', '#ef4444', '#ec4899', '#8b5cf6', '#334155'];
 const SHAPES: { value: WorkflowNodeShape; label: string }[] = [
@@ -22,8 +21,6 @@ const SHAPES: { value: WorkflowNodeShape; label: string }[] = [
   { value: 'pill', label: 'Pill' },
   { value: 'diamond', label: 'Decision' },
 ];
-
-type ExpressionPreview = { ok: true; value: unknown } | { ok: false; error: string };
 
 interface InitialFormState {
   values: Record<string, unknown>;
@@ -244,60 +241,18 @@ export function NodeConfigPanel({
               return (
                 <div key={param.name}>
                   <Label className="mb-1 block" htmlFor={param.name}>{param.label}{param.required && <span className="ml-0.5 text-red-500">*</span>}</Label>
-                  {param.type === 'boolean' ? (
-                    <Checkbox id={param.name} disabled={isTesting} {...register(param.name)} />
-                  ) : param.type === 'string' && param.options && !param.allowCustomOptions ? (
-                    <select
-                      id={param.name}
-                      disabled={isTesting}
-                      className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-700 shadow-sm outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 disabled:cursor-not-allowed disabled:opacity-50"
-                      {...register(param.name)}
-                    >
-                      {param.options.map((option) => (
-                        <option key={option.value} value={option.value}>{option.label}</option>
-                      ))}
-                    </select>
-                  ) : param.type === 'string' && param.options ? (
-                    <>
-                      <Input id={param.name} list={`${param.name}-suggestions`} autoComplete="off" disabled={isTesting} {...register(param.name)} />
-                      <datalist id={`${param.name}-suggestions`} data-testid={`suggestions-${param.name}`}>
-                        {param.options.map((option) => (
-                          <option key={option.value} value={option.value} label={option.label} />
-                        ))}
-                      </datalist>
-                    </>
-                  ) : param.type === 'json' ? (
-                    <Controller
-                      name={param.name}
-                      control={control}
-                      render={({ field }) => <JsonFieldEditor id={param.name} value={field.value} onChange={field.onChange} sampleJson={displayedTestInput} nodeScope={nodeScope} envScope={envScope} rowSchema={param.rowSchema} disabled={isTesting} />}
-                    />
-                  ) : param.sensitive ? (
-                    <div className="flex gap-1.5">
-                      <Input id={param.name} type={revealed[param.name] ? 'text' : 'password'} autoComplete="off" disabled={isTesting} {...register(param.name)} />
-                      <button className="grid w-9 shrink-0 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500" type="button" onClick={() => setRevealed((previous) => ({ ...previous, [param.name]: !previous[param.name] }))} aria-label={revealed[param.name] ? 'Hide value' : 'Show value'} aria-pressed={!!revealed[param.name]}>
-                        {revealed[param.name] ? <UnlockIcon /> : <LockIcon />}
-                      </button>
-                    </div>
-                  ) : param.language ? (
-                    <textarea
-                      id={param.name}
-                      rows={8}
-                      disabled={isTesting}
-                      className="w-full font-mono text-xs rounded-lg border border-slate-200 bg-slate-900 text-emerald-400 p-3 shadow-inner focus:outline-none focus:ring-2 focus:ring-indigo-400 disabled:opacity-50"
-                      placeholder={param.language === 'sql' ? 'SELECT * FROM users WHERE id = $1;' : '// return $json;'}
-                      spellCheck={false}
-                      {...register(param.name)}
-                    />
-                  ) : (
-                    <Input
-                      id={param.name}
-                      type={param.type === 'number' ? 'number' : 'text'}
-                      disabled={isTesting}
-                      {...register(param.name, { valueAsNumber: param.type === 'number' })}
-                      className={preview ? (preview.ok ? '!border-emerald-400 focus:!border-emerald-400 focus:!ring-emerald-50' : '!border-red-400 focus:!border-red-400 focus:!ring-red-50') : ''}
-                    />
-                  )}
+                  {renderParameterField({
+                    parameter: param,
+                    register,
+                    control,
+                    disabled: isTesting,
+                    preview,
+                    revealed: !!revealed[param.name],
+                    onToggleReveal: () => setRevealed((previous) => ({ ...previous, [param.name]: !previous[param.name] })),
+                    sampleJson: displayedTestInput,
+                    nodeScope,
+                    envScope,
+                  })}
                   {preview && (
                     <p
                       className={`mb-0 mt-1 truncate text-[9px] ${preview.ok ? 'text-emerald-600' : 'text-red-600'}`}
@@ -407,12 +362,4 @@ function shapePreviewClasses(shape: WorkflowNodeShape) {
   if (shape === 'pill') return `${base} rounded-full`;
   if (shape === 'diamond') return `${base} h-[14px] w-[14px] rotate-45 scale-75 rounded-sm`;
   return `${base} rounded-[3px]`;
-}
-
-function LockIcon() {
-  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>;
-}
-
-function UnlockIcon() {
-  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 7.4-2" /></svg>;
 }
