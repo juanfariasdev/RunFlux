@@ -5,19 +5,18 @@ import { fileURLToPath } from 'node:url';
 import { consoleDiscoveryLogger, PluginCatalogProvider, type PluginRegistry } from '@runflux/plugin-system';
 import type { WorkflowDefinition } from '@runflux/workflow-model';
 import {
-  BuildProfile,
   TARGET_PLATFORMS,
   WorkflowCompiler,
-  createZipPackage,
   type BuildManifest,
   type CompilationOptions,
   type CompilationFailure,
-  type CompilationSuccess,
   type IncompatibleNode,
   type TargetPlatform,
 } from '@runflux/compiler';
 import { workflowDefinitionSchema } from '@runflux/workflow-model/schema';
 import { DomainError } from '../errors.js';
+import { buildBackend } from './backend-build.js';
+import { CompilationFolders } from './compilation-folders.js';
 
 /** A compilation the request cannot get: `status` is the HTTP status to answer with. */
 export class CompilerRequestError extends DomainError {
@@ -59,20 +58,16 @@ export interface CompileWorkflowResponse {
   filesCount: number;
 }
 
-const FUNCTION_ZIP = 'function.zip';
-const COMPILATION_ID = /^[A-Za-z0-9_-]+-(local|aws)-\d+-[0-9a-f]{8}$/;
-
 /**
- * Compiles workflows into downloadable backends. Every compilation gets its own folder in the
- * output directory, written under a temporary name and renamed once complete, so concurrent
- * compilations never mix files; only the latest folder of each project and target is kept. The
- * folder holds the project built into dist/ and `<project>-<target>.zip`, plus, for AWS, the
- * function package `function.zip`.
+ * Compiles workflows into downloadable backends: validates the request, compiles with the plugin
+ * catalog and stores each result, built into dist/ and archived, as a compilation folder (see
+ * CompilationFolders and buildBackend).
  */
 export class CompilerService {
   private catalog?: PluginCatalogProvider;
   private readonly customPluginsDir?: string;
   private readonly customOutputDir?: string;
+  private readonly folders = new CompilationFolders(() => this.getOutputDir());
 
   /** `catalog` defaults to the plugins directory, discovered on the first compilation. */
   constructor(customPluginsDir?: string, customOutputDir?: string, catalog?: PluginCatalogProvider) {
@@ -114,8 +109,8 @@ export class CompilerService {
     // The target in the name keeps the local and AWS downloads of one workflow apart.
     const zipFilename = `${projectName.replace(/[\\/<>:"|?*\x00-\x1f]/g, '_') || 'backend'}-${targetPlatform}.zip`;
     const nodePaths = [this.dependencyDirectory(), ...this.pluginDependencyDirectories(registry, workflow)];
-    const outputDirectory = await this.writeProject(result, compilationId, zipFilename, nodePaths);
-    await this.removeEarlierCompilations(key, compilationId);
+    const outputDirectory = await this.folders.write(compilationId, (staging) => buildBackend(staging, result, zipFilename, nodePaths, buildError));
+    await this.folders.removeEarlier(key, compilationId);
     console.log(`[compiler] Compilation succeeded: ${result.files.length} files, download ${zipFilename}`);
 
     return {
@@ -134,15 +129,8 @@ export class CompilerService {
    * The archive `filename` of a compilation, or of the latest compilation that produced it when
    * no compilation is named. Names are checked, so no request reaches outside the output folder.
    */
-  async findZipFile(filename: string, compilationId?: string): Promise<string | null> {
-    if (filename !== path.basename(filename) || filename.includes('\\') || !filename.endsWith('.zip')) return null;
-    if (compilationId !== undefined && !COMPILATION_ID.test(compilationId)) return null;
-    const folders = compilationId ? [compilationId] : (await this.compilations()).reverse();
-    for (const folder of folders) {
-      const candidate = path.join(this.getOutputDir(), folder, filename);
-      if (fs.existsSync(candidate)) return candidate;
-    }
-    return null;
+  findZipFile(filename: string, compilationId?: string): Promise<string | null> {
+    return this.folders.findArchive(filename, compilationId);
   }
 
   private validWorkflow(workflow: unknown): WorkflowDefinition {
@@ -163,55 +151,6 @@ export class CompilerService {
     if (includeCli === undefined) return {};
     if (typeof includeCli !== 'boolean') throw new CompilerValidationError('Invalid compilation option: includeCli must be a boolean.');
     return { includeCli };
-  }
-
-  /** Writes and builds the project under a temporary name, then renames it into place. */
-  private async writeProject(result: CompilationSuccess, compilationId: string, zipFilename: string, nodePaths: string[]): Promise<string> {
-    const outputDirectory = path.join(this.getOutputDir(), compilationId);
-    const staging = `${outputDirectory}.partial`;
-    try {
-      for (const file of result.files) {
-        const filePath = path.join(staging, file.path);
-        await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
-        await fs.promises.writeFile(filePath, file.content, 'utf8');
-      }
-      try {
-        await BuildProfile.fromManifest(result.manifest).build(staging, nodePaths);
-      } catch (error) {
-        throw new CompilerRequestError('BUILD_ERROR', `Backend build failed: ${error instanceof Error ? error.message : String(error)}`, { status: 500 });
-      }
-      const bundle = await readTree(path.join(staging, 'dist'));
-      if (result.targetPlatform === 'aws') await fs.promises.writeFile(path.join(staging, FUNCTION_ZIP), await createZipPackage(bundle));
-      await fs.promises.writeFile(
-        path.join(staging, zipFilename),
-        await createZipPackage([...result.files, ...bundle.map((file) => ({ ...file, path: `dist/${file.path}` }))]),
-      );
-      await fs.promises.rename(staging, outputDirectory);
-      return outputDirectory;
-    } finally {
-      await fs.promises.rm(staging, { recursive: true, force: true });
-    }
-  }
-
-  /**
-   * Removes the compilations of the same project and target that started before `keep`; one that
-   * started later, concurrently, is newer and stays.
-   */
-  private async removeEarlierCompilations(key: string, keep: string): Promise<void> {
-    const earlier = (await this.compilations()).filter((folder) => folder !== keep
-      && /^\d+-[0-9a-f]{8}$/.test(folder.slice(key.length + 1))
-      && folder.startsWith(`${key}-`)
-      && timestampOf(folder) <= timestampOf(keep));
-    await Promise.all(earlier.map((folder) => fs.promises.rm(path.join(this.getOutputDir(), folder), { recursive: true, force: true })));
-  }
-
-  /** Completed compilation folders, oldest first. */
-  private async compilations(): Promise<string[]> {
-    const entries = await fs.promises.readdir(this.getOutputDir(), { withFileTypes: true }).catch(() => []);
-    return entries
-      .filter((entry) => entry.isDirectory() && COMPILATION_ID.test(entry.name))
-      .map((entry) => entry.name)
-      .sort((a, b) => timestampOf(a) - timestampOf(b));
   }
 
   /** RunFlux's own node_modules, which provides the npm packages a function bundle includes. */
@@ -244,16 +183,6 @@ function toRequestError({ error }: CompilationFailure): CompilerRequestError {
   return new CompilerRequestError(error.code, error.message, { status: error.code === 'GENERATOR_ERROR' ? 500 : 400 });
 }
 
-function timestampOf(compilationId: string): number {
-  return Number(/-(\d+)-[0-9a-f]{8}$/.exec(compilationId)?.[1] ?? 0);
-}
-
-async function readTree(directory: string, prefix = ''): Promise<Array<{ path: string; content: Buffer }>> {
-  const entries = await fs.promises.readdir(path.join(directory, prefix), { withFileTypes: true });
-  const nested = await Promise.all(entries.map(async (entry) => {
-    const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
-    if (entry.isDirectory()) return readTree(directory, relative);
-    return [{ path: relative, content: await fs.promises.readFile(path.join(directory, relative)) }];
-  }));
-  return nested.flat();
+function buildError(error: unknown): CompilerRequestError {
+  return new CompilerRequestError('BUILD_ERROR', `Backend build failed: ${error instanceof Error ? error.message : String(error)}`, { status: 500 });
 }
