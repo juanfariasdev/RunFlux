@@ -57,6 +57,8 @@ export const manifestSchema = z.object({
   }),
   supportedPlatforms: z.array(z.string().min(1)).min(1),
   outputs: z.array(z.string().min(1)).optional(),
+  appearance: z.object({ icon: z.string().min(1).optional(), accent: z.string().min(1).optional() }).optional(),
+  testing: z.object({ waitsForRequest: z.boolean().optional() }).optional(),
 });
 
 export type ManifestValidationResult =

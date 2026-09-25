@@ -323,7 +323,7 @@ export function NodeConfigPanel({
           </div>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={onTest} disabled={isTesting}>
-              {isTesting ? (manifest?.id === 'trigger-webhook' ? '⏳ Listening for event…' : 'Testing…') : '▶ Test this node'}
+              {isTesting ? (manifest?.testing?.waitsForRequest ? '⏳ Listening for event…' : 'Testing…') : '▶ Test this node'}
             </Button>
             {isTesting && onCancelTest && (
               <Button variant="destructive" size="sm" onClick={onCancelTest} className="text-[10px]">
@@ -331,7 +331,7 @@ export function NodeConfigPanel({
               </Button>
             )}
           </div>
-          {isTesting && manifest?.id === 'trigger-webhook' && (
+          {isTesting && manifest?.testing?.waitsForRequest && (
             <div className="mt-3 rounded-lg border border-indigo-200 bg-indigo-50/70 p-3 text-[10px] text-indigo-950" data-testid="webhook-waiting-banner">
               <div className="flex items-center gap-2 font-bold text-indigo-700">
                 <span className="relative flex h-2 w-2">

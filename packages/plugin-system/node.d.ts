@@ -35,6 +35,8 @@ export interface PluginManifest {
   parameters: ParameterSchema[];
   supportedPlatforms: string[];
   outputs?: string[];
+  appearance?: { icon?: string; accent?: string };
+  testing?: { waitsForRequest?: boolean };
 }
 
 export interface DiscoverOptions {

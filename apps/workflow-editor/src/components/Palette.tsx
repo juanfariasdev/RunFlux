@@ -108,7 +108,7 @@ function PaletteItem({ manifest }: { manifest: PluginManifest }) {
       className="group flex min-h-[58px] cursor-grab select-none items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-2.5 py-2 shadow-sm transition hover:-translate-y-px hover:border-indigo-200 hover:shadow-lg active:cursor-grabbing"
       data-plugin-id={manifest.id}
     >
-      <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-[10px] ${categoryClasses(manifest.category, manifest.id)}`}><PluginIcon category={manifest.category} pluginId={manifest.id} /></span>
+      <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-[10px] ${categoryClasses(manifest.category, manifest.appearance?.accent)}`}><PluginIcon category={manifest.category} icon={manifest.appearance?.icon} /></span>
       <span className="flex min-w-0 flex-1 flex-col">
         <strong className="truncate text-[11px] text-slate-800">{manifest.name}</strong>
         {manifest.id !== manifest.name && <small className="truncate text-[9px] text-slate-400">{manifest.id}</small>}
@@ -130,18 +130,21 @@ function PaletteItem({ manifest }: { manifest: PluginManifest }) {
   );
 }
 
-function categoryClasses(category: PluginManifest['category'], pluginId?: string) {
-  if (pluginId === 'database-query') return 'bg-cyan-50 text-cyan-600';
-  if (pluginId === 'code-javascript') return 'bg-violet-50 text-violet-600';
+/** Tones for the accents a manifest may name (`appearance.accent`). */
+const ACCENT_CLASSES: Readonly<Record<string, string>> = { cyan: 'bg-cyan-50 text-cyan-600', violet: 'bg-violet-50 text-violet-600' };
+
+function categoryClasses(category: PluginManifest['category'], accent?: string) {
+  if (accent && Object.hasOwn(ACCENT_CLASSES, accent)) return ACCENT_CLASSES[accent];
   if (category === 'trigger') return 'bg-emerald-50 text-emerald-600';
   if (category === 'output') return 'bg-orange-50 text-orange-600';
   if (category === 'control-flow') return 'bg-violet-50 text-violet-600';
   return 'bg-indigo-50 text-indigo-600';
 }
 
-function PluginIcon({ category, pluginId }: { category: PluginManifest['category']; pluginId?: string }) {
-  if (pluginId === 'database-query') return <svg className="h-[18px] w-[18px] fill-none stroke-current stroke-[1.8]" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" /><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" /></svg>;
-  if (pluginId === 'code-javascript') return <svg className="h-[18px] w-[18px] fill-none stroke-current stroke-[1.8]" viewBox="0 0 24 24"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6" /></svg>;
+/** The icon a manifest names (`appearance.icon`), or its category's. */
+function PluginIcon({ category, icon }: { category: PluginManifest['category']; icon?: string }) {
+  if (icon === 'database') return <svg className="h-[18px] w-[18px] fill-none stroke-current stroke-[1.8]" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" /><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" /></svg>;
+  if (icon === 'code') return <svg className="h-[18px] w-[18px] fill-none stroke-current stroke-[1.8]" viewBox="0 0 24 24"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6" /></svg>;
   if (category === 'trigger') return <svg className="h-[18px] w-[18px] fill-none stroke-current stroke-[1.8]" viewBox="0 0 24 24"><path d="M13 2 4.5 13H11l-1 9 8.5-12H12l1-8Z" /></svg>;
   if (category === 'output') return <svg className="h-[18px] w-[18px] fill-none stroke-current stroke-[1.8]" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5" /></svg>;
   return <svg className="h-[18px] w-[18px] fill-none stroke-current stroke-[1.8]" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2" /><rect x="14" y="14" width="7" height="7" rx="2" /><path d="M10 6h3a4 4 0 0 1 4 4v4" /></svg>;

@@ -35,6 +35,7 @@ export const manifest: PluginModule['manifest'] = {
   ],
   supportedPlatforms: ['local', 'aws'],
   outputs: ['main'],
+  testing: { waitsForRequest: true },
 };
 
 export const runtimeModule = new URL('./runtime.ts', import.meta.url);

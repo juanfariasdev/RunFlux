@@ -19,9 +19,12 @@ const manifestWithRequiredField: PluginManifest = {
   supportedPlatforms: ['local'],
 };
 
+/** Like the real Webhook Trigger, it waits for a request in test runs. */
+const webhookManifest: PluginManifest = { id: 'trigger-webhook', name: 'Webhook Trigger', category: 'trigger', version: '1.0.0', parameters: [], supportedPlatforms: ['local'], testing: { waitsForRequest: true } };
+
 function fakeCatalog(): PluginCatalogAdapter {
   return {
-    listPlugins: async () => ({ action: [manifestWithRequiredField] }),
+    listPlugins: async () => ({ action: [manifestWithRequiredField], trigger: [webhookManifest] }),
     checkReference: async () => ({ status: 'ok' }),
   };
 }

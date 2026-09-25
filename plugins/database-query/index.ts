@@ -18,6 +18,7 @@ export const manifest: PluginModule['manifest'] = {
     { name: 'outputMode', label: 'Output Mode', type: 'string', required: false, default: 'all', options: OUTPUT_MODE_OPTIONS },
   ],
   supportedPlatforms: ['local', 'aws'],
+  appearance: { icon: 'database', accent: 'cyan' },
 };
 
 export const runtimeModule = new URL('./runtime.ts', import.meta.url);

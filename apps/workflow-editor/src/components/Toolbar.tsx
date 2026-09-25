@@ -57,7 +57,9 @@ export function Toolbar({ catalog, persistence, validation, webhooks, onTestingN
   // not one after another) and needs its OWN row: a run with 2 webhooks only ever
   // finishes once BOTH have received a request, so the UI must give a way to send
   // a test payload to each of them individually, not just the first one.
-  const webhookNodes = workflow.nodes.filter((n) => n.pluginId === 'trigger-webhook');
+  // Which plugins wait for a request in a test run comes from their manifests, read when a run starts.
+  const [listeningPlugins, setListeningPlugins] = useState<ReadonlySet<string>>(new Set());
+  const webhookNodes = workflow.nodes.filter((n) => listeningPlugins.has(n.pluginId));
 
   let projectCtx: ReturnType<typeof useProject> | null = null;
   try {
@@ -98,6 +100,8 @@ export function Toolbar({ catalog, persistence, validation, webhooks, onTestingN
 
     const grouped = await catalog.listPlugins();
     const manifestsById = new Map(Object.values(grouped).flat().map((m) => [m.id, m]));
+    const listening = new Set([...manifestsById.values()].filter((m) => m.testing?.waitsForRequest).map((m) => m.id));
+    setListeningPlugins(listening);
     const { buildZodSchema } = await import('../forms/build-zod-schema');
 
     for (const node of workflow.nodes) {
@@ -118,7 +122,7 @@ export function Toolbar({ catalog, persistence, validation, webhooks, onTestingN
     // actually arrives, up to 120s late for one still waiting on a webhook).
     clearNodeResults();
     setIsRunning(true);
-    onTestingNodesChange?.(webhookNodes.map((n) => n.id));
+    onTestingNodesChange?.(workflow.nodes.filter((n) => listening.has(n.pluginId)).map((n) => n.id));
     try {
       const result = await validation.run(workflow, { mode, environment: projectEnvironment(projectCtx?.envVars) });
       setNodeResults(result.nodeResults ?? []);

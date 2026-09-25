@@ -78,6 +78,16 @@ export interface PluginManifest {
    * "main" output. The node's handler names the port it activates on every run.
    */
   outputs?: string[];
+  /**
+   * How the editor draws the plugin, as names it maps to its own icons and colors (for example
+   * `database` and `cyan`). Without it, the plugin's category decides.
+   */
+  appearance?: { icon?: string; accent?: string };
+  /** How the plugin behaves in the editor's test runs. */
+  testing?: {
+    /** The node waits for an HTTP request sent to its test URL, so the editor offers to send one. */
+    waitsForRequest?: boolean;
+  };
 }
 
 /**

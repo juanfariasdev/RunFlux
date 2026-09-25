@@ -25,6 +25,7 @@ return {
 };`,
     },
   ],
+  appearance: { icon: 'code', accent: 'violet' },
   supportedPlatforms: ['local', 'aws'],
 };
 
