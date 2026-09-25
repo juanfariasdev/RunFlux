@@ -18,33 +18,24 @@ import {
   type TargetPlatform,
 } from '@runflux/compiler';
 import { workflowDefinitionSchema } from '@runflux/workflow-model/schema';
+import { DomainError } from '../errors.js';
 
 /** A compilation the request cannot get: `status` is the HTTP status to answer with. */
-export class CompilerRequestError extends Error {
-  readonly code: string;
-  readonly status: number;
-  readonly details: unknown;
-
+export class CompilerRequestError extends DomainError {
   constructor(code: string, message: string, options: { status?: number; details?: unknown } = {}) {
-    super(message);
-    this.name = 'CompilerRequestError';
-    this.code = code;
-    this.status = options.status ?? 400;
-    this.details = options.details ?? null;
+    super(code, options.status ?? 400, message, options.details ?? null);
   }
 }
 
 class IncompatibleNodesError extends CompilerRequestError {
   constructor(incompatibleNodes: IncompatibleNode[]) {
     super('INCOMPATIBLE_NODES', `Incompatible nodes for target platform: ${incompatibleNodes.map((node) => node.pluginId).join(', ')}`, { details: incompatibleNodes });
-    this.name = 'IncompatibleNodesError';
   }
 }
 
 class CompilerValidationError extends CompilerRequestError {
   constructor(message: string) {
     super('VALIDATION_ERROR', message);
-    this.name = 'CompilerValidationError';
   }
 }
 

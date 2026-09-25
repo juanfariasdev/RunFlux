@@ -1,5 +1,5 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
-import { CompilerRequestError, CompilerService } from '../services/compiler-service.js';
+import type { CompilerService } from '../services/compiler-service.js';
 
 export function createCompilerRouter(service: CompilerService): Router {
   const router = Router();
@@ -9,9 +9,6 @@ export function createCompilerRouter(service: CompilerService): Router {
       const { workflow, targetPlatform, target, projectName, options } = req.body ?? {};
       return res.status(200).json(await service.compile({ workflow, targetPlatform, target, projectName, options }));
     } catch (err) {
-      if (err instanceof CompilerRequestError) {
-        return res.status(err.status).json({ error: { code: err.code, message: err.message, details: err.details } });
-      }
       return next(err);
     }
   });

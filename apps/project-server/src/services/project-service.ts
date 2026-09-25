@@ -1,28 +1,23 @@
 import type { WorkflowDefinition } from '@runflux/workflow-model';
 import { envVarsArraySchema, runfluxEnvelopeSchema, workflowDefinitionSchema, type ProjectEnvVar } from '@runflux/workflow-model/schema';
+import { DomainError } from '../errors.js';
 import { ProjectRepository } from '../repositories/project-repository.js';
 
-export class ProjectConflictError extends Error {
-  code = 'PROJECT_NAME_CONFLICT';
+export class ProjectConflictError extends DomainError {
   constructor(message: string) {
-    super(message);
-    this.name = 'ProjectConflictError';
+    super('PROJECT_NAME_CONFLICT', 409, message);
   }
 }
 
-export class ProjectNotFoundError extends Error {
-  code = 'PROJECT_NOT_FOUND';
+export class ProjectNotFoundError extends DomainError {
   constructor(message: string) {
-    super(message);
-    this.name = 'ProjectNotFoundError';
+    super('PROJECT_NOT_FOUND', 404, message);
   }
 }
 
-export class ValidationError extends Error {
-  code = 'INVALID_PAYLOAD';
+export class ValidationError extends DomainError {
   constructor(message: string) {
-    super(message);
-    this.name = 'ValidationError';
+    super('INVALID_PAYLOAD', 400, message);
   }
 }
 

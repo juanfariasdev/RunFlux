@@ -4,11 +4,7 @@ import { ZodError } from 'zod';
 import { createProjectsRouter } from './routes/projects.js';
 import { createCompilerRouter } from './routes/compiler.js';
 import type { ServerServices } from './container.js';
-import {
-  ProjectConflictError,
-  ProjectNotFoundError,
-  ValidationError,
-} from './services/project-service.js';
+import { DomainError } from './errors.js';
 import { WebhookTestHub } from '@runflux/plugin-system/webhook-test-hub';
 
 export function createServer(services: ServerServices): Express {
@@ -55,15 +51,7 @@ export function createServer(services: ServerServices): Express {
   });
 
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
-    if (err instanceof ValidationError) {
-      return res.status(400).json({
-        error: {
-          code: err.code,
-          message: err.message,
-          details: null,
-        },
-      });
-    }
+    if (err instanceof DomainError) return res.status(err.status).json(err.toBody());
 
     if (err instanceof ZodError) {
       return res.status(400).json({
@@ -71,26 +59,6 @@ export function createServer(services: ServerServices): Express {
           code: 'INVALID_PAYLOAD',
           message: err.errors.map((e) => `${e.path.join('.')}: ${e.message}`).join(', '),
           details: err.errors,
-        },
-      });
-    }
-
-    if (err instanceof ProjectNotFoundError) {
-      return res.status(404).json({
-        error: {
-          code: err.code,
-          message: err.message,
-          details: null,
-        },
-      });
-    }
-
-    if (err instanceof ProjectConflictError) {
-      return res.status(409).json({
-        error: {
-          code: err.code,
-          message: err.message,
-          details: null,
         },
       });
     }

@@ -1,10 +1,5 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
-import {
-  ProjectService,
-  ProjectConflictError,
-  ProjectNotFoundError,
-  ValidationError,
-} from '../services/project-service.js';
+import type { ProjectService } from '../services/project-service.js';
 
 export function createProjectsRouter(service: ProjectService): Router {
   const router = Router();
