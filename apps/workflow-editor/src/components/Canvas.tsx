@@ -24,13 +24,16 @@ import { layoutWorkflowNodes, type WorkflowLayout } from '../domain/layout';
 import type { WorkflowNode } from '@runflux/workflow-model/types';
 import { useWorkflowStore } from '../store/workflow-store';
 import { SubflowNodeView, WorkflowNodeView } from './WorkflowNodeView';
+import { useCanvasClipboard } from './canvas/use-canvas-clipboard';
+import { useCanvasShortcuts } from './canvas/use-canvas-shortcuts';
+import { useContextMenu } from './canvas/use-context-menu';
+import { usePluginManifests } from './canvas/use-plugin-manifests';
 
 const nodeTypes = { workflowNode: WorkflowNodeView, subflowNode: SubflowNodeView };
 const PLUGIN_DRAG_TYPE = 'application/runflux-plugin-id';
 const DEFAULT_NODE_WIDTH = 220;
 const DEFAULT_NODE_HEIGHT = 104;
 type DraggedPlugin = Pick<PluginManifest, 'id' | 'name' | 'category' | 'version'>;
-type ContextMenuState = { x: number; y: number } | undefined;
 
 export interface CanvasProps {
   catalog: PluginCatalogAdapter;
@@ -58,7 +61,7 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge, onTestNode, onTest
   const canRedo = useWorkflowStore((state) => state.historyFuture.length > 0);
   const beginHistoryTransaction = useWorkflowStore((state) => state.beginHistoryTransaction);
   const endHistoryTransaction = useWorkflowStore((state) => state.endHistoryTransaction);
-  const [manifests, setManifests] = useState<Record<string, PluginManifest>>({});
+  const manifests = usePluginManifests(catalog, workflow.nodes);
   const [rejectionMessage, setRejectionMessage] = useState<string>();
   const [isDragActive, setIsDragActive] = useState(false);
   const [dragPoint, setDragPoint] = useState({ x: 0, y: 0 });
@@ -66,15 +69,9 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge, onTestNode, onTest
   const [layout, setLayout] = useState<WorkflowLayout>('horizontal');
   const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(new Set());
   const [multiSelectMode, setMultiSelectMode] = useState(false);
-  const [contextMenu, setContextMenu] = useState<ContextMenuState>();
   const canvasRef = useRef<HTMLDivElement>(null);
-  const contextMenuRef = useRef<HTMLDivElement>(null);
+  const { contextMenu, contextMenuRef, openContextMenu, closeContextMenu } = useContextMenu(canvasRef);
   const dragDepth = useRef(0);
-  const clipboardRef = useRef<{
-    nodes: WorkflowNode[];
-    connections: typeof workflow.connections;
-    pasteCount: number;
-  } | undefined>(undefined);
   const { fitView, screenToFlowPosition } = useReactFlow();
   const { zoom } = useViewport();
 
@@ -98,61 +95,16 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge, onTestNode, onTest
   );
   const edges = useMemo(() => workflow.connections.map(toReactFlowEdge), [workflow.connections]);
 
-  const cloneNode = useCallback((node: WorkflowNode): WorkflowNode => ({
-    ...node,
-    parameters: structuredClone(node.parameters),
-    position: { ...node.position },
-    ...(node.appearance ? { appearance: { ...node.appearance } } : {}),
-  }), []);
 
-  const copySelection = useCallback(() => {
-    const selected = workflow.nodes.filter((node) => selectedNodeIds.has(node.id));
-    if (selected.length === 0) return false;
-    const ids = new Set(selected.map((node) => node.id));
-    clipboardRef.current = {
-      nodes: selected.map(cloneNode),
-      connections: workflow.connections
-        .filter((connection) => ids.has(connection.sourceNodeId) && ids.has(connection.targetNodeId))
-        .map((connection) => ({ ...connection })),
-      pasteCount: 0,
-    };
-    return true;
-  }, [cloneNode, selectedNodeIds, workflow.connections, workflow.nodes]);
-
-  const pasteClipboard = useCallback(() => {
-    const clipboard = clipboardRef.current;
-    if (!clipboard || clipboard.nodes.length === 0) return false;
-    clipboard.pasteCount += 1;
-    const offset = clipboard.pasteCount * 32;
-    const idMap = new Map(clipboard.nodes.map((node) => [node.id, crypto.randomUUID()]));
-    const pastedNodes = clipboard.nodes.map((node) => {
-      const copiedParent = node.parentId ? idMap.get(node.parentId) : undefined;
-      return {
-        ...cloneNode(node),
-        id: idMap.get(node.id)!,
-        position: copiedParent ? { ...node.position } : { x: node.position.x + offset, y: node.position.y + offset },
-        ...(copiedParent ? { parentId: copiedParent } : node.parentId ? { parentId: node.parentId } : {}),
-      };
-    });
-    const pastedConnections = clipboard.connections.map((connection) => ({
-      ...connection,
-      sourceNodeId: idMap.get(connection.sourceNodeId)!,
-      targetNodeId: idMap.get(connection.targetNodeId)!,
-    }));
-    addSubgraph(pastedNodes, pastedConnections);
-    setSelectedNodeIds(new Set(pastedNodes.map((node) => node.id)));
-    onSelectEdge?.(undefined);
-    onSelectNode(pastedNodes.length === 1 ? pastedNodes[0].id : undefined);
-    return true;
-  }, [addSubgraph, cloneNode, onSelectEdge, onSelectNode]);
-
-  const openContextMenu = useCallback((clientX: number, clientY: number) => {
-    const bounds = canvasRef.current?.getBoundingClientRect();
-    setContextMenu({
-      x: Math.max(8, clientX - (bounds?.left ?? 0)),
-      y: Math.max(8, clientY - (bounds?.top ?? 0)),
-    });
-  }, []);
+  const { copySelection, pasteClipboard, hasCopiedNodes } = useCanvasClipboard({
+    nodes: workflow.nodes,
+    connections: workflow.connections,
+    selectedNodeIds,
+    addSubgraph,
+    selectNodes: setSelectedNodeIds,
+    onSelectNode,
+    onSelectEdge,
+  });
 
   useEffect(() => {
     setSelectedNodeIds((current) => {
@@ -162,101 +114,10 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge, onTestNode, onTest
     });
   }, [workflow.nodes]);
 
-  useEffect(() => {
-    const closeOnPointerDown = (event: PointerEvent) => {
-      if (!contextMenuRef.current?.contains(event.target as globalThis.Node | null)) setContextMenu(undefined);
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setContextMenu(undefined);
-    };
-    window.addEventListener('pointerdown', closeOnPointerDown);
-    window.addEventListener('keydown', closeOnEscape);
-    return () => {
-      window.removeEventListener('pointerdown', closeOnPointerDown);
-      window.removeEventListener('keydown', closeOnEscape);
-    };
-  }, []);
-
   // A panel edits one node, so it closes once the selection is not exactly one node.
   useEffect(() => {
     if (selectedNodeIds.size !== 1) onSelectNode(undefined);
   }, [selectedNodeIds, onSelectNode]);
-
-  useEffect(() => {
-    const isEditableTarget = (target: EventTarget | null) => {
-      const element = target instanceof Element ? target : null;
-      return Boolean(element?.closest('input, textarea, select, [contenteditable="true"]'));
-    };
-    const handleKeyboard = (event: KeyboardEvent) => {
-      if (isEditableTarget(event.target)) return;
-      const modifier = event.metaKey || event.ctrlKey;
-      if (!modifier) return;
-      const key = event.key.toLowerCase();
-
-      if (key === 'z') {
-        event.preventDefault();
-        if (event.shiftKey) redo();
-        else undo();
-        setSelectedNodeIds(new Set());
-        onSelectNode(undefined);
-        onSelectEdge?.(undefined);
-        return;
-      }
-      if (key === 'y') {
-        event.preventDefault();
-        redo();
-        setSelectedNodeIds(new Set());
-        onSelectNode(undefined);
-        onSelectEdge?.(undefined);
-        return;
-      }
-      if (key === 'c') {
-        if (!copySelection()) return;
-        event.preventDefault();
-        return;
-      }
-      if (key === 'v') {
-        if (!pasteClipboard()) return;
-        event.preventDefault();
-        return;
-      }
-      if (key === 'a') {
-        event.preventDefault();
-        setSelectedNodeIds(new Set(workflow.nodes.map((node) => node.id)));
-        onSelectNode(undefined);
-        onSelectEdge?.(undefined);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyboard);
-    return () => window.removeEventListener('keydown', handleKeyboard);
-  }, [copySelection, onSelectEdge, onSelectNode, pasteClipboard, redo, undo, workflow.nodes]);
-
-  useEffect(() => {
-    let cancelled = false;
-    catalog.listPlugins().then((grouped) => {
-      if (cancelled) return;
-      const resolved = Object.fromEntries(Object.values(grouped).flat().map((manifest) => [manifest.id, manifest]));
-      setManifests((previous) => ({ ...resolved, ...previous }));
-    });
-    return () => { cancelled = true; };
-  }, [catalog]);
-
-  useEffect(() => {
-    const pluginIds = workflow.nodes
-      .filter((node) => node.appearance?.shape !== 'subflow')
-      .map((node) => node.pluginId)
-      .filter((pluginId) => !manifests[pluginId]);
-    if (pluginIds.length === 0) return;
-
-    let cancelled = false;
-    catalog.listPlugins().then((grouped) => {
-      if (cancelled) return;
-      const resolved = Object.fromEntries(Object.values(grouped).flat().map((manifest) => [manifest.id, manifest]));
-      setManifests((previous) => ({ ...resolved, ...previous }));
-    });
-    return () => { cancelled = true; };
-  }, [catalog, manifests, workflow.nodes]);
 
   useEffect(() => {
     const clearDragState = () => {
@@ -554,6 +415,14 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge, onTestNode, onTest
     onSelectEdge?.(undefined);
   }, [onSelectEdge, onSelectNode, workflow.nodes]);
 
+  const clearSelection = useCallback(() => {
+    setSelectedNodeIds(new Set());
+    onSelectNode(undefined);
+    onSelectEdge?.(undefined);
+  }, [onSelectEdge, onSelectNode]);
+
+  useCanvasShortcuts({ undo, redo, copySelection, pasteClipboard, selectAll: selectAllNodes, clearSelection });
+
   const onNodeContextMenu = useCallback((event: React.MouseEvent, node: FlowNode) => {
     event.preventDefault();
     if (!selectedNodeIds.has(node.id)) {
@@ -726,40 +595,40 @@ export function Canvas({ catalog, onSelectNode, onSelectEdge, onTestNode, onTest
             label={selectedNodeIds.size > 1 ? `Copiar ${selectedNodeIds.size} itens` : 'Copiar'}
             shortcut="Ctrl/Cmd+C"
             disabled={selectedNodeIds.size === 0}
-            onClick={() => { copySelection(); setContextMenu(undefined); }}
+            onClick={() => { copySelection(); closeContextMenu(); }}
           />
           <ContextMenuButton
             label="Colar"
             shortcut="Ctrl/Cmd+V"
-            disabled={!clipboardRef.current?.nodes.length}
-            onClick={() => { pasteClipboard(); setContextMenu(undefined); }}
+            disabled={!hasCopiedNodes()}
+            onClick={() => { pasteClipboard(); closeContextMenu(); }}
           />
           <ContextMenuButton
             label={selectedNodeIds.size > 1 ? `Excluir ${selectedNodeIds.size} itens` : 'Excluir'}
             shortcut="Delete"
             disabled={selectedNodeIds.size === 0}
             danger
-            onClick={() => { deleteSelection(); setContextMenu(undefined); }}
+            onClick={() => { deleteSelection(); closeContextMenu(); }}
           />
           <div className="my-1 h-px bg-slate-100" role="separator" />
           <ContextMenuButton
             label="Selecionar todos"
             shortcut="Ctrl/Cmd+A"
             disabled={workflow.nodes.length === 0}
-            onClick={() => { selectAllNodes(); setContextMenu(undefined); }}
+            onClick={() => { selectAllNodes(); closeContextMenu(); }}
           />
           <div className="my-1 h-px bg-slate-100" role="separator" />
           <ContextMenuButton
             label="Desfazer"
             shortcut="Ctrl/Cmd+Z"
             disabled={!canUndo}
-            onClick={() => { undo(); setSelectedNodeIds(new Set()); onSelectNode(undefined); setContextMenu(undefined); }}
+            onClick={() => { undo(); setSelectedNodeIds(new Set()); onSelectNode(undefined); closeContextMenu(); }}
           />
           <ContextMenuButton
             label="Refazer"
             shortcut="Ctrl/Cmd+Shift+Z"
             disabled={!canRedo}
-            onClick={() => { redo(); setSelectedNodeIds(new Set()); onSelectNode(undefined); setContextMenu(undefined); }}
+            onClick={() => { redo(); setSelectedNodeIds(new Set()); onSelectNode(undefined); closeContextMenu(); }}
           />
         </div>
       )}
