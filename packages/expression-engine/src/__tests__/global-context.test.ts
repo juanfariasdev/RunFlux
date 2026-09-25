@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { evaluateExpression } from '../evaluate-expression';
-import { resolveExpressions } from '../resolve-expressions';
+import { evaluateExpression, resolveExpressions } from '../evaluate-expression';
 
 describe('global-context: $node and $env (009-expression-global-context)', () => {
   it('evaluates $node references by node label and ID', () => {

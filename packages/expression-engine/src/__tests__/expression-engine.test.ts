@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { evaluateExpression } from '../evaluate-expression';
-import { resolveExpressions } from '../resolve-expressions';
+import { evaluateExpression, resolveExpressions } from '../evaluate-expression';
 
 describe('evaluateExpression (004-core-nodes-catalog, D-01)', () => {
   it('evaluates a simple $json field access', () => {
