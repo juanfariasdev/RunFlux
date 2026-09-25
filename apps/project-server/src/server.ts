@@ -5,7 +5,6 @@ import { createProjectsRouter } from './routes/projects.js';
 import { createCompilerRouter } from './routes/compiler.js';
 import type { ServerServices } from './container.js';
 import { DomainError } from './errors.js';
-import { WebhookTestHub } from '@runflux/plugin-system/webhook-test-hub';
 
 export function createServer(services: ServerServices): Express {
   const app = express();
@@ -31,7 +30,7 @@ export function createServer(services: ServerServices): Express {
   app.all(['/api/webhooks/test', '/api/webhooks/test/*'], async (req, res) => {
     try {
       const subPath = req.path.replace(/^\/api\/webhooks\/test/, '') || '/webhook';
-      const captured = WebhookTestHub.shared().deliver(subPath, {
+      const captured = services.webhooks.deliver(subPath, {
         body: req.body,
         headers: req.headers,
         query: req.query,

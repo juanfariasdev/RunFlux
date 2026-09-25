@@ -83,9 +83,4 @@ describe('WebhookTestHub', () => {
     for (const wait of waits) await expect(wait).rejects.toThrow('Webhook listener cancelled');
     expect(hub.pending).toBe(0);
   });
-
-  it('shares one hub per process', () => {
-    expect(WebhookTestHub.shared()).toBe(WebhookTestHub.shared());
-    expect(WebhookTestHub.shared()).not.toBe(new WebhookTestHub());
-  });
 });

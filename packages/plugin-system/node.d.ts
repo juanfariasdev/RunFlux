@@ -88,7 +88,6 @@ export interface WebhookTestRequest {
 
 export class WebhookTestHub {
   constructor(timeoutMs?: number);
-  static shared(): WebhookTestHub;
   readonly pending: number;
   /** `channel` is a route such as `POST /orders`, or a bare path accepting any method. */
   waitFor(channel: string, signal: AbortSignal): Promise<WebhookTestRequest>;

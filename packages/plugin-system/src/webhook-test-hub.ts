@@ -15,7 +15,6 @@ interface Waiter {
 }
 
 const DEFAULT_TIMEOUT_MS = 120_000;
-const SHARED_HUB = Symbol.for('runflux.webhook-test-hub');
 const CANCELLED = 'Cancelled: another trigger in this test run already fired';
 
 /**
@@ -31,15 +30,6 @@ export class WebhookTestHub implements TriggerEventSource {
 
   constructor(timeoutMs = DEFAULT_TIMEOUT_MS) {
     this.timeoutMs = timeoutMs;
-  }
-
-  /**
-   * The hub of this process. It lives on `globalThis` so the editor's server and the plugins it
-   * loads share it even when each bundled its own copy of this module.
-   */
-  static shared(): WebhookTestHub {
-    const host = globalThis as typeof globalThis & { [SHARED_HUB]?: WebhookTestHub };
-    return (host[SHARED_HUB] ??= new WebhookTestHub());
   }
 
   get pending(): number {

@@ -1,6 +1,5 @@
 import type { Plugin } from 'vite';
-import { WebhookTestHub } from '@runflux/plugin-system/node';
-import { createValidationHttpHandlers } from '@runflux/validation-runtime/node';
+import { createValidationHttpHandlers, type WebhookDelivery } from '@runflux/validation-runtime/node';
 import type { PluginRegistryCache } from './vite-plugin-registry.ts';
 
 /**
@@ -12,9 +11,9 @@ import type { PluginRegistryCache } from './vite-plugin-registry.ts';
  *   `<path>`, so curl or a third-party service can drive a test.
  * - `POST /runflux-webhook-cancel` stops every waiting webhook trigger.
  */
-export function runfluxValidationPlugin(plugins: PluginRegistryCache): Plugin {
+export function runfluxValidationPlugin(plugins: PluginRegistryCache, webhooks: WebhookDelivery): Plugin {
   // Webhook triggers of test runs wait on this hub for the requests sent to their test URL.
-  const handlers = createValidationHttpHandlers({ catalog: () => plugins.registry(), webhooks: WebhookTestHub.shared() });
+  const handlers = createValidationHttpHandlers({ catalog: () => plugins.registry(), webhooks });
 
   return {
     name: 'runflux-validation-runtime',

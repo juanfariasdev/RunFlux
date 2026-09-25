@@ -13,6 +13,8 @@ import { runfluxPluginCatalogPlugin } from '../../apps/workflow-editor/vite-plug
 import { PluginRegistryCache } from '../../apps/workflow-editor/vite-plugin-registry';
 import { runfluxValidationPlugin } from '../../apps/workflow-editor/vite-plugin-validation-runtime';
 
+const webhooks = new WebhookTestHub();
+
 let directory: string;
 
 async function writePlugin(name: string): Promise<string> {
@@ -37,7 +39,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  WebhookTestHub.shared().cancelAll();
+  webhooks.cancelAll();
   vi.restoreAllMocks();
   await fs.rm(directory, { recursive: true, force: true });
 });
@@ -83,7 +85,7 @@ describe('editor dev server', () => {
     const entry = await writePlugin('Greeter');
     const cache = new PluginRegistryCache([directory]);
     const discover = vi.spyOn(PluginRegistry.prototype, 'discover');
-    const vite = await devServer(runfluxPluginCatalogPlugin(cache), runfluxValidationPlugin(cache));
+    const vite = await devServer(runfluxPluginCatalogPlugin(cache), runfluxValidationPlugin(cache, webhooks));
     try {
       const names = async () => (await request(vite.middlewares).get('/runflux-plugins.json')).body.action.map((plugin: { name: string }) => plugin.name);
       expect(await names()).toEqual(['Greeter']);
@@ -98,7 +100,7 @@ describe('editor dev server', () => {
   });
 
   it('answers 400 for a validation request that is not JSON and 405 for other methods', async () => {
-    const vite = await devServer(runfluxValidationPlugin(new PluginRegistryCache([])));
+    const vite = await devServer(runfluxValidationPlugin(new PluginRegistryCache([]), webhooks));
     try {
       const malformed = await request(vite.middlewares).post('/runflux-validate').set('Content-Type', 'application/json').send('{broken');
       expect(malformed.status).toBe(400);
@@ -112,7 +114,7 @@ describe('editor dev server', () => {
   it('runs with the project variables the editor sends as $env, before its own environment', async () => {
     vi.stubEnv('RUNFLUX_SHARED', 'from the dev server');
     vi.stubEnv('RUNFLUX_SERVER_ONLY', 'server');
-    const vite = await devServer(runfluxValidationPlugin(new PluginRegistryCache([path.resolve('plugins')])));
+    const vite = await devServer(runfluxValidationPlugin(new PluginRegistryCache([path.resolve('plugins')]), webhooks));
     const workflow = {
       id: 'wf', name: 'Variables', connections: [{ sourceNodeId: 'start', sourceOutput: 'main', targetNodeId: 'read', targetInput: 'main' }],
       nodes: [
@@ -133,7 +135,7 @@ describe('editor dev server', () => {
   });
 
   it('cancels the test run of a client that disconnects', async () => {
-    const vite = await devServer(runfluxValidationPlugin(new PluginRegistryCache([path.resolve('plugins')])));
+    const vite = await devServer(runfluxValidationPlugin(new PluginRegistryCache([path.resolve('plugins')]), webhooks));
     const server = http.createServer(vite.middlewares);
     await new Promise<void>((resolve) => server.listen(0, resolve));
     const workflow = {
@@ -145,10 +147,10 @@ describe('editor dev server', () => {
       const run = fetch(`http://127.0.0.1:${(server.address() as AddressInfo).port}/runflux-validate`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workflow, mode: 'sandbox' }), signal: client.signal,
       }).catch((error: Error) => error.name);
-      await vi.waitFor(() => expect(WebhookTestHub.shared().pending).toBe(1), { timeout: 5000 });
+      await vi.waitFor(() => expect(webhooks.pending).toBe(1), { timeout: 5000 });
       client.abort();
       expect(await run).toBe('AbortError');
-      await vi.waitFor(() => expect(WebhookTestHub.shared().pending).toBe(0), { timeout: 5000 });
+      await vi.waitFor(() => expect(webhooks.pending).toBe(0), { timeout: 5000 });
     } finally {
       server.closeAllConnections();
       await new Promise((resolve) => server.close(resolve));

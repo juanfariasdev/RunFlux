@@ -1,14 +1,17 @@
 import react from '@vitejs/plugin-react';
 import { configDefaults, defineConfig } from 'vitest/config';
 import { runfluxPluginCatalogPlugin } from './vite-plugin-plugin-catalog.ts';
+import { WebhookTestHub } from '@runflux/plugin-system/node';
 import { PluginRegistryCache } from './vite-plugin-registry.ts';
 import { runfluxValidationPlugin } from './vite-plugin-validation-runtime.ts';
 
 const plugins = new PluginRegistryCache(['../../plugins']);
+// Webhook triggers of the editor's test runs wait on this hub for requests sent to their test URL.
+const webhooks = new WebhookTestHub();
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), runfluxPluginCatalogPlugin(plugins), runfluxValidationPlugin(plugins)],
+  plugins: [react(), runfluxPluginCatalogPlugin(plugins), runfluxValidationPlugin(plugins, webhooks)],
   build: {
     rolldownOptions: {
       output: {
