@@ -1,9 +1,8 @@
 import { RuntimeBundleError, RuntimeBundler } from './bundling/runtime-bundler.js';
 import { PackageRequirements } from './deployment/contributions.js';
 import { DeploymentPlanner, type DeploymentPlan } from './deployment/deployment-plan.js';
-import { AwsTarget } from './targets/aws-target.js';
 import type { DeploymentTarget } from './targets/deployment-target.js';
-import { LocalTarget } from './targets/local-target.js';
+import { defaultTargets, TargetRegistry } from './targets/target-registry.js';
 import {
   CompilationError,
   type BuildManifest,
@@ -20,7 +19,8 @@ export const RUNFLUX_VERSION = '0.1.0';
 
 export interface CompilerDependencies {
   readonly bundler?: RuntimeBundler;
-  readonly targets?: Partial<Record<TargetPlatform, DeploymentTarget>>;
+  /** The targets to build for: a registry, or targets by platform id. Defaults to defaultTargets(). */
+  readonly targets?: TargetRegistry | Readonly<Record<TargetPlatform, DeploymentTarget>>;
   readonly clock?: () => Date;
 }
 
@@ -33,14 +33,14 @@ export class WorkflowCompiler {
   private readonly validator: WorkflowValidator;
   private readonly planner: DeploymentPlanner;
   private readonly bundler: RuntimeBundler;
-  private readonly targets: Partial<Record<TargetPlatform, DeploymentTarget>>;
+  private readonly target: (platform: TargetPlatform) => DeploymentTarget | undefined;
   private readonly clock: () => Date;
 
   constructor(plugins: PluginResolver, dependencies: CompilerDependencies = {}) {
     this.validator = new WorkflowValidator(plugins);
     this.planner = new DeploymentPlanner(plugins);
     this.bundler = dependencies.bundler ?? new RuntimeBundler();
-    this.targets = dependencies.targets ?? { local: new LocalTarget(), aws: new AwsTarget() };
+    this.target = targetLookup(dependencies.targets ?? defaultTargets());
     this.clock = dependencies.clock ?? (() => new Date());
   }
 
@@ -56,7 +56,7 @@ export class WorkflowCompiler {
 
   private async compileProject(request: CompilationRequest): Promise<CompilationResult> {
     const { workflow, targetPlatform, projectName, options = {} } = request;
-    const target = this.targets[targetPlatform];
+    const target = this.target(targetPlatform);
     if (!target) throw new CompilationError('UNSUPPORTED_TARGET', `Target platform '${targetPlatform}' is not supported.`);
     this.validator.validate(workflow, targetPlatform);
     const plan = this.planner.plan(workflow, options);
@@ -114,6 +114,12 @@ export class WorkflowCompiler {
       generatedFiles: files.map((file) => file.path),
     };
   }
+}
+
+/** Finds a target in a registry, or in a record by its own keys only. */
+function targetLookup(targets: TargetRegistry | Readonly<Record<TargetPlatform, DeploymentTarget>>): (platform: TargetPlatform) => DeploymentTarget | undefined {
+  if (targets instanceof TargetRegistry) return (platform) => targets.get(platform);
+  return (platform) => (Object.hasOwn(targets, platform) ? targets[platform] : undefined);
 }
 
 export function compileWorkflow(request: CompilationRequest, plugins: PluginResolver): Promise<CompilationResult> {

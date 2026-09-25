@@ -1,8 +1,10 @@
 import type { PluginDeployment, PluginManifest } from '@runflux/plugin-system';
 import type { WorkflowDefinition, WorkflowEnvVar } from '@runflux/workflow-model';
 
-export type TargetPlatform = 'local' | 'aws';
+/** The id of a deployment target, such as `local` or `aws`; see TargetRegistry. */
+export type TargetPlatform = string;
 
+/** The platforms of the targets RunFlux ships (defaultTargets). */
 export const TARGET_PLATFORMS: readonly TargetPlatform[] = ['local', 'aws'];
 
 export interface GeneratedFile {

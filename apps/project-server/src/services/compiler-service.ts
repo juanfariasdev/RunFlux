@@ -5,8 +5,9 @@ import { fileURLToPath } from 'node:url';
 import { consoleDiscoveryLogger, PluginCatalogProvider, type PluginRegistry } from '@runflux/plugin-system';
 import type { WorkflowDefinition } from '@runflux/workflow-model';
 import {
-  TARGET_PLATFORMS,
+  defaultTargets,
   WorkflowCompiler,
+  type TargetRegistry,
   type BuildManifest,
   type CompilationOptions,
   type CompilationFailure,
@@ -67,13 +68,16 @@ export class CompilerService {
   private catalog?: PluginCatalogProvider;
   private readonly customPluginsDir?: string;
   private readonly customOutputDir?: string;
-  private readonly folders = new CompilationFolders(() => this.getOutputDir());
+  private readonly targets: TargetRegistry;
+  private readonly folders: CompilationFolders;
 
   /** `catalog` defaults to the plugins directory, discovered on the first compilation. */
-  constructor(customPluginsDir?: string, customOutputDir?: string, catalog?: PluginCatalogProvider) {
+  constructor(customPluginsDir?: string, customOutputDir?: string, catalog?: PluginCatalogProvider, targets: TargetRegistry = defaultTargets()) {
     this.customPluginsDir = customPluginsDir;
     this.customOutputDir = customOutputDir;
     this.catalog = catalog;
+    this.targets = targets;
+    this.folders = new CompilationFolders(() => this.getOutputDir(), targets.platforms());
   }
 
   getOutputDir(): string {
@@ -93,15 +97,15 @@ export class CompilerService {
   async compile(request: CompileWorkflowRequest): Promise<CompileWorkflowResponse> {
     const workflow = this.validWorkflow(request.workflow);
     const targetPlatform = String(request.targetPlatform || request.target || 'local').toLowerCase() as TargetPlatform;
-    if (!TARGET_PLATFORMS.includes(targetPlatform)) {
-      throw new CompilerRequestError('UNSUPPORTED_TARGET', `Plataforma alvo inválida: "${targetPlatform}". Suportadas: ${TARGET_PLATFORMS.join(', ')}.`);
+    if (!this.targets.get(targetPlatform)) {
+      throw new CompilerRequestError('UNSUPPORTED_TARGET', `Plataforma alvo inválida: "${targetPlatform}". Suportadas: ${this.targets.platforms().join(', ')}.`);
     }
     const options = this.validOptions(request.options);
     const registry = await this.loadPlugins();
     const projectName = String(request.projectName || workflow.name || 'runflux-project').trim();
     console.log(`[compiler] Starting compilation for project "${projectName}" (target: ${targetPlatform})`);
 
-    const result = await new WorkflowCompiler((pluginId) => registry.get(pluginId)).compile({ workflow, targetPlatform, projectName, options });
+    const result = await new WorkflowCompiler((pluginId) => registry.get(pluginId), { targets: this.targets }).compile({ workflow, targetPlatform, projectName, options });
     if (result.status === 'failed') throw toRequestError(result);
 
     const key = `${projectName.replace(/[^a-zA-Z0-9_-]/g, '_')}-${targetPlatform}`;

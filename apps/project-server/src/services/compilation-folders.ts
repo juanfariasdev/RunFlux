@@ -1,8 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const COMPILATION_ID = /^[A-Za-z0-9_-]+-(local|aws)-\d+-[0-9a-f]{8}$/;
-
 /**
  * The output directory of compiled backends: one folder per compilation, written under a
  * temporary name and renamed once complete, so concurrent compilations never mix files. Only the
@@ -10,10 +8,15 @@ const COMPILATION_ID = /^[A-Za-z0-9_-]+-(local|aws)-\d+-[0-9a-f]{8}$/;
  */
 export class CompilationFolders {
   private readonly root: () => string;
+  private readonly compilationId: RegExp;
 
-  /** `root` is read on every call, since the output directory may depend on the environment. */
-  constructor(root: () => string) {
+  /**
+   * `root` is read on every call, since the output directory may depend on the environment.
+   * `platforms` are the target ids a compilation folder name may carry.
+   */
+  constructor(root: () => string, platforms: readonly string[]) {
     this.root = root;
+    this.compilationId = new RegExp(`^[A-Za-z0-9_-]+-(${platforms.map(escapeRegExp).join('|')})-\\d+-[0-9a-f]{8}$`);
   }
 
   /**
@@ -38,7 +41,7 @@ export class CompilationFolders {
    */
   async findArchive(filename: string, compilationId?: string): Promise<string | null> {
     if (filename !== path.basename(filename) || filename.includes('\\') || !filename.endsWith('.zip')) return null;
-    if (compilationId !== undefined && !COMPILATION_ID.test(compilationId)) return null;
+    if (compilationId !== undefined && !this.compilationId.test(compilationId)) return null;
     const folders = compilationId ? [compilationId] : (await this.list()).reverse();
     for (const folder of folders) {
       const candidate = path.join(this.root(), folder, filename);
@@ -63,10 +66,14 @@ export class CompilationFolders {
   private async list(): Promise<string[]> {
     const entries = await fs.promises.readdir(this.root(), { withFileTypes: true }).catch(() => []);
     return entries
-      .filter((entry) => entry.isDirectory() && COMPILATION_ID.test(entry.name))
+      .filter((entry) => entry.isDirectory() && this.compilationId.test(entry.name))
       .map((entry) => entry.name)
       .sort((a, b) => timestampOf(a) - timestampOf(b));
   }
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function timestampOf(compilationId: string): number {

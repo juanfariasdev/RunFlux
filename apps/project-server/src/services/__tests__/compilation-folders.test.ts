@@ -10,7 +10,7 @@ afterEach(() => { for (const root of roots.splice(0)) fs.rmSync(root, { recursiv
 function folders() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runflux-folders-'));
   roots.push(root);
-  return { root, folders: new CompilationFolders(() => root) };
+  return { root, folders: new CompilationFolders(() => root, ['local', 'aws']) };
 }
 
 it('moves a filled staging folder into place', async () => {
