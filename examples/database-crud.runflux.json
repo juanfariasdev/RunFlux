@@ -764,14 +764,49 @@
         }
       },
       {
-        "id": "stats-response",
-        "pluginId": "code-javascript",
+        "id": "tag-values",
+        "pluginId": "map-fields",
         "pluginVersion": "1.0.0",
         "parameters": {
-          "code": "// $node holds the outputs of the ancestors of this node, by id.\nreturn { ...$node['product-stats'].json, tags: $json.map((row) => row.tag) };"
+          "mode": "value",
+          "value": "{{ $json.tag }}",
+          "onElementError": "fail"
         },
         "position": {
           "x": 960,
+          "y": 2280
+        },
+        "appearance": {
+          "label": "Tag names"
+        }
+      },
+      {
+        "id": "stats-response",
+        "pluginId": "set",
+        "pluginVersion": "1.0.0",
+        "parameters": {
+          "fields": [
+            {
+              "name": "total",
+              "value": "{{ $node['product-stats'].json.total }}"
+            },
+            {
+              "name": "active",
+              "value": "{{ $node['product-stats'].json.active }}"
+            },
+            {
+              "name": "stock_value",
+              "value": "{{ $node['product-stats'].json.stock_value }}"
+            },
+            {
+              "name": "tags",
+              "value": "{{ $json }}"
+            }
+          ],
+          "includeOtherFields": false
+        },
+        "position": {
+          "x": 1280,
           "y": 2280
         },
         "appearance": {
@@ -967,6 +1002,12 @@
       },
       {
         "sourceNodeId": "tag-list",
+        "sourceOutput": "main",
+        "targetNodeId": "tag-values",
+        "targetInput": "main"
+      },
+      {
+        "sourceNodeId": "tag-values",
         "sourceOutput": "main",
         "targetNodeId": "stats-response",
         "targetInput": "main"

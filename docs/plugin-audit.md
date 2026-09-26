@@ -2,7 +2,7 @@
 
 ## Catálogo
 
-Os 11 plugins passam por descoberta, validação de manifesto, carregamento do runtime e empacotamento nos backends exportados. O catálogo também é verificado em Node puro, sem Vitest, e no build final do editor.
+Os 12 plugins passam por descoberta, validação de manifesto, carregamento do runtime e empacotamento nos backends exportados. O catálogo também é verificado em Node puro, sem Vitest, e no build final do editor.
 
 | Plugin | Componentes do runtime | Comportamentos cobertos |
 | --- | --- | --- |
@@ -13,6 +13,7 @@ Os 11 plugins passam por descoberta, validação de manifesto, carregamento do r
 | `condition-switch` | `ConditionEvaluator`, leitores de condição | Primeira regra verdadeira, fallback, limite de cinco regras |
 | `filter` | `ConditionEvaluator`, leitores de condição | Passagem e encerramento do ramo sem erro |
 | `set` | `FieldComposer`, `readFields` | Tipos, expressões, campos ausentes, campos no formato de objeto, preservação da entrada |
+| `map-fields` | `ExpressionEvaluator`, `FieldComposer`, `readFields` | Expressões avaliadas por elemento com `$json`, `$node` e `$env`; modos campos e valor; entrada que não é lista mantém a forma; lista vazia; tipos do Set; falha que cita campo e posição sem o conteúdo; pulo de elementos com avisos; uma compilação por expressão |
 | `code-javascript` | — | Código assíncrono, `$json`, `$node`, `$env`, código literal, falhas |
 | `http-output` | `HttpClient` | Método, headers, corpo, resposta, falhas HTTP e de transporte, configuração inválida |
 | `log-output` | `Logger` | Registro e preservação do payload |

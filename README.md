@@ -40,7 +40,7 @@ Os testes compilam backends, gravam o projeto como o download, constroem `dist/`
 | `packages/expression-engine` | Expressões dos previews do editor, sobre o avaliador do runtime |
 | `packages/validation-runtime` | Execuções de teste do editor sobre o motor do runtime |
 | `packages/compiler` | Validação, plano de deployment, alvos local/AWS, templates e empacotamento do runtime |
-| `plugins` | Os 11 plugins: `runtime.ts` executável e `index.ts` com manifesto e deployment |
+| `plugins` | Os 12 plugins: `runtime.ts` executável e `index.ts` com manifesto e deployment |
 | `examples` | Workflows de exemplo prontos para importar no editor |
 | `tests` | Paridade entre editor e backend, execução dos projetos exportados e dos exemplos |
 

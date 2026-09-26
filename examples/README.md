@@ -5,7 +5,7 @@ Três projetos prontos para importar no editor. Cada um reúne vários fluxos no
 | Arquivo | Conteúdo | Nós |
 | --- | --- | --- |
 | `http-api.runflux.json` | GET, POST, PUT, PATCH e DELETE com resposta, corpo bruto em qualquer método, chamadas de saída GET/POST/PUT/DELETE | 28 |
-| `database-crud.runflux.json` | CRUD em PostgreSQL: schema, validação, filtros, jsonb, reajuste em lote, estatísticas, relatório agendado | 34 |
+| `database-crud.runflux.json` | CRUD em PostgreSQL: schema, validação, filtros, jsonb, reajuste em lote, estatísticas, relatório agendado | 35 |
 | `switch-routing.runflux.json` | Switch com cinco regras e fallback, Switch sem fallback, Switch acionado por agendamento | 22 |
 
 ## Como usar
@@ -60,7 +60,7 @@ Variáveis: `ITEMS_API_KEY` (segredo de PUT e PATCH) e `UPSTREAM_URL` (API chama
 | `PUT /products?id=` | Atualiza só os campos enviados (`COALESCE`), inclusive as tags `jsonb` |
 | `DELETE /products?id=` | Remove e retorna `id` e `sku`, ou `{ error: 'product not found' }` |
 | `POST /products/reprice` | Reajusta em uma única instrução os preços dos produtos ativos; exige `X-Admin-Key` |
-| `GET /products/stats` | Junta duas consultas pelo `$node`: totais, valor em estoque e tags distintas |
+| `GET /products/stats` | Junta duas consultas pelo `$node`: totais, valor em estoque e tags distintas, extraídas linha a linha pelo Map Fields, sem Code |
 | Agendamento de hora em hora | Conta os produtos ativos e registra em log |
 
 Os valores chegam ao SQL sempre como parâmetros (`$1`, `$2`…), e o SQL é literal. O Docker Compose do projeto exportado já sobe um PostgreSQL. Dentro do Compose, use `postgres` como host em `DATABASE_URL`. Variáveis: `DATABASE_URL` e `ADMIN_KEY`.
