@@ -1,0 +1,21 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "types": [
+      "node"
+    ]
+  },
+  "references": [
+    {
+      "path": "../../packages/runtime"
+    },
+    {
+      "path": "../../packages/plugin-system"
+    }
+  ],
+  "include": [
+    "*.ts",
+    "__tests__/**/*.ts"
+  ]
+}

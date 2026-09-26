@@ -4,7 +4,7 @@ import type { WorkflowConnection, WorkflowDefinition, WorkflowNode } from '@runf
 
 export const PLUGIN_IDS = [
   'code-javascript', 'condition-if', 'condition-switch', 'database-query', 'filter', 'http-output',
-  'log-output', 'set', 'trigger-cron', 'trigger-manual-example', 'trigger-webhook',
+  'log-output', 'map-fields', 'set', 'trigger-cron', 'trigger-manual-example', 'trigger-webhook',
 ] as const;
 
 export type PluginId = (typeof PLUGIN_IDS)[number];

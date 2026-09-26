@@ -17,6 +17,14 @@ function scenario(target: ReturnType<typeof node>, seed: Record<string, unknown>
   );
 }
 
+/** Like scenario, but a Code node seeds a list of records, for the nodes that map each element. */
+function listScenario(target: ReturnType<typeof node>, records: readonly unknown[]): WorkflowDefinition {
+  return workflow(
+    [node('start', 'trigger-manual-example', { label: 'Parity' }), node('seed', 'code-javascript', { code: `return ${JSON.stringify(records)};` }), target],
+    [edge('start', 'seed'), edge('seed', target.id)],
+  );
+}
+
 async function inEditor(definition: WorkflowDefinition) {
   const run = await runWorkflow(definition, await editorRegistry(), { mode: 'production' });
   return run.nodeResults.find((result) => result.nodeId === 'under-test');
@@ -32,7 +40,7 @@ async function inBackend(definition: WorkflowDefinition) {
   }
 }
 
-async function expectParity(definition: WorkflowDefinition, expected: { output?: unknown; error?: string | null }) {
+async function expectParity(definition: WorkflowDefinition, expected: { output?: unknown; error?: string | null; notices?: readonly string[] }) {
   const [editor, backend] = [await inEditor(definition), await inBackend(definition)];
   expect(editor).toMatchObject(expected);
   expect(backend).toMatchObject(expected);
@@ -46,6 +54,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   vi.restoreAllMocks();
 });
 
@@ -108,6 +117,30 @@ describe('plugins behave the same in the editor and in exported backends', () =>
     // A production run without a request gets an empty one, never the editor's sample.
     const webhook = workflow([node('under-test', 'trigger-webhook', { sampleBody: [{ name: 'id', value: '42', type: 'number' }] })]);
     await expectParity(webhook, { output: { data: undefined, _headers: {}, _query: {} } });
+  });
+
+  it('map-fields evaluates its fields once per record with $json, $node and $env', async () => {
+    vi.stubEnv('PARITY_REGION', 'eu');
+    await expectParity(listScenario(node('under-test', 'map-fields', { fields: [
+      { name: 'greeting', value: '{{ $json.first }} from {{ $node.start.json.label }} in {{ $env.PARITY_REGION }}', type: 'string' },
+      { name: 'double', value: '{{ $json.n * 2 }}', type: 'number' },
+    ] }), [{ first: 'Ada', n: 1 }, { first: 'Grace', n: 2 }, { first: 'Alan', n: 3 }]), { output: [
+      { greeting: 'Ada from Parity in eu', double: 2 },
+      { greeting: 'Grace from Parity in eu', double: 4 },
+      { greeting: 'Alan from Parity in eu', double: 6 },
+    ], error: null });
+  });
+
+  it('map-fields maps each record to one value in value mode', async () => {
+    await expectParity(listScenario(node('under-test', 'map-fields', { mode: 'value', value: '{{ $json.first }}' }), [{ first: 'Ada' }, { first: 'Grace' }, { first: 'Alan' }]),
+      { output: ['Ada', 'Grace', 'Alan'], error: null });
+  });
+
+  it('map-fields skips a failing record with the same notice', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    await expectParity(listScenario(node('under-test', 'map-fields', { onElementError: 'skip', fields: [{ name: 'size', value: '{{ $json.tag.length }}' }] }), [{ tag: 'ab' }, {}, { tag: 'abc' }]),
+      { output: [{ size: 2 }, { size: 3 }], error: null, notices: ['field "size" skipped element 2 (TypeError)'] });
+    expect(log.mock.calls.filter(([message]) => message === '[map-fields] field "size" skipped element 2 (TypeError)')).toHaveLength(2);
   });
 
   it('invalid configuration fails with the same message', async () => {

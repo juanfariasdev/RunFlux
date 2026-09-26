@@ -41,6 +41,9 @@
       "path": "plugins/log-output"
     },
     {
+      "path": "plugins/map-fields"
+    },
+    {
       "path": "plugins/set"
     },
     {

@@ -43,6 +43,13 @@ it('declares literal parameters only where source code, SQL or a variable refere
   expect(literal.sort()).toEqual(['code-javascript.code', 'database-query.connectionEnvVar', 'database-query.query']);
 });
 
+it('declares per-element expressions only where a node evaluates each element of its input itself', async () => {
+  const registry = new PluginRegistry();
+  await registry.discover({ pluginDirectories: [resolve('plugins')] });
+  const perElement = registry.listManifests().flatMap((manifest) => manifest.parameters.filter((parameter) => parameter.expressions === 'perElement').map((parameter) => `${manifest.id}.${parameter.name}`));
+  expect(perElement.sort()).toEqual(['map-fields.fields', 'map-fields.value']);
+});
+
 it('preserves parameter types, expression policies and nested row schemas when exporting the plugin catalog', async () => {
   const { manifest } = await import('../../plugins/set/index');
   expect(deserializeManifest(serializeManifest(manifest))).toEqual({ success: true, manifest });
