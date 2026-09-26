@@ -9,6 +9,8 @@ export interface NodeRecord {
   readonly error: string | null;
   readonly startedAt: string;
   readonly finishedAt: string;
+  /** What the node reported without failing, e.g. skipped elements; absent when it reported nothing. */
+  readonly notices?: readonly string[];
 }
 
 export type NodeOutputsById = Record<string, { readonly json: unknown }>;

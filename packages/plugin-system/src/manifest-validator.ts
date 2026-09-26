@@ -24,7 +24,7 @@ const parameterSchema = z.object({
   required: z.boolean(),
   default: z.unknown().optional(),
   sensitive: z.boolean().optional(),
-  expressions: z.boolean().optional(),
+  expressions: z.union([z.boolean(), z.literal('perElement')]).optional(),
   rowSchema: z.array(jsonRowFieldSchema).optional(),
   options: z.array(jsonRowOptionSchema).min(1).optional(),
   allowCustomOptions: z.boolean().optional(),

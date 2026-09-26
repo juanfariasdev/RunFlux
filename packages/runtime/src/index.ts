@@ -10,9 +10,11 @@ export {
   type NodeDefinition,
   type NodeHandler,
   type NodeInvocation,
+  type NodeOutputOptions,
   type NodeOutputs,
 } from './contracts/node.js';
 export type { RunRequest, WorkflowRunner } from './contracts/runner.js';
+export { RUNTIME_CONTRACT_VERSION } from './contracts/version.js';
 export type { Clock, Logger, RuntimeServices, TriggerEventSource } from './contracts/services.js';
 export { isEnvironmentVariableName, systemEnvironment, type EnvironmentVariables } from './environment.js';
 export { isRecord } from './values.js';

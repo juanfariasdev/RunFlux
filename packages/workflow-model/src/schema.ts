@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { WORKFLOW_SCHEMA_VERSION } from './version';
 
 /*
  * The shapes RunFlux accepts from outside (the editor's API requests, imported project files and
@@ -66,7 +67,7 @@ export const envVarsArraySchema = z.array(envVarItemSchema);
 /** A `.runflux.json` project file, as exported and imported. */
 export const runfluxEnvelopeSchema = z.object({
   $schema: z.string().optional(),
-  schemaVersion: z.literal(1),
+  schemaVersion: z.literal(WORKFLOW_SCHEMA_VERSION),
   exportedAt: z.string(),
   project: z.object({
     name: z.string().min(1, 'Nome do projeto é obrigatório'),

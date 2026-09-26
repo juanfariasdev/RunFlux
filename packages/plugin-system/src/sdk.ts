@@ -10,6 +10,7 @@ export type {
   PluginModule,
 } from './types.js';
 export type { ComposeContribution, ComposeService, EnvironmentVariableDeclaration, PluginDeployment } from './deployment.js';
+export { PLUGIN_CONTRACT_VERSION } from './contract-version.js';
 export { validateManifest, type ManifestValidationResult } from './manifest-validator.js';
 export { checkPluginReference, type PluginReferenceStatus } from './api/check-plugin-reference.js';
 export { FIELDS_ROW_SCHEMA } from './fields-row-schema.js';

@@ -20,7 +20,7 @@ export interface ParameterSchema {
   required: boolean;
   default?: unknown;
   sensitive?: boolean;
-  expressions?: boolean;
+  expressions?: boolean | 'perElement';
   options?: Array<{ value: string; label: string }>;
   allowCustomOptions?: boolean;
   showWhen?: { parameter: string; oneOf: readonly unknown[] };

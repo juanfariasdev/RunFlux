@@ -14,21 +14,31 @@ export type ExecutionMode = 'sandbox' | 'production';
 export class NodeOutput {
   readonly value: unknown;
   readonly activeOutput: string | null;
+  /**
+   * Facts about a successful execution the developer should see, such as a skipped element. They
+   * never make the node fail; the engine records and logs them. They must not quote record content.
+   */
+  readonly notices: readonly string[];
 
-  private constructor(value: unknown, activeOutput: string | null) {
+  private constructor(value: unknown, activeOutput: string | null, notices: readonly string[] = []) {
     this.value = value;
     this.activeOutput = activeOutput;
+    this.notices = notices;
   }
 
   /** Sends `value` through the main output. */
-  static main(value: unknown): NodeOutput {
-    return new NodeOutput(value, MAIN_OUTPUT);
+  static main(value: unknown, options: NodeOutputOptions = {}): NodeOutput {
+    return new NodeOutput(value, MAIN_OUTPUT, options.notices);
   }
 
   /** Sends `value` through a named output, or ends the branch when `output` is null. */
-  static route(value: unknown, output: string | null): NodeOutput {
-    return new NodeOutput(value, output);
+  static route(value: unknown, output: string | null, options: NodeOutputOptions = {}): NodeOutput {
+    return new NodeOutput(value, output, options.notices);
   }
+}
+
+export interface NodeOutputOptions {
+  readonly notices?: readonly string[];
 }
 
 /** `$node`: the output of every node that already ran, by node id and by label. */
@@ -61,7 +71,8 @@ export interface NodeHandler<TParameters> {
 
 /**
  * The executable part of a plugin. The same definition runs in the editor and inside exported
- * backends; parameters reach it with their `{{ }}` expressions already resolved.
+ * backends; parameters reach it with their `{{ }}` expressions already resolved, except those its
+ * manifest keeps verbatim (`expressions: false` or `'perElement'`).
  */
 export interface NodeDefinition<TParameters = unknown> {
   parseParameters(parameters: ParameterReader): TParameters;

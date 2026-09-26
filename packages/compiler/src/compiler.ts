@@ -1,3 +1,6 @@
+import { PLUGIN_CONTRACT_VERSION } from '@runflux/plugin-system/sdk';
+import { RUNTIME_CONTRACT_VERSION } from '@runflux/runtime';
+import { WORKFLOW_SCHEMA_VERSION } from '@runflux/workflow-model';
 import { RuntimeBundleError, RuntimeBundler } from './bundling/runtime-bundler.js';
 import { PackageRequirements } from './deployment/contributions.js';
 import { DeploymentPlanner, type DeploymentPlan } from './deployment/deployment-plan.js';
@@ -111,6 +114,7 @@ export class WorkflowCompiler {
       build: { entryPoints: [...profile.entryPoints], bundleDependencies: profile.bundleDependencies },
       nodeCount: request.workflow.nodes.length,
       pluginVersions: { ...plan.pluginVersions },
+      contracts: { runtime: RUNTIME_CONTRACT_VERSION, plugin: PLUGIN_CONTRACT_VERSION, workflowSchema: WORKFLOW_SCHEMA_VERSION },
       generatedFiles: files.map((file) => file.path),
     };
   }

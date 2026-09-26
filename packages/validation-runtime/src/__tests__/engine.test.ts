@@ -1,6 +1,8 @@
 import type { PluginCategory } from '@runflux/plugin-system/sdk';
+import { testPlugin } from '@runflux/plugin-system/testing';
+import { defineNode, NodeOutput } from '@runflux/runtime';
 import { describe, expect, it } from 'vitest';
-import { runWorkflow, runWorkflowToNode } from '../engine';
+import { runNode, runWorkflow, runWorkflowToNode, type NodeResult } from '../engine';
 import type { WorkflowDefinition } from '@runflux/workflow-model/types';
 import { behaviourPlugin, registryWith, type TestBehaviour } from './support';
 
@@ -281,5 +283,36 @@ describe('runWorkflowToNode', () => {
     const run = await runWorkflowToNode(wf, 'target', registry, { mode: 'sandbox' });
 
     expect(run.nodeResults.map((result) => result.nodeId)).toEqual(['start', 'before', 'target']);
+  });
+});
+
+describe('notices', () => {
+  const noticing = testPlugin({ id: 'noticing' }, defineNode({
+    parseParameters: () => ({}),
+    createHandler: () => ({ execute: ({ input }) => NodeOutput.main(input, { notices: ['skipped element 2'] }) }),
+  }));
+  const wf = workflow({
+    nodes: [
+      { id: 'start', pluginId: 'trigger', pluginVersion: '1.0.0', parameters: {}, position: { x: 0, y: 0 } },
+      { id: 'mapped', pluginId: 'noticing', pluginVersion: '1.0.0', parameters: {}, position: { x: 0, y: 0 } },
+    ],
+    connections: [{ sourceNodeId: 'start', sourceOutput: 'main', targetNodeId: 'mapped', targetInput: 'main' }],
+  });
+
+  it('carries the notices of a node into its result and leaves the other results without them', async () => {
+    const run = await runWorkflow(wf, registryWith(plugin('trigger', () => 'payload', 'trigger'), noticing), { mode: 'sandbox' });
+
+    expect(run.nodeResults.find((result) => result.nodeId === 'mapped')).toMatchObject({ output: 'payload', notices: ['skipped element 2'] });
+    expect(run.nodeResults.find((result) => result.nodeId === 'start')).not.toHaveProperty('notices');
+  });
+
+  it('keeps the notices when a single node runs against cached results', async () => {
+    const cache = new Map<string, NodeResult>([
+      ['start', { nodeId: 'start', input: undefined, output: 'cached', error: null, startedAt: 't0', finishedAt: 't0', notices: ['earlier notice'] }],
+    ]);
+
+    const result = await runNode(wf, 'mapped', registryWith(plugin('trigger', () => 'unused', 'trigger'), noticing), { mode: 'sandbox' }, cache);
+
+    expect(result).toMatchObject({ input: 'cached', output: 'cached', notices: ['skipped element 2'] });
   });
 });

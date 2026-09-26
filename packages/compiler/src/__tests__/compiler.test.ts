@@ -37,6 +37,7 @@ describe('WorkflowCompiler', () => {
         : { entryPoints: ['src/handler.ts'], bundleDependencies: true },
       nodeCount: 2,
       pluginVersions: { webhook: '1.0.0', echo: '1.0.0' },
+      contracts: { runtime: '1.1.0', plugin: '1.1.0', workflowSchema: 1 },
       generatedFiles: paths.slice(1),
     });
     expect(JSON.parse(result.files[0].content)).toEqual(result.manifest);

@@ -35,6 +35,8 @@ export interface BuildManifest {
   build: { entryPoints: string[]; bundleDependencies: boolean };
   nodeCount: number;
   pluginVersions: Record<string, string>;
+  /** Versions of the runtime, plugin and workflow schema contracts of the RunFlux build that compiled the project. */
+  contracts: { runtime: string; plugin: string; workflowSchema: number };
   generatedFiles: string[];
 }
 

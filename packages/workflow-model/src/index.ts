@@ -10,3 +10,4 @@ export type {
 } from './types';
 
 export { wouldCreateCycle } from './dag';
+export { WORKFLOW_SCHEMA_VERSION } from './version';

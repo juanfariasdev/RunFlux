@@ -18,6 +18,7 @@ export { PluginCatalogProvider, type PluginCatalogProviderOptions, type PluginFi
 export { consoleDiscoveryLogger } from './discovery/logger.js';
 export { PluginLoadError, loadPlugin } from './discovery/plugin-loader.js';
 
+export { PLUGIN_CONTRACT_VERSION } from './contract-version.js';
 export { validateManifest } from './manifest-validator.js';
 export type { ManifestValidationResult } from './manifest-validator.js';
 export { serializeManifest, deserializeManifest } from './manifest-serializer.js';

@@ -49,6 +49,15 @@ describe('ExecutableWorkflowBuilder', () => {
     expect(built.nodes[0].parameters.tags).not.toBe(defaults.parameters[1].default);
   });
 
+  it('keeps parameters evaluated per element verbatim, for the node to resolve itself', () => {
+    const mapper: NodeTypeDescription = { category: 'action', parameters: [{ name: 'fields', expressions: 'perElement' }, { name: 'mode' }] };
+    const built = new ExecutableWorkflowBuilder(() => mapper).build({
+      id: 'w', name: 'W', connections: [],
+      nodes: [{ id: 'map', pluginId: 'map-fields', parameters: { fields: [{ name: 'b', value: '{{ $json.a }}' }], mode: 'fields' } }],
+    });
+    expect(built.nodes[0]).toMatchObject({ parameters: { fields: [{ name: 'b', value: '{{ $json.a }}' }] }, literalParameters: ['fields'] });
+  });
+
   it('defaults connection ports to main and drops connections to missing nodes', () => {
     expect(document.connections).toEqual([
       { source: 'hook', sourceOutput: 'main', target: 'check', targetInput: 'main' },

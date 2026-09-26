@@ -321,6 +321,20 @@ describe('WorkflowEngine services and lifecycle', () => {
     expect(logger.info).toHaveBeenCalledTimes(4);
   });
 
+  it('records and logs the notices of a node, and leaves records without notices unchanged', async () => {
+    const logger: Logger = { info: vi.fn(), error: vi.fn() };
+    const document = workflow([{ id: 'a', pluginId: 'start' }, { id: 'b', pluginId: 'notify' }], [['a', 'b']]);
+    const run = new WorkflowEngine(document, new StaticNodeCatalog({
+      start: defineNode({ parseParameters: () => ({}), createHandler: () => ({ execute: () => NodeOutput.main(1) }) }),
+      notify: defineNode({ parseParameters: () => ({}), createHandler: () => ({ execute: ({ input }) => NodeOutput.main(input, { notices: ['skipped element 2', 'skipped element 3'] }) }) }),
+    }), { services: { logger } });
+    const execution = await run.run();
+    expect(execution.record('b')).toMatchObject({ output: 1, activeOutput: 'main', notices: ['skipped element 2', 'skipped element 3'] });
+    expect(execution.record('a')).not.toHaveProperty('notices');
+    expect(vi.mocked(logger.info).mock.calls).toEqual([['[notify] skipped element 2'], ['[notify] skipped element 3']]);
+    expect(NodeOutput.route(1, 'true').notices).toEqual([]);
+  });
+
   it('retries creating a handler that failed to be created', async () => {
     const createHandler = vi.fn()
       .mockImplementationOnce(() => { throw new Error('not ready'); })

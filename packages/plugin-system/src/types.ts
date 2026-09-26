@@ -47,8 +47,13 @@ export interface ParameterSchema {
   required: boolean;
   default?: unknown;
   sensitive?: boolean;
-  /** Disable interpolation for source code or SQL; bind data through separate parameters. */
-  expressions?: boolean;
+  /**
+   * How `{{ }}` expressions in the value are handled. Absent or true: the engine resolves them before
+   * the node runs. False: kept verbatim, for source code or SQL; bind data through separate parameters.
+   * `'perElement'`: kept verbatim for the node to evaluate once per element of its list input, with
+   * `$json` bound to that element; the editor previews it against one record of the last test input.
+   */
+  expressions?: boolean | 'perElement';
   /** Row shape for a `type: 'json'` array-of-objects parameter. See JsonRowFieldSchema. */
   rowSchema?: JsonRowFieldSchema[];
   /** Choices of a `type: 'string'` parameter; the editor shows them as a select. */

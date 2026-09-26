@@ -41,6 +41,8 @@ export interface NodeResult {
   error: string | null;
   startedAt: string;
   finishedAt: string | null;
+  /** What the node reported without failing, e.g. skipped elements; absent when it reported nothing. */
+  notices?: string[];
 }
 
 export interface ValidationRun {
@@ -78,6 +80,7 @@ function toNodeResult(record: NodeRecord): NodeResult {
     error: record.error,
     startedAt: record.startedAt,
     finishedAt: record.finishedAt,
+    ...(record.notices ? { notices: [...record.notices] } : {}),
   };
 }
 

@@ -56,7 +56,11 @@ export class NodeExecutor {
     const startedAt = this.timestamp();
     try {
       const output = await this.invoke(node, input, outputs, signal);
-      return { nodeId: node.id, input, output: output.value, activeOutput: output.activeOutput, error: null, startedAt, finishedAt: this.timestamp() };
+      for (const notice of output.notices) this.services.logger.info(`[${node.pluginId}] ${notice}`);
+      return {
+        nodeId: node.id, input, output: output.value, activeOutput: output.activeOutput, error: null, startedAt, finishedAt: this.timestamp(),
+        ...(output.notices.length > 0 ? { notices: [...output.notices] } : {}),
+      };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return { nodeId: node.id, input, output: null, activeOutput: null, error: message, startedAt, finishedAt: this.timestamp() };

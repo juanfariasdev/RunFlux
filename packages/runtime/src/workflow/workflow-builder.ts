@@ -26,7 +26,8 @@ export interface NodeTypeDescription {
   readonly outputs?: readonly string[];
   readonly parameters: readonly {
     readonly name: string;
-    readonly expressions?: boolean;
+    /** False keeps the value verbatim; `'perElement'` too, for the node to evaluate per element itself. */
+    readonly expressions?: boolean | 'perElement';
     /** Used when the node does not set the parameter. */
     readonly default?: unknown;
   }[];
@@ -75,7 +76,7 @@ export class ExecutableWorkflowBuilder {
       trigger: type?.category === 'trigger',
       outputs: type?.outputs?.length ? [...type.outputs] : [MAIN_OUTPUT],
       parameters: { ...defaultParameters(type), ...node.parameters },
-      literalParameters: (type?.parameters ?? []).filter((parameter) => parameter.expressions === false).map((parameter) => parameter.name),
+      literalParameters: (type?.parameters ?? []).filter((parameter) => parameter.expressions === false || parameter.expressions === 'perElement').map((parameter) => parameter.name),
     };
   }
 }
