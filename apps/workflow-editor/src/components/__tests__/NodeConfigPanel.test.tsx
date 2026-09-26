@@ -468,3 +468,69 @@ describe('NodeConfigPanel — parameters described by their manifest', () => {
   });
 });
 
+
+describe('NodeConfigPanel — per-element parameters preview one record (014-map-fields-per-element, RF-04)', () => {
+  const mapManifest: PluginManifest = {
+    ...manifest,
+    id: 'map-fields',
+    category: 'action',
+    parameters: [
+      { name: 'value', label: 'Value', type: 'string', required: false, expressions: 'perElement' },
+      { name: 'fields', label: 'Fields', type: 'json', required: false, expressions: 'perElement' },
+      { name: 'label', label: 'Label', type: 'string', required: false },
+    ],
+  };
+  const rows = [{ email: 'ada@example.test' }, { email: 'grace@example.test' }, { email: 'alan@example.test' }];
+  const resultWith = (input: unknown, extra: Record<string, unknown> = {}) => ({ nodeId: 'n1', input, output: null, error: null, startedAt: 't0', finishedAt: 't1', ...extra });
+
+  it('previews against the first record by default and against the record the developer picks', async () => {
+    render(<NodeConfigPanel manifest={mapManifest} values={{ value: '{{ $json.email }}', fields: [], label: '' }} onChange={vi.fn()} onClose={vi.fn()} testResult={resultWith(rows)} />);
+
+    expect(screen.getByTestId('expression-preview-value')).toHaveTextContent('ada@example.test');
+    expect(screen.getByLabelText('Preview record')).toHaveValue('0');
+
+    fireEvent.change(screen.getByLabelText('Preview record'), { target: { value: '1' } });
+    await vi.waitFor(() => {
+      expect(screen.getByTestId('expression-preview-value')).toHaveTextContent('grace@example.test');
+    });
+  });
+
+  it('previews the rows of a per-element fields parameter against the picked record', async () => {
+    render(<NodeConfigPanel manifest={mapManifest} values={{ value: '', fields: [{ name: 'to', value: '' }], label: '' }} onChange={vi.fn()} onClose={vi.fn()} testResult={resultWith(rows)} />);
+    fireEvent.change(screen.getByLabelText('Preview record'), { target: { value: '2' } });
+    fireEvent.change(screen.getByLabelText('Row 1 Value'), { target: { value: '{{ $json.email }}' } });
+
+    await vi.waitFor(() => {
+      expect(screen.getByTestId('expression-preview-row-1-value')).toHaveTextContent('alan@example.test');
+    });
+  });
+
+  it('keeps previewing the other parameters against the whole input', () => {
+    render(<NodeConfigPanel manifest={mapManifest} values={{ value: '', fields: [], label: '{{ $json.length }}' }} onChange={vi.fn()} onClose={vi.fn()} testResult={resultWith(rows)} />);
+
+    expect(screen.getByTestId('expression-preview-label')).toHaveTextContent('3');
+  });
+
+  it('offers no record picker without a per-element parameter, a list input or any record', () => {
+    const { unmount } = render(<NodeConfigPanel manifest={manifest} values={{ label: '' }} onChange={vi.fn()} onClose={vi.fn()} testResult={resultWith(rows)} />);
+    expect(screen.queryByLabelText('Preview record')).not.toBeInTheDocument();
+    unmount();
+
+    const single = render(<NodeConfigPanel manifest={mapManifest} values={{ value: '{{ $json.email }}', fields: [], label: '' }} onChange={vi.fn()} onClose={vi.fn()} testResult={resultWith({ email: 'solo@example.test' })} />);
+    expect(screen.queryByLabelText('Preview record')).not.toBeInTheDocument();
+    expect(screen.getByTestId('expression-preview-value')).toHaveTextContent('solo@example.test');
+    single.unmount();
+
+    render(<NodeConfigPanel manifest={mapManifest} values={{ value: '', fields: [], label: '' }} onChange={vi.fn()} onClose={vi.fn()} testResult={resultWith([])} />);
+    expect(screen.queryByLabelText('Preview record')).not.toBeInTheDocument();
+  });
+
+  it('lists the notices of the node under its output', () => {
+    const testResult = resultWith(rows, { output: [], notices: ['field "b" skipped element 2 (TypeError)', 'field "b" skipped element 3 (TypeError)'] });
+    render(<NodeConfigPanel manifest={mapManifest} values={{ value: '', fields: [], label: '' }} onChange={vi.fn()} onClose={vi.fn()} onTest={vi.fn()} testResult={testResult} />);
+
+    const notices = screen.getByTestId('node-notices');
+    expect(notices).toHaveTextContent('field "b" skipped element 2 (TypeError)');
+    expect(notices).toHaveTextContent('field "b" skipped element 3 (TypeError)');
+  });
+});

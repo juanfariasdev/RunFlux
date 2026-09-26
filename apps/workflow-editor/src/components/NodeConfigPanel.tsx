@@ -14,6 +14,9 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 
+/** Records the preview picker offers; the label still counts every record of the input. */
+const PREVIEW_RECORD_LIMIT = 200;
+
 const COLORS = ['#4f46e5', '#0ea5e9', '#10b981', '#f59e0b', '#f97316', '#ef4444', '#ec4899', '#8b5cf6', '#334155'];
 const SHAPES: { value: WorkflowNodeShape; label: string }[] = [
   { value: 'card', label: 'Card' },
@@ -131,6 +134,12 @@ export function NodeConfigPanel({
   const isSubflow = appearance.shape === 'subflow';
   const displayedTestInput = testResult ? testResult.input : lastTestInput?.value;
   const hasDisplayedTestInput = testResult !== undefined || lastTestInput !== undefined;
+  // Parameters evaluated per element preview against one record of a list input, the one picked here.
+  const [previewIndex, setPreviewIndex] = useState(0);
+  const records = Array.isArray(displayedTestInput) ? displayedTestInput : undefined;
+  const pickedRecord = records ? Math.min(previewIndex, Math.max(records.length - 1, 0)) : 0;
+  const elementSample = records ? records[pickedRecord] : displayedTestInput;
+  const showRecordPicker = parameters.some((parameter) => parameter.expressions === 'perElement') && records !== undefined && records.length > 0;
   // The request a webhook trigger of this panel receives in a test run, from the values being edited.
   const testRequest = webhookTestRequest(watch(), typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173');
 
@@ -231,12 +240,28 @@ export function NodeConfigPanel({
             <h3 className="m-0 text-[11px] font-bold text-slate-800">Configuration</h3>
             <span className="mt-0.5 text-[9px] text-slate-400">{manifest ? `Type · ${manifest.category}` : 'Plugin unavailable'}</span>
           </div>
+          {showRecordPicker && (
+            <div className="mb-3 flex items-center justify-between gap-2 rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-1.5">
+              <label htmlFor="preview-record" className="text-[9px] font-semibold text-slate-500">Preview record</label>
+              <select
+                id="preview-record"
+                value={String(pickedRecord)}
+                onChange={(event) => setPreviewIndex(Number(event.target.value))}
+                className="h-7 rounded-md border border-slate-200 bg-white px-2 text-[10px] text-slate-700"
+              >
+                {records.slice(0, PREVIEW_RECORD_LIMIT).map((_, index) => (
+                  <option key={index} value={index}>{index + 1} of {records.length}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <form className="grid gap-3.5" onSubmit={(event) => event.preventDefault()}>
             {parameters.map((param) => {
               if (!isParameterVisible(param, watch(), parameters)) return null;
               const liveValue = param.type === 'string' ? watch(param.name) : undefined;
+              const sample = param.expressions === 'perElement' ? elementSample : displayedTestInput;
               const preview =
-                typeof liveValue === 'string' && containsExpression(liveValue) ? resolveExpressionPreview(liveValue, displayedTestInput, nodeScope, envScope) : undefined;
+                typeof liveValue === 'string' && containsExpression(liveValue) ? resolveExpressionPreview(liveValue, sample, nodeScope, envScope) : undefined;
 
               return (
                 <div key={param.name}>
@@ -249,7 +274,7 @@ export function NodeConfigPanel({
                     preview,
                     revealed: !!revealed[param.name],
                     onToggleReveal: () => setRevealed((previous) => ({ ...previous, [param.name]: !previous[param.name] })),
-                    sampleJson: displayedTestInput,
+                    sampleJson: sample,
                     nodeScope,
                     envScope,
                   })}
@@ -318,7 +343,14 @@ export function NodeConfigPanel({
               {testResult?.error ? (
                 <p className="mb-0 rounded-md bg-red-50 px-2 py-1.5 font-semibold text-red-700" role="alert">{testResult.error}</p>
               ) : testResult ? (
-                <ResultField label="Output" value={testResult.output} />
+                <>
+                  <ResultField label="Output" value={testResult.output} />
+                  {testResult.notices && testResult.notices.length > 0 && (
+                    <ul className="mb-0 list-none space-y-0.5 rounded-md bg-amber-50 px-2 py-1.5 text-[9px] text-amber-800" data-testid="node-notices">
+                      {testResult.notices.map((notice, index) => <li key={index}>{notice}</li>)}
+                    </ul>
+                  )}
+                </>
               ) : (
                 <p className="mb-0 text-[9px] text-slate-400">Run the node again to refresh its output.</p>
               )}
