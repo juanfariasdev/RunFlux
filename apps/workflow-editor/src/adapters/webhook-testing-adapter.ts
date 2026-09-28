@@ -1,3 +1,4 @@
+import { authorizedFetch, bindFetch, type FetchFunction } from './authorized-fetch';
 import type { WebhookTestRequest } from './webhook-test-request';
 
 /**
@@ -13,9 +14,16 @@ export interface WebhookTestingAdapter {
 
 export class HttpWebhookTestingAdapter implements WebhookTestingAdapter {
   private readonly cancelUrl: string;
+  private readonly cancel: FetchFunction;
 
-  constructor(cancelUrl = '/runflux-webhook-cancel') {
+  /**
+   * Cancelling goes through `authorizedFetch`, since an exposed dev server guards it. Test requests
+   * use the plain `fetch`: webhook test URLs are open, and the platform token must never reach the
+   * waiting trigger's headers (RN-04, audit A003).
+   */
+  constructor(cancelUrl = '/runflux-webhook-cancel', cancel: FetchFunction = authorizedFetch) {
     this.cancelUrl = cancelUrl;
+    this.cancel = bindFetch(cancel);
   }
 
   async send(request: WebhookTestRequest): Promise<void> {
@@ -23,6 +31,6 @@ export class HttpWebhookTestingAdapter implements WebhookTestingAdapter {
   }
 
   async cancelListeners(): Promise<void> {
-    await fetch(this.cancelUrl, { method: 'POST' }).catch(() => {});
+    await this.cancel(this.cancelUrl, { method: 'POST' }).catch(() => {});
   }
 }

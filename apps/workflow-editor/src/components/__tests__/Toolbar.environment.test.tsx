@@ -7,14 +7,14 @@ const testWebhooks = new HttpWebhookTestingAdapter();
 
 vi.mock('../../context/ProjectContext', () => ({
   useProject: () => ({
-    currentProject: null,
+    currentProject: { id: 'p1', name: 'Orders' },
     isDirty: false,
-    envVars: [{ key: 'DATABASE_URL', value: 'postgres://localhost/runflux' }, { key: 'EMPTY', value: '' }],
+    envVars: [{ key: 'DATABASE_URL', hasValue: true }, { key: 'EMPTY', hasValue: false }],
   }),
 }));
 
 describe('Toolbar — project variables in test runs', () => {
-  it('runs the workflow with the variables of the open project as its environment', async () => {
+  it("runs the workflow with the open project's id, so the server reads its stored values (feature 015, RF-13)", async () => {
     const run = vi.fn().mockResolvedValue({ status: 'success', nodeResults: [] });
     render(
       <Toolbar
@@ -25,6 +25,6 @@ describe('Toolbar — project variables in test runs', () => {
       />,
     );
     fireEvent.click(screen.getByRole('button', { name: /test/i }));
-    await waitFor(() => expect(run).toHaveBeenCalledWith(expect.anything(), { mode: 'production', environment: { DATABASE_URL: 'postgres://localhost/runflux', EMPTY: '' } }));
+    await waitFor(() => expect(run).toHaveBeenCalledWith(expect.anything(), { mode: 'production', projectId: 'p1' }));
   });
 });

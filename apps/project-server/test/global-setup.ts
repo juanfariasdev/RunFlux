@@ -9,7 +9,14 @@ export default function setup(project: TestProject) {
   const directory = mkdtempSync(join(tmpdir(), 'runflux-server-test-'));
   const databaseUrl = `file:${join(directory, 'test.db')}`;
   writeFileSync(join(directory, 'test.db'), '');
-  project.config.env = { ...project.config.env, DATABASE_URL: databaseUrl, RUNFLUX_OUTPUT_DIR: join(directory, 'backends') };
+  // A fixed key and a temporary home, so no test reads or writes the real ~/.runflux/secret.key.
+  project.config.env = {
+    ...project.config.env,
+    DATABASE_URL: databaseUrl,
+    RUNFLUX_OUTPUT_DIR: join(directory, 'backends'),
+    RUNFLUX_SECRET_KEY: Buffer.alloc(32, 7).toString('base64'),
+    RUNFLUX_HOME: join(directory, 'home'),
+  };
   try {
     execFileSync(process.execPath, [createRequire(import.meta.url).resolve('prisma/build/index.js'), 'migrate', 'deploy'], {
       cwd: project.config.root,

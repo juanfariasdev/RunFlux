@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import type { WorkflowDefinition } from '@runflux/workflow-model';
-import { runfluxEnvelopeSchema, workflowDefinitionSchema, type ProjectEnvVar } from '@runflux/workflow-model/schema';
+import { runfluxEnvelopeSchema, workflowDefinitionSchema, type EnvVarUpdate, type ProjectEnvVar, type ProjectEnvVarView } from '@runflux/workflow-model/schema';
 import { ProjectService } from '../services/project-service.js';
 
 export const EXAMPLES_DIRECTORY = fileURLToPath(new URL('../../../../examples/', import.meta.url));
@@ -52,10 +52,10 @@ export class ExampleSeeder {
 
     const stored = await this.projects.getProject(existing.id);
     const workflowChanged = !sameWorkflow(stored.workflow, definition);
-    const mergedVars = mergeVariables(stored.envVars, envVars);
-    const variablesChanged = !isDeepStrictEqual(mergedVars, stored.envVars);
+    const merged = mergeVariables(stored.envVars, envVars);
+    const variablesChanged = !isDeepStrictEqual(merged.views, stored.envVars);
     if (workflowChanged) await this.projects.updateProject(existing.id, { definition });
-    if (variablesChanged) await this.projects.updateProjectEnv(existing.id, mergedVars);
+    if (variablesChanged) await this.projects.updateProjectEnv(existing.id, merged.updates);
     return { file, name: project.name, projectId: existing.id, action: workflowChanged || variablesChanged ? 'updated' : 'unchanged' };
   }
 }
@@ -66,13 +66,29 @@ function sameWorkflow(stored: WorkflowDefinition, example: WorkflowDefinition): 
   return isDeepStrictEqual(stored.nodes, normalized.nodes) && isDeepStrictEqual(stored.connections, normalized.connections);
 }
 
-/** The project's variables plus those only the example declares; configured values win. */
-function mergeVariables(stored: readonly ProjectEnvVar[], example: readonly ProjectEnvVar[]): ProjectEnvVar[] {
+/**
+ * The project's variables plus those only the example declares; configured values win. A name the
+ * project already has is sent without a value, so its stored value stays (RN-08). `views` is what
+ * the project will report after the update, to tell whether anything changes.
+ */
+function mergeVariables(stored: readonly ProjectEnvVarView[], example: readonly ProjectEnvVar[]): { updates: EnvVarUpdate[]; views: ProjectEnvVarView[] } {
   const byKey = new Map(stored.map((variable) => [variable.key, variable]));
-  const merged = example.map((variable) => {
+  const updates: EnvVarUpdate[] = [];
+  const views: ProjectEnvVarView[] = [];
+  for (const variable of example) {
     const current = byKey.get(variable.key);
-    return current ? { ...variable, value: current.value } : variable;
-  });
+    updates.push(current ? described({ key: variable.key }, variable.description) : described({ key: variable.key, value: variable.value }, variable.description));
+    views.push(described({ key: variable.key, hasValue: current ? current.hasValue : variable.value !== '', ...(current?.unreadable ? { unreadable: true as const } : {}) }, variable.description));
+  }
   const exampleKeys = new Set(example.map((variable) => variable.key));
-  return [...merged, ...stored.filter((variable) => !exampleKeys.has(variable.key))];
+  for (const variable of stored.filter((candidate) => !exampleKeys.has(candidate.key))) {
+    updates.push(described({ key: variable.key }, variable.description));
+    views.push(variable);
+  }
+  return { updates, views };
+}
+
+/** `entry` with the description when there is one, and no `description` key otherwise. */
+function described<TEntry extends object>(entry: TEntry, description: string | undefined): TEntry & { description?: string } {
+  return description ? { ...entry, description } : entry;
 }

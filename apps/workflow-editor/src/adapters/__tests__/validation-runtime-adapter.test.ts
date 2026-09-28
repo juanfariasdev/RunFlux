@@ -73,14 +73,23 @@ describe('HttpValidationRuntimeAdapter (browser-safe — posts to vite-plugin-va
     expect(vi.mocked(fetch).mock.calls.map(([, init]) => init?.signal)).toEqual([controller.signal, controller.signal, controller.signal]);
   });
 
-  it('sends the project variables of a run as its environment, and none when there are none', async () => {
+  it("sends the open project's id and never a value, so the server reads the stored values (feature 015, RF-13)", async () => {
     vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => ({ status: 'success', nodeResults: [] }) } as Response);
     const adapter = new HttpValidationRuntimeAdapter();
-    await adapter.run(workflow, { mode: 'production', environment: { DATABASE_URL: 'postgres://db' } });
-    await adapter.runNode(workflow, 'n1', { mode: 'sandbox', environment: { API_KEY: 'k' } });
+    await adapter.run(workflow, { mode: 'production', projectId: 'p1' });
+    await adapter.runToNode(workflow, 'n1', { mode: 'sandbox', projectId: 'p1' });
+    await adapter.runNode(workflow, 'n1', { mode: 'sandbox', projectId: 'p1' });
     await adapter.run(workflow, { mode: 'sandbox' });
     const bodies = vi.mocked(fetch).mock.calls.map(([, init]) => JSON.parse(init!.body as string));
-    expect(bodies.map((body) => body.environment)).toEqual([{ DATABASE_URL: 'postgres://db' }, { API_KEY: 'k' }, undefined]);
+    expect(bodies.map((body) => body.projectId)).toEqual(['p1', 'p1', 'p1', undefined]);
+    expect(bodies.every((body) => body.environment === undefined)).toBe(true);
+  });
+
+  it('uses the fetch function it is given', async () => {
+    const send = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ status: 'success', nodeResults: [] }) } as Response);
+    await new HttpValidationRuntimeAdapter('/runflux-validate', send).run(workflow, { mode: 'sandbox' });
+    expect(send).toHaveBeenCalledWith('/runflux-validate', expect.objectContaining({ method: 'POST' }));
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it('accepts a custom URL', async () => {

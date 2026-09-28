@@ -63,7 +63,7 @@ it.each([
 it('keeps the workflow settings, such as its environment variables', async () => {
   const { service } = fixture(PASS_THROUGH);
   const result = await service.compile({ workflow: { ...workflow, settings: { envVars: [{ key: 'API_KEY', value: 'k' }] } } as never, targetPlatform: 'local' });
-  expect(readFileSync(join(result.outputDirectory, '.env.example'), 'utf8')).toContain('API_KEY=k');
+  expect(readFileSync(join(result.outputDirectory, '.env.example'), 'utf8')).toMatch(/^API_KEY=$/m);
 });
 
 it('downloads a complete standalone project with dependencies, source and compiled entrypoints', async () => {
@@ -92,7 +92,7 @@ it('ignores the options a client may not set, such as the port and the variables
   const result = await service.compile({ workflow: { ...workflow, settings: { envVars: [{ key: 'API_KEY', value: 'k' }] } } as never, targetPlatform: 'local', options: options as never });
   const env = readFileSync(join(result.outputDirectory, '.env.example'), 'utf8');
   expect(env).toContain('PORT=3000');
-  expect(env).toContain('API_KEY=k');
+  expect(env).toMatch(/^API_KEY=$/m);
   expect(env).not.toContain('INJECTED');
 });
 

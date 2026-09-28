@@ -103,11 +103,30 @@ export interface WebhookDelivery extends TriggerEventSource {
   cancelAll(): void;
 }
 
+/** The stored values of a project, and the names whose value cannot be decrypted. */
+export interface ProjectEnvironmentValues {
+  readonly values: Readonly<Record<string, string>>;
+  readonly unreadable?: readonly string[];
+}
+
 export interface ValidationHttpOptions {
   readonly catalog: () => Promise<ValidationCatalog>;
   readonly webhooks: WebhookDelivery;
+  /** `$env` under the project's values. Defaults to the process environment without the platform's secrets. */
   readonly environment?: () => Readonly<Record<string, string | undefined>>;
+  /** Gives the stored values of the project a request names. */
+  readonly projectEnvironment?: (projectId: string, signal: AbortSignal) => Promise<ProjectEnvironmentValues>;
+  /** Whether a request may run tests or cancel them; webhook test requests are never asked. */
+  readonly authorize?: (request: IncomingMessage) => boolean;
+  /** Largest request body, in bytes. Defaults to 5 MB. */
+  readonly maxBodyBytes?: number;
 }
+
+/** Variables of the platform itself, which no test run may read. */
+export const PLATFORM_SECRET_VARIABLES: readonly string[];
+
+/** `environment` without the platform's own secrets. */
+export function withoutPlatformSecrets(environment: Readonly<Record<string, string | undefined>>): Record<string, string | undefined>;
 
 /** The test execution endpoints of the editor, over plain node:http requests. */
 export interface ValidationHttpHandlers {

@@ -4,20 +4,24 @@ import type { Plugin } from 'vite';
 // `build:node`, which the workspace build runs).
 import { listPlugins } from '@runflux/plugin-system/node';
 import type { PluginRegistryCache } from './vite-plugin-registry.ts';
+import { createAccessGuard, DEFAULT_PLATFORM_SETTINGS, type PlatformSettings } from './vite-platform.ts';
 
 /**
  * Serves the plugin catalog at `/runflux-plugins.json`. Discovery needs `node:fs`, so it runs in
  * Vite's Node process: the dev server answers from the shared registry (discovered again after
  * plugin files change) and a production build emits the catalog as a static asset at that URL.
- * The browser only fetches it; see src/adapters/plugin-catalog-adapter.ts.
+ * The browser only fetches it; see src/adapters/plugin-catalog-adapter.ts. With the platform
+ * token set, the dev server answers only requests that carry it (RF-19).
  */
-export function runfluxPluginCatalogPlugin(plugins: PluginRegistryCache): Plugin {
+export function runfluxPluginCatalogPlugin(plugins: PluginRegistryCache, settings: PlatformSettings = DEFAULT_PLATFORM_SETTINGS): Plugin {
   const urlPath = '/runflux-plugins.json';
+  const guard = createAccessGuard(settings.apiToken);
 
   return {
     name: 'runflux-plugin-catalog',
     configureServer(server) {
       plugins.watch(server);
+      server.middlewares.use(urlPath, guard.middleware);
       server.middlewares.use(urlPath, (_request, response) => {
         plugins.registry()
           .then((registry) => {

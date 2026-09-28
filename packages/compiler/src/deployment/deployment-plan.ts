@@ -38,8 +38,9 @@ export interface DeploymentPlan {
 /**
  * Collects the contributions every node's plugin declares in its `deployment`, reading each node's
  * parameters as the backend will run them (manifest defaults included). The workflow's own
- * environment variables (or those given in the options) come last, so their values and
- * descriptions win. Conflicting contributions are rejected.
+ * environment variables (or those given in the options) come last, so their descriptions win.
+ * Their values stay out: a compiled project never carries a stored value (feature 015, RN-13).
+ * Conflicting contributions are rejected.
  */
 export class DeploymentPlanner {
   private readonly plugins: PluginResolver;
@@ -72,7 +73,8 @@ export class DeploymentPlanner {
       devDependencies.add(owner, deployment?.devDependencies);
       compose.add(owner, deployment?.compose?.services, deployment?.compose?.volumes);
     }
-    environment.add('The workflow settings', options.envVars ?? workflow.settings?.envVars ?? []);
+    const variables = options.envVars ?? workflow.settings?.envVars ?? [];
+    environment.add('The workflow settings', variables.map(({ key, description }) => (description ? { key, description } : { key })));
     assertDistinctRoutes(http);
 
     return {

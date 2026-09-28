@@ -21,7 +21,7 @@ function fakeApi(overrides: Partial<ProjectApi> = {}): ProjectApi {
     deletePermanently: vi.fn(async () => {}),
     exportProject: vi.fn(),
     importProject: vi.fn(async () => detail),
-    updateEnvVars: vi.fn(async (_id, envVars) => envVars),
+    updateEnvVars: vi.fn(async (_id, updates: Array<{ key: string; value?: string; description?: string }>) => updates.map(({ key, description, value }) => ({ key, description, hasValue: Boolean(value) }))),
     ...overrides,
   };
 }

@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { loadConfig } from '../../config.js';
+import { createContainer } from '../../container.js';
 import { prisma } from '../../db.js';
-import { ProjectRepository } from '../../repositories/project-repository.js';
-import { ProjectService, ProjectConflictError, ValidationError, ProjectNotFoundError } from '../project-service.js';
+import { ProjectConflictError, ValidationError, ProjectNotFoundError } from '../project-service.js';
 
 describe('ProjectService', () => {
-  const service = new ProjectService(new ProjectRepository(prisma));
+  const service = createContainer(loadConfig()).projects;
 
   beforeEach(async () => {
     await prisma.workflowVersion.deleteMany();

@@ -4,11 +4,11 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { prisma } from '../db.js';
 import { EXAMPLES_DIRECTORY, ExampleSeeder } from '../examples/example-seeder.js';
-import { ProjectRepository } from '../repositories/project-repository.js';
-import { ProjectService } from '../services/project-service.js';
+import { loadConfig } from '../config.js';
+import { createContainer } from '../container.js';
 
 describe('ExampleSeeder', () => {
-  const projects = new ProjectService(new ProjectRepository(prisma));
+  const projects = createContainer(loadConfig()).projects;
   let directory: string;
 
   beforeEach(async () => {
@@ -33,7 +33,8 @@ describe('ExampleSeeder', () => {
       expect(stored.name).toBe(source.project.name);
       expect(stored.workflow.nodes).toEqual(source.workflow.nodes);
       expect(stored.workflow.connections).toEqual(source.workflow.connections);
-      expect(stored.envVars).toEqual(source.project.envVars);
+      expect(stored.envVars).toEqual(source.project.envVars.map(({ key, value, description }: { key: string; value: string; description?: string }) => ({ key, description, hasValue: value !== '' })));
+      expect((await projects.projectEnvironment(projectId)).values).toEqual(Object.fromEntries(source.project.envVars.map(({ key, value }: { key: string; value: string }) => [key, value])));
       expect(stored.currentWorkflowVersion).toBe('v1');
     }
   });
@@ -59,9 +60,10 @@ describe('ExampleSeeder', () => {
     const stored = await projects.getProject(http.projectId);
     expect(stored.currentWorkflowVersion).toBe('v2');
     expect(stored.workflow.nodes[0].appearance?.label).toBe('GET /items (renamed)');
-    expect(stored.envVars.map(({ key, value }) => [key, value])).toEqual([
-      ['ITEMS_API_KEY', 'my-secret'], ['UPSTREAM_URL', 'http://mine'], ['NEW_VARIABLE', 'default'], ['EXTRA', 'kept'],
-    ]);
+    expect(stored.envVars.map(({ key }) => key)).toEqual(['ITEMS_API_KEY', 'UPSTREAM_URL', 'NEW_VARIABLE', 'EXTRA']);
+    expect((await projects.projectEnvironment(http.projectId)).values).toEqual({
+      ITEMS_API_KEY: 'my-secret', UPSTREAM_URL: 'http://mine', NEW_VARIABLE: 'default', EXTRA: 'kept',
+    });
   });
 
   it('refuses a file that is not a project file, naming it', async () => {

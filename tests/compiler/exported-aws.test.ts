@@ -89,7 +89,7 @@ describe('exported AWS CDK stack', () => {
     template.hasResourceProperties('AWS::Lambda::Function', {
       Runtime: 'nodejs22.x',
       Handler: 'handler.handler',
-      Environment: { Variables: { WORKFLOW_NAME: "Customer's backend", NODE_ENV: 'production', HOOK_SECRET: '', ORDERS_DATABASE_URL: '', API_KEY: 'default-key' } },
+      Environment: { Variables: { WORKFLOW_NAME: "Customer's backend", NODE_ENV: 'production', HOOK_SECRET: '', ORDERS_DATABASE_URL: '', API_KEY: '' } },
     });
     template.resourceCountIs('AWS::Lambda::Url', 1);
     template.resourceCountIs('AWS::Scheduler::Schedule', 2);

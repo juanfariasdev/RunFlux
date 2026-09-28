@@ -31,7 +31,9 @@ describe.each(files)('example %s', (file) => {
     expect(project.name).toBe(example.project.name);
     const exported = await request(app).get(`/api/projects/${project.id}/export`);
     expect(exported.status).toBe(200);
-    expect(exported.body.project.envVars).toEqual(example.project.envVars);
+    // Exports carry names and descriptions, never values (feature 015, RN-11).
+    expect(exported.body.project.envVars).toEqual(example.project.envVars.map(({ key, description }: { key: string; description?: string }) => ({ key, description })));
+    expect(project.envVars.every((variable: { hasValue: boolean; value?: string }) => variable.value === undefined && typeof variable.hasValue === 'boolean')).toBe(true);
     expect(exported.body.workflow.nodes).toEqual(example.workflow.nodes);
     expect(exported.body.workflow.connections).toEqual(example.workflow.connections);
   });

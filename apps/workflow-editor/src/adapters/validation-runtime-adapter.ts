@@ -1,5 +1,6 @@
 import type { WorkflowDefinition } from '@runflux/workflow-model/types';
 import type { NodeResult, PluginExecutionMode } from '@runflux/validation-runtime';
+import { authorizedFetch, bindFetch, type FetchFunction } from './authorized-fetch';
 
 export type { NodeResult, PluginExecutionMode };
 
@@ -7,8 +8,8 @@ export interface ValidationRunOptions {
   mode: PluginExecutionMode;
   /** Aborting it closes the request, which cancels the run on the server. */
   signal?: AbortSignal;
-  /** The project's variables, read by the nodes as `$env`. */
-  environment?: Record<string, string>;
+  /** The open project: the server reads its stored values as `$env`, which the editor never holds (RN-12). */
+  projectId?: string;
 }
 
 /**
@@ -41,25 +42,28 @@ export interface ValidationRunResult {
  */
 export class HttpValidationRuntimeAdapter implements ValidationRuntimeAdapter {
   private readonly url: string;
+  private readonly send: FetchFunction;
 
-  constructor(url: string = '/runflux-validate') {
+  /** `send` defaults to `authorizedFetch`: an exposed dev server guards test runs (RF-19). */
+  constructor(url: string = '/runflux-validate', send: FetchFunction = authorizedFetch) {
     this.url = url;
+    this.send = bindFetch(send);
   }
 
   async run(workflow: WorkflowDefinition, options: ValidationRunOptions): Promise<ValidationRunResult> {
-    return this.post<ValidationRunResult>({ workflow, mode: options.mode, ...environmentOf(options) }, options.signal);
+    return this.post<ValidationRunResult>({ workflow, mode: options.mode, ...projectOf(options) }, options.signal);
   }
 
   async runToNode(workflow: WorkflowDefinition, nodeId: string, options: ValidationRunOptions): Promise<ValidationRunResult> {
-    return this.post<ValidationRunResult>({ workflow, untilNodeId: nodeId, mode: options.mode, ...environmentOf(options) }, options.signal);
+    return this.post<ValidationRunResult>({ workflow, untilNodeId: nodeId, mode: options.mode, ...projectOf(options) }, options.signal);
   }
 
   async runNode(workflow: WorkflowDefinition, nodeId: string, options: ValidationRunOptions, cachedResults: NodeResult[] = []): Promise<NodeResult> {
-    return this.post<NodeResult>({ workflow, nodeId, mode: options.mode, cachedResults, ...environmentOf(options) }, options.signal);
+    return this.post<NodeResult>({ workflow, nodeId, mode: options.mode, cachedResults, ...projectOf(options) }, options.signal);
   }
 
   private async post<T>(body: Record<string, unknown>, signal?: AbortSignal): Promise<T> {
-    const response = await fetch(this.url, {
+    const response = await this.send(this.url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -73,6 +77,6 @@ export class HttpValidationRuntimeAdapter implements ValidationRuntimeAdapter {
   }
 }
 
-function environmentOf(options: ValidationRunOptions): { environment?: Record<string, string> } {
-  return options.environment ? { environment: options.environment } : {};
+function projectOf(options: ValidationRunOptions): { projectId?: string } {
+  return options.projectId ? { projectId: options.projectId } : {};
 }

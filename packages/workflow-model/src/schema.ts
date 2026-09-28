@@ -64,6 +64,33 @@ export const envVarItemSchema = z.object({
 
 export const envVarsArraySchema = z.array(envVarItemSchema);
 
+/** One entry of a variables update. A value is sent only when it changes; without one, the stored value stays. */
+export const envVarUpdateSchema = z.object({
+  key: envVarItemSchema.shape.key,
+  value: z.string().optional(),
+  description: z.string().optional(),
+});
+
+/** A variables update: the whole list, each name at most once. */
+export const envVarUpdatesSchema = z.array(envVarUpdateSchema).superRefine((updates, context) => {
+  const seen = new Set<string>();
+  updates.forEach((update, index) => {
+    if (seen.has(update.key)) context.addIssue({ code: z.ZodIssueCode.custom, path: [index, 'key'], message: `Variável '${update.key}' repetida` });
+    seen.add(update.key);
+  });
+});
+
+export type EnvVarUpdate = z.output<typeof envVarUpdateSchema>;
+
+/** A project variable as the API returns it: whether it has a value, never the value. */
+export interface ProjectEnvVarView {
+  key: string;
+  description?: string;
+  hasValue: boolean;
+  /** Present when the stored value cannot be decrypted with the current key. */
+  unreadable?: true;
+}
+
 /** A `.runflux.json` project file, as exported and imported. */
 export const runfluxEnvelopeSchema = z.object({
   $schema: z.string().optional(),

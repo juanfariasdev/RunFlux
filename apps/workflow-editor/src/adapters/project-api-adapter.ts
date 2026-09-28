@@ -1,5 +1,7 @@
 import type { WorkflowDefinition } from '@runflux/workflow-model/types';
-import type { ProjectEnvVar } from '@runflux/workflow-model/schema';
+import type { EnvVarUpdate, ProjectEnvVarView } from '@runflux/workflow-model/schema';
+import { ProjectApiError } from './api-error';
+import { authorizedFetch, bindFetch, type FetchFunction } from './authorized-fetch';
 import type { WorkflowPersistenceAdapter } from './workflow-persistence-adapter';
 
 export interface ProjectSummary {
@@ -12,7 +14,8 @@ export interface ProjectSummary {
   nodeCount: number;
 }
 
-export type { ProjectEnvVar } from '@runflux/workflow-model/schema';
+export type { EnvVarUpdate, ProjectEnvVar, ProjectEnvVarView } from '@runflux/workflow-model/schema';
+export { ProjectApiError } from './api-error';
 
 export interface ProjectDetail {
   id: string;
@@ -21,7 +24,8 @@ export interface ProjectDetail {
   updatedAt: string;
   archivedAt: string | null;
   currentWorkflowVersion: string | null;
-  envVars?: ProjectEnvVar[];
+  /** Whether each variable has a value, never the value (feature 015, RN-07). */
+  envVars?: ProjectEnvVarView[];
   workflow: WorkflowDefinition;
 }
 
@@ -31,25 +35,10 @@ export interface RunfluxExportEnvelope {
   exportedAt: string;
   project: {
     name: string;
-    envVars?: ProjectEnvVar[];
+    /** Names and descriptions; files exported before feature 015 also carry values, which import seals. */
+    envVars?: Array<{ key: string; value?: string; description?: string }>;
   };
   workflow: WorkflowDefinition;
-}
-
-export class ProjectApiError extends Error {
-  status: number;
-  code: string;
-
-  constructor(
-    status: number,
-    code: string,
-    message: string
-  ) {
-    super(message);
-    this.status = status;
-    this.code = code;
-    this.name = 'ProjectApiError';
-  }
 }
 
 /** What the project session (ProjectContext) needs from the project server. */
@@ -63,14 +52,18 @@ export interface ProjectApi {
   deletePermanently(id: string): Promise<void>;
   exportProject(id: string): Promise<RunfluxExportEnvelope>;
   importProject(envelope: RunfluxExportEnvelope): Promise<ProjectDetail>;
-  updateEnvVars(projectId: string, envVars: ProjectEnvVar[]): Promise<ProjectEnvVar[]>;
+  /** Sends the whole list; a variable without `value` keeps its stored one. */
+  updateEnvVars(projectId: string, updates: EnvVarUpdate[]): Promise<ProjectEnvVarView[]>;
 }
 
 export class HttpProjectApiAdapter implements ProjectApi, WorkflowPersistenceAdapter {
   private readonly baseUrl: string;
+  private readonly send: FetchFunction;
 
-  constructor(baseUrl: string = '/api/projects') {
+  /** `send` defaults to the editor's `authorizedFetch`, which adds the platform token (D-14). */
+  constructor(baseUrl: string = '/api/projects', send: FetchFunction = authorizedFetch) {
     this.baseUrl = baseUrl;
+    this.send = bindFetch(send);
   }
 
   private async request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -80,7 +73,7 @@ export class HttpProjectApiAdapter implements ProjectApi, WorkflowPersistenceAda
       ...options.headers,
     };
 
-    const res = await fetch(url, { ...options, headers });
+    const res = await this.send(url, { ...options, headers });
     if (!res.ok) {
       let code = 'UNKNOWN_ERROR';
       let message = `Request to ${url} failed with status ${res.status}`;
@@ -187,15 +180,15 @@ export class HttpProjectApiAdapter implements ProjectApi, WorkflowPersistenceAda
     }
   }
 
-  async getEnvVars(projectId: string): Promise<ProjectEnvVar[]> {
-    const res = await this.request<{ envVars: ProjectEnvVar[] }>(`/${projectId}/env`);
+  async getEnvVars(projectId: string): Promise<ProjectEnvVarView[]> {
+    const res = await this.request<{ envVars: ProjectEnvVarView[] }>(`/${projectId}/env`);
     return res.envVars || [];
   }
 
-  async updateEnvVars(projectId: string, envVars: ProjectEnvVar[]): Promise<ProjectEnvVar[]> {
-    const res = await this.request<{ envVars: ProjectEnvVar[] }>(`/${projectId}/env`, {
+  async updateEnvVars(projectId: string, updates: EnvVarUpdate[]): Promise<ProjectEnvVarView[]> {
+    const res = await this.request<{ envVars: ProjectEnvVarView[] }>(`/${projectId}/env`, {
       method: 'PUT',
-      body: JSON.stringify({ envVars }),
+      body: JSON.stringify({ envVars: updates }),
     });
     return res.envVars || [];
   }

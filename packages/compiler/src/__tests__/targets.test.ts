@@ -81,17 +81,17 @@ describe('LocalTarget', () => {
     expect(file(withoutSchedules, 'docker-compose.yml')).not.toContain('cron');
   });
 
-  it('lists the configured port and every environment variable once, with descriptions and values', async () => {
+  it('lists the configured port and every environment variable once, with descriptions and no stored value', async () => {
     const env = file(await generate([node('hook', 'webhook', { secret: 'KEY' }), node('save', 'store')], { port: 8080 }, {
       settings: { envVars: [{ key: 'KEY', value: 'configured' }, { key: 'STRIPE_SECRET_KEY', value: 'sk_test', description: 'Stripe token' }] },
     }), '.env.example');
     expect(env).toBe([
       'PORT=8080', 'NODE_ENV=production', '', '# Project Environment Variables',
-      'KEY=configured', '# Store connection', 'STORE_URL=', '# Stripe token', 'STRIPE_SECRET_KEY=sk_test', '',
+      'KEY=', '# Store connection', 'STORE_URL=', '# Stripe token', 'STRIPE_SECRET_KEY=', '',
     ].join('\n'));
   });
 
-  it('quotes values and keeps descriptions on comment lines, so the file reads back as written', async () => {
+  it('keeps descriptions on comment lines and leaves the workflow values out (feature 015, RN-13)', async () => {
     const env = file(await generate([node('hook', 'webhook')], {}, {
       settings: { envVars: [
         { key: 'GREETING', value: 'hello world # not a comment', description: 'First line\nSECOND=line' },
@@ -99,12 +99,12 @@ describe('LocalTarget', () => {
         { key: 'MULTILINE', value: 'a\nb' },
       ] },
     }), '.env.example');
-    expect(env).toContain(["# First line", '# SECOND=line', "GREETING='hello world # not a comment'", `QUOTED="it's"`, 'MULTILINE="a\\nb"'].join('\n'));
+    expect(env).toContain(['# First line', '# SECOND=line', 'GREETING=', 'QUOTED=', 'MULTILINE='].join('\n'));
+    expect(env).not.toContain('hello world');
   });
 
   it.each([
     [[{ key: 'BAD-NAME', value: '1' }], 'The workflow settings: "BAD-NAME" is not an environment variable name'],
-    [[{ key: 'MIXED', value: `it's "$HOME"\n` }], 'The value of MIXED mixes quotes'],
   ])('rejects environment variables a .env file cannot hold: %j', async (envVars, message) => {
     await expect(generate([node('hook', 'webhook')], {}, { settings: { envVars } })).rejects.toThrow(message);
   });
@@ -185,7 +185,7 @@ describe('AwsTarget', () => {
       description: "Compiled stack by RunFlux for project Customer's schedules",
       workflowName: "Customer's schedules",
       functionUrl: false,
-      environment: [{ key: 'API_KEY', value: 'secret' }, { key: 'EMPTY', value: '' }],
+      environment: [{ key: 'API_KEY', value: '' }, { key: 'EMPTY', value: '' }],
       schedules: [
         { nodeId: 'first', expression: 'cron(*/15 * * * ? *)', timezone: 'UTC' },
         { nodeId: 'second', expression: 'cron(0 9 ? * 2-6 *)', timezone: 'UTC' },

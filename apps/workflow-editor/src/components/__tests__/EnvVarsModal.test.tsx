@@ -1,84 +1,103 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EnvVarsModal } from '../EnvVarsModal';
 import * as projectContext from '../../context/ProjectContext';
 
-describe('EnvVarsModal (011-env-vars-secrets)', () => {
+/** The variables screen is write-only (011-env-vars-secrets, 015 RF-11). */
+describe('EnvVarsModal', () => {
   const mockSaveEnvVars = vi.fn().mockResolvedValue(undefined);
   const mockOnClose = vi.fn();
 
   const defaultProjectContext: any = {
     currentProject: { id: 'p1', name: 'Demo Project', workflow: { nodes: [], connections: [] } },
     envVars: [
-      { key: 'API_SECRET', value: 'secret123', description: 'API Key' },
+      { key: 'API_SECRET', description: 'API Key', hasValue: true },
+      { key: 'OPTIONAL', hasValue: false },
+      { key: 'OLD_SECRET', hasValue: true, unreadable: true },
     ],
     saveEnvVars: mockSaveEnvVars,
   };
 
-  it('renders nothing when isOpen is false', () => {
+  beforeEach(() => {
+    mockSaveEnvVars.mockClear();
     vi.spyOn(projectContext, 'useProject').mockReturnValue(defaultProjectContext);
+  });
+
+  const save = () => fireEvent.click(screen.getByRole('button', { name: /Salvar Variáveis/i }));
+
+  it('renders nothing when isOpen is false', () => {
     const { container } = render(<EnvVarsModal isOpen={false} onClose={mockOnClose} />);
     expect(container.firstChild).toBeNull();
   });
 
-  it('renders modal with existing variables when isOpen is true', () => {
-    vi.spyOn(projectContext, 'useProject').mockReturnValue(defaultProjectContext);
+  it('shows each name, description and whether it has a value, never the value', () => {
     render(<EnvVarsModal isOpen={true} onClose={mockOnClose} />);
-
     expect(screen.getByText('Environment Variables')).toBeInTheDocument();
     expect(screen.getByText('Demo Project')).toBeInTheDocument();
     expect(screen.getByDisplayValue('API_SECRET')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('secret123')).toBeInTheDocument();
     expect(screen.getByDisplayValue('API Key')).toBeInTheDocument();
+    expect(screen.getByTestId('env-status-API_SECRET')).toHaveTextContent('definido');
+    expect(screen.getByTestId('env-status-OPTIONAL')).toHaveTextContent('não definido');
+    expect(screen.getByTestId('env-status-OLD_SECRET')).toHaveTextContent('ilegível');
+    for (const key of ['API_SECRET', 'OPTIONAL', 'OLD_SECRET']) {
+      const field = screen.getByLabelText(`Novo valor de ${key}`) as HTMLInputElement;
+      expect([field.type, field.value]).toEqual(['password', '']);
+    }
   });
 
-  it('adds a new environment variable to the table', async () => {
-    vi.spyOn(projectContext, 'useProject').mockReturnValue(defaultProjectContext);
+  it('sends a value only for the variable the developer changed', async () => {
     render(<EnvVarsModal isOpen={true} onClose={mockOnClose} />);
+    fireEvent.change(screen.getByLabelText('Novo valor de OLD_SECRET'), { target: { value: 'typed-again' } });
+    save();
+    await waitFor(() => expect(mockSaveEnvVars).toHaveBeenCalledWith([
+      { key: 'API_SECRET', description: 'API Key' },
+      { key: 'OPTIONAL' },
+      { key: 'OLD_SECRET', value: 'typed-again' },
+    ]));
+  });
 
-    const inputs = screen.getAllByRole('textbox');
-    const keyInput = inputs.find((i) => i.getAttribute('placeholder') === 'EX: STRIPE_API_KEY')!;
-    const valInput = inputs.find((i) => i.getAttribute('placeholder') === 'sk_test_...')!;
-    const descInput = inputs.find((i) => i.getAttribute('placeholder') === 'Finalidade da chave')!;
+  it('clears a value by sending empty text', async () => {
+    render(<EnvVarsModal isOpen={true} onClose={mockOnClose} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Limpar valor de API_SECRET' }));
+    expect(screen.getByTestId('env-status-API_SECRET')).toHaveTextContent('será limpo');
+    save();
+    await waitFor(() => expect(mockSaveEnvVars.mock.calls[0][0][0]).toEqual({ key: 'API_SECRET', description: 'API Key', value: '' }));
+  });
 
-    fireEvent.change(keyInput, { target: { value: 'DATABASE_URL' } });
-    fireEvent.change(valInput, { target: { value: 'postgres://localhost/db' } });
-    fireEvent.change(descInput, { target: { value: 'Database URI' } });
-
+  it('adds a new variable with its value in a hidden field', async () => {
+    render(<EnvVarsModal isOpen={true} onClose={mockOnClose} />);
+    fireEvent.change(screen.getByPlaceholderText('EX: STRIPE_API_KEY'), { target: { value: 'DATABASE_URL' } });
+    const value = screen.getByPlaceholderText('sk_test_...') as HTMLInputElement;
+    expect(value.type).toBe('password');
+    fireEvent.change(value, { target: { value: 'postgres://localhost/db' } });
+    fireEvent.change(screen.getByPlaceholderText('Finalidade da chave'), { target: { value: 'Database URI' } });
     fireEvent.click(screen.getByRole('button', { name: /\+ Adicionar Variável/i }));
 
     expect(screen.getByDisplayValue('DATABASE_URL')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('postgres://localhost/db')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('Database URI')).toBeInTheDocument();
+    expect(screen.getByTestId('env-status-DATABASE_URL')).toHaveTextContent('será definido');
+    save();
+    await waitFor(() => expect(mockSaveEnvVars.mock.calls[0][0][3]).toEqual({ key: 'DATABASE_URL', description: 'Database URI', value: 'postgres://localhost/db' }));
   });
 
   it('rejects invalid variable identifier format', () => {
-    vi.spyOn(projectContext, 'useProject').mockReturnValue(defaultProjectContext);
     render(<EnvVarsModal isOpen={true} onClose={mockOnClose} />);
-
-    const inputs = screen.getAllByRole('textbox');
-    const keyInput = inputs.find((i) => i.getAttribute('placeholder') === 'EX: STRIPE_API_KEY')!;
-
-    fireEvent.change(keyInput, { target: { value: '123-INVALID-KEY' } });
+    fireEvent.change(screen.getByPlaceholderText('EX: STRIPE_API_KEY'), { target: { value: '123-INVALID-KEY' } });
     fireEvent.click(screen.getByRole('button', { name: /\+ Adicionar Variável/i }));
-
     expect(screen.getByText(/Nome da variável deve conter apenas letras/i)).toBeInTheDocument();
   });
 
-  it('removes a variable and saves updated list', async () => {
-    vi.spyOn(projectContext, 'useProject').mockReturnValue(defaultProjectContext);
+  it('removes a variable and saves the rest', async () => {
     render(<EnvVarsModal isOpen={true} onClose={mockOnClose} />);
-
-    const removeBtn = screen.getByTitle('Remover variável');
-    fireEvent.click(removeBtn);
-
+    fireEvent.click(screen.getAllByTitle('Remover variável')[0]);
     expect(screen.queryByDisplayValue('API_SECRET')).toBeNull();
+    save();
+    await waitFor(() => expect(mockSaveEnvVars).toHaveBeenCalledWith([{ key: 'OPTIONAL' }, { key: 'OLD_SECRET' }]));
+  });
 
-    const saveBtn = screen.getByRole('button', { name: /Salvar Variáveis/i });
-    fireEvent.click(saveBtn);
-
-    await waitFor(() => {
-      expect(mockSaveEnvVars).toHaveBeenCalledWith([]);
-    });
+  it('says that values are never shown again and that compiled projects get placeholders', () => {
+    render(<EnvVarsModal isOpen={true} onClose={mockOnClose} />);
+    expect(screen.queryByText(/Valores são gerados no/)).toBeNull();
+    expect(screen.getByText(/nunca são exibidos de novo/)).toBeInTheDocument();
+    expect(screen.getByText(/placeholders vazios/)).toBeInTheDocument();
   });
 });

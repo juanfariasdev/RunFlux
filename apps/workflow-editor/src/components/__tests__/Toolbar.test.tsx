@@ -158,7 +158,7 @@ describe('Toolbar — Test (RF-06, RF-12, RN-04)', () => {
     fireEvent.change(screen.getByLabelText(/execution mode/i), { target: { value: 'sandbox' } });
     fireEvent.click(screen.getByRole('button', { name: /test/i }));
 
-    await waitFor(() => expect(run).toHaveBeenCalledWith(expect.anything(), { mode: 'sandbox', environment: {} }));
+    await waitFor(() => expect(run).toHaveBeenCalledWith(expect.anything(), { mode: 'sandbox' }));
   });
 
   it('clears a previous "ok" status as soon as a new test starts, instead of leaving it showing for the whole run', async () => {

@@ -1,7 +1,8 @@
 import type { WorkflowDefinition } from '@runflux/workflow-model';
-import { envVarsArraySchema, runfluxEnvelopeSchema, workflowDefinitionSchema, type ProjectEnvVar } from '@runflux/workflow-model/schema';
+import { envVarUpdatesSchema, runfluxEnvelopeSchema, workflowDefinitionSchema, type EnvVarUpdate, type ProjectEnvVarView } from '@runflux/workflow-model/schema';
 import { DomainError } from '../errors.js';
 import { ProjectRepository } from '../repositories/project-repository.js';
+import type { ProjectEnvironment, ProjectVariables } from './project-variables.js';
 
 export class ProjectConflictError extends DomainError {
   constructor(message: string) {
@@ -44,22 +45,25 @@ function normalizeWorkflowDefinition(definition: WorkflowDefinition): WorkflowDe
 }
 
 export class ProjectService {
-  constructor(private readonly repo: ProjectRepository) {}
+  constructor(
+    private readonly repo: ProjectRepository,
+    /** Seals, reports and gives back the variables; no response of this service carries a value. */
+    private readonly variables: ProjectVariables,
+  ) {}
 
-  async createProject(data: { name: string; definition?: WorkflowDefinition; envVars?: ProjectEnvVar[] }) {
+  async createProject(data: { name: string; definition?: WorkflowDefinition; envVars?: EnvVarUpdate[] }) {
     const trimmedName = requireName(data.name);
     await this.assertNameAvailable(trimmedName);
+    const updates = data.envVars?.length ? envVarUpdatesSchema.parse(data.envVars) : [];
 
     const project = await this.repo.create({
       name: trimmedName,
       currentWorkflowVersion: data.definition ? 'v1' : undefined,
     });
 
-    if (data.envVars && data.envVars.length > 0) {
-      const validatedEnv = envVarsArraySchema.parse(data.envVars);
-      await this.repo.update(project.id, {
-        envVars: JSON.stringify(validatedEnv),
-      });
+    if (updates.length > 0) {
+      // Values are sealed with the project's id, so they are written once the row exists.
+      await this.repo.update(project.id, { envVars: this.variables.apply(project.id, null, updates) });
     }
 
     if (data.definition) {
@@ -122,7 +126,7 @@ export class ProjectService {
       }
     }
 
-    const envVars = parseEnvVars(project.envVars);
+    const envVars = this.variables.views(project.id, project.envVars);
 
     return {
       id: project.id,
@@ -188,31 +192,38 @@ export class ProjectService {
     return this.repo.hardDelete(id);
   }
 
-  async getProjectEnv(id: string): Promise<ProjectEnvVar[]> {
+  async getProjectEnv(id: string): Promise<ProjectEnvVarView[]> {
     const project = await this.requireProject(id);
-    return parseEnvVars(project.envVars);
+    return this.variables.views(id, project.envVars);
   }
 
-  async updateProjectEnv(id: string, envVars: unknown): Promise<ProjectEnvVar[]> {
-    await this.requireProject(id);
+  /** Replaces the list; a variable sent without a value keeps its stored one (RN-08). */
+  async updateProjectEnv(id: string, envVars: unknown): Promise<ProjectEnvVarView[]> {
+    const project = await this.requireProject(id);
 
-    const validated = envVarsArraySchema.parse(envVars);
-    await this.repo.update(id, {
-      envVars: JSON.stringify(validated),
-    });
+    const updates = envVarUpdatesSchema.parse(envVars);
+    const stored = this.variables.apply(id, project.envVars, updates);
+    await this.repo.update(id, { envVars: stored });
 
-    return validated;
+    return this.variables.views(id, stored);
+  }
+
+  /** The values of the project's variables, for test runs only (RN-12); no API response carries them. */
+  async projectEnvironment(id: string): Promise<ProjectEnvironment> {
+    const project = await this.requireProject(id);
+    return this.variables.environment(id, project.envVars);
   }
 
   async exportProject(id: string) {
     const projectWithWf = await this.getProject(id);
+    const stored = await this.requireProject(id);
     return {
       $schema: 'https://runflux.dev/schemas/v1/workflow-project.json',
       schemaVersion: 1 as const,
       exportedAt: new Date().toISOString(),
       project: {
         name: projectWithWf.name,
-        envVars: projectWithWf.envVars,
+        envVars: this.variables.exported(stored.envVars),
       },
       workflow: projectWithWf.workflow,
     };
@@ -287,15 +298,4 @@ function validDefinition(definition: WorkflowDefinition) {
 function nextVersionLabel(latest: { version: string } | null): string {
   const current = latest?.version.startsWith('v') ? parseInt(latest.version.substring(1), 10) : Number.NaN;
   return `v${Number.isNaN(current) ? 1 : current + 1}`;
-}
-
-/** The stored variables of a project; missing or unreadable ones are an empty list. */
-function parseEnvVars(stored: string | null): ProjectEnvVar[] {
-  if (!stored) return [];
-  try {
-    const parsed = JSON.parse(stored);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
 }

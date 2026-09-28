@@ -18,6 +18,13 @@ npm run dev:all
 
 O servidor de projetos usa a porta 3001; o terminal do Vite informa o endereço do editor. O banco SQLite de desenvolvimento pertence ao servidor de projetos. A suíte de testes cria e migra um banco temporário independente.
 
+## Executando a plataforma com segurança
+
+- **Local por padrão.** O servidor de projetos escuta em `127.0.0.1`, e o editor o alcança pelo proxy `/api` do Vite. Nenhum token é pedido.
+- **Exposto.** Com `HOST` num endereço de rede, o servidor só sobe com `RUNFLUX_API_TOKEN`. Use `HOST=0.0.0.0` (ou `::`): um IP específico deixa de escutar em `127.0.0.1`, que o proxy do editor e a leitura das variáveis dos testes usam. Com `HOST` assim, o servidor só sobe com `RUNFLUX_API_TOKEN` (no mínimo 32 caracteres), e toda rota `/api/*` exige `Authorization: Bearer <token>`. O editor pede o token na primeira resposta 401 e o guarda na sessão do navegador. Exporte o token no shell que roda `npm run dev:all` (`export RUNFLUX_API_TOKEN=$(openssl rand -base64 32)`): os dois processos o leem, e o `apps/project-server/.env` deste repositório é versionado, então não guarde segredos nele. O dev server do Vite também aceita o token desse `.env` quando ele não é versionado. Com `--host`, ele só sobe com o token, e seus endpoints de teste passam a exigi-lo. As URLs de teste de webhook continuam abertas enquanto um teste espera. Atrás de um proxy reverso na mesma máquina, defina o token mesmo sem `HOST`.
+- **Limites.** Corpos acima de `RUNFLUX_BODY_LIMIT` (padrão `5mb`) recebem 413. Só as origens de `RUNFLUX_CORS_ORIGINS` leem respostas de um navegador.
+- **Variáveis.** Os valores são gravados cifrados (AES-256-GCM) e nunca voltam em uma resposta nem aparecem no editor; os previews de `$env` mostram `••••••`. As execuções de teste leem os valores do servidor de projetos por uma rota interna, aceita só por loopback. A chave fica em `~/.runflux/secret.key` (ou em `RUNFLUX_SECRET_KEY`): faça backup dela junto com o banco. Projetos compilados levam os nomes e as descrições, com valores vazios.
+
 ## Verificação
 
 ```sh

@@ -1,8 +1,29 @@
 import { useState, useEffect } from 'react';
 import { useProject } from '../context/ProjectContext';
-import type { ProjectEnvVar } from '../adapters/project-api-adapter';
+import type { EnvVarUpdate, ProjectEnvVarView } from '../adapters/project-api-adapter';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
+
+/**
+ * A row of the screen: the variable as the server reports it, plus the value the developer typed.
+ * `value` stays undefined until edited, so saving keeps the stored value (RN-08); empty text clears it.
+ */
+interface VariableRow extends ProjectEnvVarView {
+  value?: string;
+}
+
+/** What a row will do to the stored value when saved. */
+function statusOf(row: VariableRow): { label: string; tone: string } {
+  if (row.value === '' && row.hasValue) return { label: 'será limpo', tone: 'text-amber-400' };
+  if (row.value) return { label: row.hasValue ? 'será substituído' : 'será definido', tone: 'text-sky-400' };
+  if (row.unreadable) return { label: 'ilegível', tone: 'text-red-400' };
+  return row.hasValue ? { label: 'definido', tone: 'text-emerald-400' } : { label: 'não definido', tone: 'text-slate-500' };
+}
+
+function updateOf(row: VariableRow): EnvVarUpdate {
+  const description = row.description?.trim();
+  return { key: row.key.trim(), ...(description ? { description } : {}), ...(row.value !== undefined ? { value: row.value } : {}) };
+}
 
 interface EnvVarsModalProps {
   isOpen: boolean;
@@ -11,7 +32,7 @@ interface EnvVarsModalProps {
 
 export function EnvVarsModal({ isOpen, onClose }: EnvVarsModalProps) {
   const { currentProject, envVars, saveEnvVars } = useProject();
-  const [localVars, setLocalVars] = useState<ProjectEnvVar[]>([]);
+  const [localVars, setLocalVars] = useState<VariableRow[]>([]);
   const [newKey, setNewKey] = useState('');
   const [newValue, setNewValue] = useState('');
   const [newDescription, setNewDescription] = useState('');
@@ -55,6 +76,7 @@ export function EnvVarsModal({ isOpen, onClose }: EnvVarsModalProps) {
       ...localVars,
       {
         key: trimmedKey,
+        hasValue: false,
         value: newValue,
         description: newDescription.trim() || undefined,
       },
@@ -69,7 +91,7 @@ export function EnvVarsModal({ isOpen, onClose }: EnvVarsModalProps) {
     setLocalVars(localVars.filter((_, i) => i !== index));
   };
 
-  const handleUpdate = (index: number, field: keyof ProjectEnvVar, val: string) => {
+  const handleUpdate = (index: number, field: 'key' | 'value' | 'description', val: string) => {
     setLocalVars(
       localVars.map((item, i) => {
         if (i !== index) return item;
@@ -90,7 +112,7 @@ export function EnvVarsModal({ isOpen, onClose }: EnvVarsModalProps) {
     setIsSaving(true);
     setError(null);
     try {
-      await saveEnvVars(localVars);
+      await saveEnvVars(localVars.map(updateOf));
       setSuccess('Variáveis de ambiente salvas com sucesso!');
       setTimeout(() => {
         setSuccess(null);
@@ -165,6 +187,8 @@ export function EnvVarsModal({ isOpen, onClose }: EnvVarsModalProps) {
               <div>
                 <label className="block text-[11px] font-medium text-slate-400 mb-1">Valor de Teste / Dev</label>
                 <Input
+                  type="password"
+                  autoComplete="new-password"
                   placeholder="sk_test_..."
                   value={newValue}
                   onChange={(e) => setNewValue(e.target.value)}
@@ -208,7 +232,7 @@ export function EnvVarsModal({ isOpen, onClose }: EnvVarsModalProps) {
                   <thead className="bg-slate-800/80 text-[11px] uppercase tracking-wider text-slate-400">
                     <tr>
                       <th className="py-2 px-3 font-semibold">Chave</th>
-                      <th className="py-2 px-3 font-semibold">Valor de Teste</th>
+                      <th className="py-2 px-3 font-semibold">Valor</th>
                       <th className="py-2 px-3 font-semibold">Descrição</th>
                       <th className="py-2 px-2 text-right">Ação</th>
                     </tr>
@@ -225,13 +249,31 @@ export function EnvVarsModal({ isOpen, onClose }: EnvVarsModalProps) {
                           />
                         </td>
                         <td className="py-2 px-3 font-mono text-slate-200">
-                          <input
-                            type="text"
-                            value={v.value}
-                            placeholder="vazio"
-                            onChange={(e) => handleUpdate(index, 'value', e.target.value)}
-                            className="w-full bg-transparent border-0 border-b border-transparent focus:border-emerald-500 focus:outline-none text-xs font-mono"
-                          />
+                          <div className="flex items-center gap-2">
+                            <span data-testid={`env-status-${v.key}`} className={`shrink-0 text-[10px] font-sans uppercase tracking-wide ${statusOf(v).tone}`}>
+                              {statusOf(v).label}
+                            </span>
+                            <input
+                              type="password"
+                              autoComplete="new-password"
+                              aria-label={`Novo valor de ${v.key}`}
+                              value={v.value ?? ''}
+                              placeholder={v.hasValue ? 'manter' : 'novo valor'}
+                              onChange={(e) => handleUpdate(index, 'value', e.target.value)}
+                              className="w-full min-w-0 bg-transparent border-0 border-b border-transparent focus:border-emerald-500 focus:outline-none text-xs font-mono"
+                            />
+                            {v.hasValue && v.value !== '' && (
+                              <button
+                                type="button"
+                                aria-label={`Limpar valor de ${v.key}`}
+                                title="Limpar valor"
+                                onClick={() => handleUpdate(index, 'value', '')}
+                                className="shrink-0 rounded px-1 text-[10px] font-sans text-slate-500 hover:text-amber-400"
+                              >
+                                limpar
+                              </button>
+                            )}
+                          </div>
                         </td>
                         <td className="py-2 px-3 text-slate-400">
                           <input
@@ -264,7 +306,7 @@ export function EnvVarsModal({ isOpen, onClose }: EnvVarsModalProps) {
         {/* Footer */}
         <div className="flex items-center justify-between border-t border-slate-800 px-6 py-3.5 bg-slate-950/50 rounded-b-xl">
           <p className="text-[11px] text-slate-500">
-            Valores são gerados no <code className="text-slate-400">.env.example</code> ao compilar.
+            Os valores ficam cifrados e nunca são exibidos de novo. Projetos compilados recebem placeholders vazios no <code className="text-slate-400">.env.example</code>.
           </p>
           <div className="flex gap-2">
             <Button

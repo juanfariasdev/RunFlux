@@ -3,14 +3,28 @@ import cors from 'cors';
 import { ZodError } from 'zod';
 import { createProjectsRouter } from './routes/projects.js';
 import { createCompilerRouter } from './routes/compiler.js';
+import type { ServerConfig } from './config.js';
 import type { ServerServices } from './container.js';
 import { DomainError } from './errors.js';
+import { createInternalRouter } from './routes/internal.js';
+import { requireAccessToken } from './security/access-token.js';
+import { internalGuard } from './security/internal-guard.js';
 
-export function createServer(services: ServerServices): Express {
+/** The settings the HTTP pipeline follows; `loadConfig` gives them, tests pick what they check. */
+export type HttpSettings = Partial<Pick<ServerConfig, 'apiToken' | 'corsOrigins' | 'bodyLimit'>>;
+
+export function createServer(services: ServerServices, settings: HttpSettings = {}): Express {
   const app = express();
+  const bodyLimit = settings.bodyLimit ?? '5mb';
 
-  app.use(cors());
-  app.use(express.json({ limit: '50mb' }));
+  // For the process that hosts the editor's test runs only: outside /api, before CORS, behind its guard (D-11).
+  app.use('/internal', internalGuard(settings.apiToken), createInternalRouter(services.projects));
+
+  // Only listed origins may read responses from a browser; the editor calls through its own origin (D-04).
+  if (settings.corsOrigins?.length) app.use(cors({ origin: [...settings.corsOrigins] }));
+  // The token is checked before any body is read (D-03).
+  if (settings.apiToken) app.use('/api', requireAccessToken(settings.apiToken));
+  app.use(express.json({ limit: bodyLimit }));
 
   app.use((req, res, next) => {
     const start = Date.now();
@@ -52,6 +66,10 @@ export function createServer(services: ServerServices): Express {
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     if (err instanceof DomainError) return res.status(err.status).json(err.toBody());
 
+    if (isTooLarge(err)) {
+      return res.status(413).json({ error: { code: 'PAYLOAD_TOO_LARGE', message: `Request body exceeds ${bodyLimit}`, details: null } });
+    }
+
     if (err instanceof ZodError) {
       return res.status(400).json({
         error: {
@@ -73,4 +91,9 @@ export function createServer(services: ServerServices): Express {
   });
 
   return app;
+}
+
+/** The error the JSON parser raises for a body over the limit. */
+function isTooLarge(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && (err as { type?: unknown }).type === 'entity.too.large';
 }

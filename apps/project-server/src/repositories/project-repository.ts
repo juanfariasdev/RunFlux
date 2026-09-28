@@ -114,4 +114,19 @@ export class ProjectRepository {
       select: { name: true },
     });
   }
+
+  /** Every project's id, variables and last update, archived ones included, for the startup migration. */
+  async findAllVariables() {
+    return this.db.project.findMany({ select: { id: true, envVars: true, updatedAt: true } });
+  }
+
+  /** Rewrites a project's variables without moving it in the list, which sorts by `updatedAt`. */
+  async replaceVariables(id: string, envVars: string, updatedAt: Date) {
+    return this.db.project.update({ where: { id }, data: { envVars, updatedAt } });
+  }
+
+  /** Rebuilds the database file, so the content of rewritten rows does not stay in its free pages. */
+  async compact(): Promise<void> {
+    await this.db.$executeRawUnsafe('VACUUM');
+  }
 }

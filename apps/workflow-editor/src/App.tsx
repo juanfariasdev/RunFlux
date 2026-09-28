@@ -8,6 +8,7 @@ import { HttpWebhookTestingAdapter } from './adapters/webhook-testing-adapter';
 import { connectionId } from './adapters/react-flow-adapter';
 import { Canvas } from './components/Canvas';
 import { Palette } from './components/Palette';
+import { AccessTokenDialog } from './components/AccessTokenDialog';
 import { Toolbar } from './components/Toolbar';
 import { useWorkflowStore } from './store/workflow-store';
 import { ProjectProvider, useProject } from './context/ProjectContext';
@@ -41,10 +42,12 @@ function WorkflowEditorContent() {
   // on one. Each shows the same waiting/spinning badge on its canvas box.
   const [testingNodeIds, setTestingNodeIds] = useState<Set<string>>(new Set());
 
-  const { isDirty, envVars } = useProject();
+  const { isDirty, envVars, currentProject } = useProject();
 
-  // The project's variables, for expression previews and as `$env` of test runs.
+  // `$env` of expression previews: a mask for each variable with a value, never the value (RN-12).
   const envScope = useMemo(() => projectEnvironment(envVars), [envVars]);
+  // Test runs name the open project; the server reads its stored values.
+  const projectId = currentProject?.id;
 
   // T021: Previne fechamento acidental da aba se houver alterações não salvas (RF-11)
   useEffect(() => {
@@ -77,24 +80,24 @@ function WorkflowEditorContent() {
     setTestingNodeIds(new Set([nodeId]));
     try {
       const cachedResults = Object.values(nodeResults).filter((result) => result.nodeId !== nodeId);
-      const result = await validation.runNode(workflow, nodeId, { mode: 'sandbox', environment: envScope }, cachedResults);
+      const result = await validation.runNode(workflow, nodeId, { mode: 'sandbox', ...(projectId ? { projectId } : {}) }, cachedResults);
       setNodeResult(result);
     } finally {
       setTestingNodeIds(new Set());
     }
-  }, [workflow, nodeResults, setNodeResult, clearNodeResult, envScope]);
+  }, [workflow, nodeResults, setNodeResult, clearNodeResult, projectId]);
 
   const handleTestToNode = useCallback(async (nodeId: string) => {
     const pathNodeIds = upstreamNodeIds(workflow, nodeId);
     for (const id of pathNodeIds) clearNodeResult(id);
     setTestingNodeIds(pathNodeIds);
     try {
-      const result = await validation.runToNode(workflow, nodeId, { mode: 'sandbox', environment: envScope });
+      const result = await validation.runToNode(workflow, nodeId, { mode: 'sandbox', ...(projectId ? { projectId } : {}) });
       setNodeResults(result.nodeResults ?? []);
     } finally {
       setTestingNodeIds(new Set());
     }
-  }, [workflow, setNodeResults, clearNodeResult, envScope]);
+  }, [workflow, setNodeResults, clearNodeResult, projectId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -185,6 +188,7 @@ function WorkflowEditorContent() {
 export function App() {
   return (
     <ProjectProvider adapter={projectAdapter}>
+      <AccessTokenDialog />
       <WorkflowEditorContent />
     </ProjectProvider>
   );

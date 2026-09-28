@@ -7,7 +7,6 @@ import type { WorkflowPersistenceAdapter } from '../adapters/workflow-persistenc
 import { useWorkflowStore } from '../store/workflow-store';
 import { Button } from './ui/button';
 import { useProject } from '../context/ProjectContext';
-import { projectEnvironment } from '../adapters/project-environment';
 import { webhookTestRequest } from '../adapters/webhook-test-request';
 
 const ProjectManagerModal = lazy(() => import('./ProjectManagerModal').then((module) => ({ default: module.ProjectManagerModal })));
@@ -124,7 +123,8 @@ export function Toolbar({ catalog, persistence, validation, webhooks, onTestingN
     setIsRunning(true);
     onTestingNodesChange?.(workflow.nodes.filter((n) => listening.has(n.pluginId)).map((n) => n.id));
     try {
-      const result = await validation.run(workflow, { mode, environment: projectEnvironment(projectCtx?.envVars) });
+      // The server reads the open project's stored values; the editor never holds them (RN-12).
+      const result = await validation.run(workflow, { mode, ...(currentProject ? { projectId: currentProject.id } : {}) });
       setNodeResults(result.nodeResults ?? []);
       setStatus({ kind: 'tested', message: result.message ?? result.status });
     } catch (error) {

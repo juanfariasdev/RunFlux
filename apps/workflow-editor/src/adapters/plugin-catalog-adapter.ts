@@ -1,5 +1,6 @@
 import type { PluginManifest } from '@runflux/plugin-system/sdk';
 import type { PluginReferenceStatus } from '@runflux/plugin-system/sdk';
+import { authorizedFetch, bindFetch, type FetchFunction } from './authorized-fetch';
 
 /**
  * Seam between the editor's UI (browser) and the Plugin System's discovery
@@ -24,14 +25,17 @@ export interface PluginCatalogAdapter {
 export class HttpPluginCatalogAdapter implements PluginCatalogAdapter {
   private cache: Record<string, PluginManifest[]> | undefined;
   private readonly url: string;
+  private readonly send: FetchFunction;
 
-  constructor(url: string = '/runflux-plugins.json') {
+  /** `send` defaults to `authorizedFetch`: an exposed dev server guards the catalog (RF-19). */
+  constructor(url: string = '/runflux-plugins.json', send: FetchFunction = authorizedFetch) {
     this.url = url;
+    this.send = bindFetch(send);
   }
 
   async listPlugins(): Promise<Record<string, PluginManifest[]>> {
     if (!this.cache) {
-      const response = await fetch(this.url);
+      const response = await this.send(this.url);
       if (!response.ok) {
         throw new Error(`Failed to load plugin catalog from ${this.url}: HTTP ${response.status}`);
       }

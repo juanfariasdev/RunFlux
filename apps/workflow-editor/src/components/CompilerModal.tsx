@@ -34,11 +34,12 @@ export function CompilerModal({ isOpen, onClose, compiler = defaultCompiler, pro
     setErrorMessage(null);
     setErrorDetails(null);
     try {
+      // Names and descriptions only: compiled projects never carry a stored value (RN-13).
       const workflowWithSettings = {
         ...workflow,
         settings: {
           ...workflow.settings,
-          envVars: envVars || [],
+          envVars: (envVars || []).map(({ key, description }) => (description ? { key, description } : { key })),
         },
       };
       const res = await compiler.compile({
@@ -50,12 +51,8 @@ export function CompilerModal({ isOpen, onClose, compiler = defaultCompiler, pro
       setResultData(res);
       setStatus('success');
 
-      const link = document.createElement('a');
-      link.href = compiler.getDownloadUrl(res.zipFilename, res.compilationId);
-      link.download = res.zipFilename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      // Through fetch, so the platform token travels in a header (D-15).
+      await compiler.download(res.zipFilename, res.compilationId);
     } catch (err: any) {
       setStatus('error');
       setErrorMessage(err.message || 'Project compilation failed.');
@@ -203,13 +200,15 @@ export function CompilerModal({ isOpen, onClose, compiler = defaultCompiler, pro
               </p>
               <div className="flex items-center justify-between pt-1">
                 <span className="text-slate-400 text-[11px]">File: {resultData.zipFilename}</span>
-                <a
-                  href={compiler.getDownloadUrl(resultData.zipFilename, resultData.compilationId)}
-                  download={resultData.zipFilename}
+                <button
+                  type="button"
+                  onClick={() => {
+                    compiler.download(resultData.zipFilename, resultData.compilationId).catch((err: Error) => setErrorMessage(err.message));
+                  }}
                   className="text-indigo-400 hover:text-indigo-300 underline font-medium"
                 >
                   Download again (.zip)
-                </a>
+                </button>
               </div>
             </div>
           )}

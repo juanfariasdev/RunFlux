@@ -32,16 +32,18 @@ describe('DeploymentPlanner', () => {
     expect(plan.workflow.connections).toHaveLength(2);
   });
 
-  it('merges environment variables, letting the workflow settings win, and the options replace the settings', () => {
+  it('merges environment variables, letting the workflow settings win, and the options replace the settings, without their values', () => {
     const definition = workflow([node('hook', 'webhook', { secret: 'KEY' }), node('save', 'store')], [], {
       settings: { envVars: [{ key: 'KEY', value: 'configured' }, { key: 'EXTRA', description: 'Extra' }] },
     });
     expect(planner.plan(definition).environment).toEqual([
-      { key: 'KEY', value: 'configured' },
+      { key: 'KEY' },
       { key: 'STORE_URL', description: 'Store connection' },
       { key: 'EXTRA', description: 'Extra' },
     ]);
-    expect(planner.plan(definition, { envVars: [{ key: 'ONLY', value: '1' }] }).environment.map((variable) => variable.key)).toEqual(['KEY', 'STORE_URL', 'ONLY']);
+    const replaced = planner.plan(definition, { envVars: [{ key: 'ONLY', value: '1' }] }).environment;
+    expect(replaced.map((variable) => variable.key)).toEqual(['KEY', 'STORE_URL', 'ONLY']);
+    expect(replaced.filter((variable) => variable.value !== undefined)).toEqual([]);
   });
 
   it('collects dependencies, compose services and the plugins to bundle once per plugin', () => {

@@ -5,7 +5,8 @@ import {
   type ProjectApi,
   type ProjectSummary,
   type ProjectDetail,
-  type ProjectEnvVar,
+  type EnvVarUpdate,
+  type ProjectEnvVarView,
   type RunfluxExportEnvelope,
 } from '../adapters/project-api-adapter';
 import { useWorkflowStore } from '../store/workflow-store';
@@ -18,9 +19,11 @@ export interface ProjectContextValue {
   isDirty: boolean;
   isLoading: boolean;
   error: string | null;
-  envVars: ProjectEnvVar[];
-  setEnvVars: (envVars: ProjectEnvVar[]) => void;
-  saveEnvVars: (envVars: ProjectEnvVar[]) => Promise<void>;
+  /** Whether each variable of the open project has a value; the editor never holds a value (RN-07). */
+  envVars: ProjectEnvVarView[];
+  setEnvVars: (envVars: ProjectEnvVarView[]) => void;
+  /** Saves the list; a variable sent without `value` keeps its stored one (RN-08). */
+  saveEnvVars: (updates: EnvVarUpdate[]) => Promise<void>;
   refreshProjects: () => Promise<void>;
   openProject: (id: string) => Promise<void>;
   createNewProject: (name: string) => Promise<ProjectDetail>;
@@ -53,7 +56,7 @@ export function ProjectProvider({
   adapter?: ProjectApi;
 }) {
   const [currentProject, setCurrentProject] = useState<ProjectDetail | null>(null);
-  const [envVars, setEnvVars] = useState<ProjectEnvVar[]>([]);
+  const [envVars, setEnvVars] = useState<ProjectEnvVarView[]>([]);
   const [lastSavedSnapshot, setLastSavedSnapshot] = useState<string>('');
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [archivedProjects, setArchivedProjects] = useState<ProjectSummary[]>([]);
@@ -125,11 +128,10 @@ export function ProjectProvider({
     });
   }, [runAction, adapter, setWorkflow, refreshProjects]);
 
-  const saveEnvVars = useCallback(async (newEnvVars: ProjectEnvVar[]) => {
-    setEnvVars(newEnvVars);
+  const saveEnvVars = useCallback(async (updates: EnvVarUpdate[]) => {
     if (!currentProject) return;
     try {
-      const saved = await adapter.updateEnvVars(currentProject.id, newEnvVars);
+      const saved = await adapter.updateEnvVars(currentProject.id, updates);
       setEnvVars(saved);
       setCurrentProject((prev) => (prev ? { ...prev, envVars: saved } : null));
     } catch (err) {

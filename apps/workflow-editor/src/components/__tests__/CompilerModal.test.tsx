@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { CompilerModal } from '../CompilerModal';
+import * as projectContext from '../../context/ProjectContext';
 import { ProjectProvider } from '../../context/ProjectContext';
 import type { CompileResult, CompilerApi } from '../../adapters/compiler-api-adapter';
 
@@ -17,7 +18,8 @@ function fakeCompiler() {
   };
   return {
     compile: vi.fn<CompilerApi['compile']>().mockResolvedValue(result),
-    getDownloadUrl: vi.fn<CompilerApi['getDownloadUrl']>().mockReturnValue('http://server/api/compiler/downloads/test-1-abcdef12/test.zip'),
+    getDownloadUrl: vi.fn<CompilerApi['getDownloadUrl']>().mockReturnValue('/api/compiler/downloads/test-1-abcdef12/test.zip'),
+    download: vi.fn<CompilerApi['download']>().mockResolvedValue(undefined),
   };
 }
 
@@ -84,7 +86,7 @@ describe('CompilerModal', () => {
     expect(compiler.compile).toHaveBeenCalledWith(expect.objectContaining({ targetPlatform: 'local', options: { includeCli: true } }));
   });
 
-  it('offers the compilation download from the compiler', async () => {
+  it('downloads through the compiler, automatically and again on request, so the token travels in a header (feature 015, D-15)', async () => {
     const compiler = fakeCompiler();
     render(
       <ProjectProvider>
@@ -94,7 +96,22 @@ describe('CompilerModal', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Compile and Download/i }));
 
-    await waitFor(() => expect(screen.getByRole('link', { name: /Download again/i })).toHaveAttribute('href', 'http://server/api/compiler/downloads/test-1-abcdef12/test.zip'));
-    expect(compiler.getDownloadUrl).toHaveBeenCalledWith('test.zip', 'test-1-abcdef12');
+    await waitFor(() => expect(compiler.download).toHaveBeenCalledWith('test.zip', 'test-1-abcdef12'));
+    fireEvent.click(screen.getByRole('button', { name: /Download again/i }));
+    await waitFor(() => expect(compiler.download).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole('link', { name: /Download again/i })).toBeNull();
+  });
+
+  it("sends the variables' names and descriptions, never a value (feature 015, RN-13)", async () => {
+    const compiler = fakeCompiler();
+    const spy = vi.spyOn(projectContext, 'useProject').mockReturnValue({
+      currentProject: { id: 'p1', name: 'Orders' },
+      envVars: [{ key: 'DB_URL', description: 'Orders database', hasValue: true }, { key: 'EMPTY', hasValue: false }],
+    } as never);
+    render(<CompilerModal isOpen={true} onClose={() => {}} compiler={compiler} projectName="Orders" />);
+    fireEvent.click(screen.getByRole('button', { name: /Compile and Download/i }));
+    await waitFor(() => expect(compiler.compile).toHaveBeenCalled());
+    expect(compiler.compile.mock.calls[0][0].workflow.settings?.envVars).toEqual([{ key: 'DB_URL', description: 'Orders database' }, { key: 'EMPTY' }]);
+    spy.mockRestore();
   });
 });

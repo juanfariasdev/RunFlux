@@ -19,3 +19,14 @@ export class DomainError extends Error {
     return { error: { code: this.code, message: this.message, details: this.details } };
   }
 }
+
+/** A setting the server refuses to start with; `variable` names it, so the message can point at it. */
+export class ConfigurationError extends Error {
+  readonly variable: string;
+
+  constructor(variable: string, message: string) {
+    super(message);
+    this.name = 'ConfigurationError';
+    this.variable = variable;
+  }
+}
