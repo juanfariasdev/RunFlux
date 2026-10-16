@@ -284,6 +284,65 @@ describe('runWorkflowToNode', () => {
 
     expect(run.nodeResults.map((result) => result.nodeId)).toEqual(['start', 'before', 'target']);
   });
+
+  it('does not execute the target when the selected branch does not activate its incoming connection', async () => {
+    const registry = registryWith(
+      plugin('trigger', () => 'payload', 'trigger'),
+      behaviourPlugin(
+        { id: 'branch', category: 'control-flow', outputs: ['true', 'false'] },
+        (_parameters, input) => ({ value: input, activeOutput: 'true' }),
+      ),
+      plugin('action', (_params, input) => input),
+    );
+    const wf = workflow({
+      nodes: [
+        { id: 'start', pluginId: 'trigger', pluginVersion: '1.0.0', parameters: {}, position: { x: 0, y: 0 } },
+        { id: 'branch', pluginId: 'branch', pluginVersion: '1.0.0', parameters: {}, position: { x: 0, y: 0 } },
+        { id: 'target', pluginId: 'action', pluginVersion: '1.0.0', parameters: {}, position: { x: 0, y: 0 } },
+      ],
+      connections: [
+        { sourceNodeId: 'start', sourceOutput: 'main', targetNodeId: 'branch', targetInput: 'main' },
+        { sourceNodeId: 'branch', sourceOutput: 'false', targetNodeId: 'target', targetInput: 'main' },
+      ],
+    });
+
+    const run = await runWorkflowToNode(wf, 'target', registry, { mode: 'sandbox' });
+
+    expect(run.nodeResults.map((result) => result.nodeId)).toEqual(['start', 'branch']);
+    expect(run.nodeResults.find((result) => result.nodeId === 'target')).toBeUndefined();
+    expect(run.status).toBe('success');
+  });
+
+  it('preserves merge inputs from every active upstream branch while excluding unrelated siblings', async () => {
+    const registry = registryWith(
+      plugin('trigger', () => 'start', 'trigger'),
+      plugin('left', () => 'left'),
+      plugin('right', () => 'right'),
+      plugin('merge', (_params, input) => input),
+      plugin('side', () => 'side'),
+    );
+    const wf = workflow({
+      nodes: [
+        { id: 'start', pluginId: 'trigger', pluginVersion: '1.0.0', parameters: {}, position: { x: 0, y: 0 } },
+        { id: 'left', pluginId: 'left', pluginVersion: '1.0.0', parameters: {}, position: { x: 0, y: 0 } },
+        { id: 'right', pluginId: 'right', pluginVersion: '1.0.0', parameters: {}, position: { x: 0, y: 0 } },
+        { id: 'target', pluginId: 'merge', pluginVersion: '1.0.0', parameters: {}, position: { x: 0, y: 0 } },
+        { id: 'side', pluginId: 'side', pluginVersion: '1.0.0', parameters: {}, position: { x: 0, y: 0 } },
+      ],
+      connections: [
+        { sourceNodeId: 'start', sourceOutput: 'main', targetNodeId: 'left', targetInput: 'main' },
+        { sourceNodeId: 'start', sourceOutput: 'main', targetNodeId: 'right', targetInput: 'main' },
+        { sourceNodeId: 'left', sourceOutput: 'main', targetNodeId: 'target', targetInput: 'main' },
+        { sourceNodeId: 'right', sourceOutput: 'main', targetNodeId: 'target', targetInput: 'main' },
+        { sourceNodeId: 'start', sourceOutput: 'main', targetNodeId: 'side', targetInput: 'main' },
+      ],
+    });
+
+    const run = await runWorkflowToNode(wf, 'target', registry, { mode: 'sandbox' });
+
+    expect(run.nodeResults.find((result) => result.nodeId === 'target')).toMatchObject({ input: ['left', 'right'], output: ['left', 'right'], error: null });
+    expect(run.nodeResults.find((result) => result.nodeId === 'side')).toBeUndefined();
+  });
 });
 
 describe('notices', () => {

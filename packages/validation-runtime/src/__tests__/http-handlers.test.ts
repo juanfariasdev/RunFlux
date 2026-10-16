@@ -13,7 +13,10 @@ afterEach(async () => {
 /** Mounts the handlers on a plain node:http server, as any host other than Vite would. */
 async function serve() {
   const webhooks = new WebhookTestHub(5_000);
-  const catalog = registryWith(behaviourPlugin({ id: 'echo', category: 'trigger' }, (_parameters, input) => input ?? { echoed: true }));
+  const catalog = registryWith(
+    behaviourPlugin({ id: 'echo', category: 'trigger' }, (_parameters, input) => input ?? { echoed: true }),
+    behaviourPlugin({ id: 'echo-action', category: 'action' }, (_parameters, input) => input),
+  );
   const handlers = createValidationHttpHandlers({ catalog: async () => catalog, webhooks, environment: () => ({}) });
   const server = createServer((request, response) => {
     if (request.url === '/runflux-validate') return handlers.validate(request, response);
@@ -32,6 +35,32 @@ describe('validation HTTP handlers without Vite', () => {
     const response = await fetch(`${url}/runflux-validate`, { method: 'POST', body: JSON.stringify({ workflow, mode: 'sandbox' }) });
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ workflowId: 'w', status: 'success', nodeResults: [{ nodeId: 'start', output: { echoed: true } }] });
+  });
+
+  it('routes untilNodeId to a workflow run that stops at the requested node', async () => {
+    const { url } = await serve();
+    const workflow = {
+      id: 'w-target',
+      name: 'Targeted run',
+      nodes: [
+        { id: 'start', pluginId: 'echo' },
+        { id: 'target', pluginId: 'echo-action' },
+        { id: 'after', pluginId: 'echo-action' },
+      ],
+      connections: [
+        { sourceNodeId: 'start', sourceOutput: 'main', targetNodeId: 'target', targetInput: 'main' },
+        { sourceNodeId: 'target', sourceOutput: 'main', targetNodeId: 'after', targetInput: 'main' },
+      ],
+    };
+
+    const response = await fetch(`${url}/runflux-validate`, {
+      method: 'POST',
+      body: JSON.stringify({ workflow, mode: 'sandbox', untilNodeId: 'target' }),
+    });
+    const body = await response.json() as { nodeResults: Array<{ nodeId: string }> };
+
+    expect(response.status).toBe(200);
+    expect(body.nodeResults.map((result) => result.nodeId)).toEqual(['start', 'target']);
   });
 
   it('answers 400 to a body that is not JSON and 405 to other methods', async () => {

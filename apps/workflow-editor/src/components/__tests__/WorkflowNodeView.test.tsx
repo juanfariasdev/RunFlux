@@ -223,4 +223,19 @@ describe('WorkflowNodeView — inline test actions', () => {
 
     expect(screen.queryByTestId('node-test-actions')).toBeNull();
   });
+
+  it('disables both inline test actions while the node is already being tested', () => {
+    const props = makeProps(manifest('action'), true, {}, undefined, true);
+    props.data.onTestNode = vi.fn();
+    props.data.onTestToNode = vi.fn();
+
+    render(
+      <ReactFlowProvider>
+        <WorkflowNodeView {...props} />
+      </ReactFlowProvider>,
+    );
+
+    expect(screen.getByRole('button', { name: /test this node/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /test up to this node/i })).toBeDisabled();
+  });
 });
